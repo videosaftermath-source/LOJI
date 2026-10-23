@@ -176,7 +176,6 @@ class Client(commands.AutoShardedBot):
             "cogs.Modules.tickets",
             # Utilities
             "cogs.Modules.Utilities.extras",
-            "cogs.Modules.Utilities.ping",
             "cogs.Modules.Utilities.info",
             "cogs.Modules.Utilities.premium",
             "cogs.Modules.Utilities.memberships",
@@ -486,11 +485,8 @@ class Client(commands.AutoShardedBot):
         logger.info("[✅] Resumed connection to Discord Gateway!")
 
     async def is_owner(self, user: discord.User):
-        if (
-            user.id in [795743076520820776]
-            if not os.getenv("OWNER")
-            else os.getenv("OWNER").split(",")
-        ):
+        owners = os.getenv("OWNER", "").replace(" ", "").split(",")
+        if str(user.id) in owners:
             return True
         return await super().is_owner(user)
 
