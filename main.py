@@ -20,6 +20,7 @@ from cogs.Tasks.qotd import *
 from cogs.Events.on_error import Tree
 from cogs.Events.modmail import ModmailClosure, Links
 from cogs.Modules.tickets import ButtonHandler
+from cogs.Modules.staffmanagement import PromotionRequestView
 from core.db import client, db
 
 sys.dont_write_bytecode = True
@@ -174,6 +175,7 @@ class Client(commands.AutoShardedBot):
             "cogs.Modules.data",
             "cogs.Modules.integrations",
             "cogs.Modules.tickets",
+            "cogs.Modules.staffmanagement",
             # Utilities
             "cogs.Modules.Utilities.extras",
             "cogs.Modules.Utilities.info",
@@ -361,6 +363,7 @@ class Client(commands.AutoShardedBot):
         self.add_view(Links())
         self.add_view(CaseApproval())
         self.add_view(PTicketControl())
+        self.add_view(PromotionRequestView())
 
         self.loop.create_task(self.load_jishaku())
         DoNotLoad = os.getenv("DoNotLoad", "").replace(" ", "").split(",")

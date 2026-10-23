@@ -173,6 +173,16 @@ async def ModuleOptions(Config, data=None):
             ),
         ),
         discord.SelectOption(
+            label="Gestión del Staff",
+            value="StaffManagement",
+            emoji="🧑‍🏫",
+            default=(
+                Config.get("Modules", {}).get("StaffManagement", False) or False
+                if not data
+                else False
+            ),
+        ),
+        discord.SelectOption(
             label="Connection Roles",
             value="connectionroles",
             emoji=f"{Emojis.link}",

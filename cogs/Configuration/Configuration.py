@@ -220,6 +220,15 @@ class ConfigMenu(discord.ui.Select):
                     interaction.user,
                 )
             )
+        elif selection == "StaffManagement":
+            from cogs.Configuration.Components.StaffManagement import (
+                StaffManagementEmbed,
+                StaffManagementOptions,
+            )
+
+            embed = await StaffManagementEmbed(interaction, Config, embed)
+            view = discord.ui.View()
+            view.add_item(StaffManagementOptions(interaction.user))
         elif selection == "customcommands":
             try:
                 from cogs.Configuration.Components.CustomCommands import (
@@ -522,6 +531,11 @@ def Options(Config: dict = None):
             label="Auto Response",
             value="Auto Responder",
             emoji=f"{Emojis.auto_response}",
+        ),
+        discord.SelectOption(
+            label="Gestión del Staff",
+            value="StaffManagement",
+            emoji="🧑‍🏫",
         ),
     ]
 
