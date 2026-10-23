@@ -15,6 +15,7 @@ from core.bot.emojis import *
 from core.bot.permissions import Permissions
 from core.bot.ui import BasicPaginator
 from core.format import TimeReformat
+from core.loaquota import RequestWarnings
 
 environment = os.getenv("ENVIRONMENT")
 
@@ -308,6 +309,9 @@ class LOAModule(commands.Cog):
             return
 
         C = await EnsureConfig(ctx, "LOA")
+        Warnings = await RequestWarnings(
+            self.client, ctx.guild.id, ctx.author.id, Start, Duration
+        )
         MSG = await ctx.send(
             f"{Emojis.loading} **{ctx.author.display_name},** requesting LOA..."
         )
@@ -356,6 +360,7 @@ class LOAModule(commands.Cog):
                 "active": False,
                 "request": True,
                 "scheduled": S,
+                "Warnings": Warnings,
                 "AddedTime": {
                     "Time": 0,
                     "Reason": None,
@@ -377,20 +382,16 @@ class LOAModule(commands.Cog):
             "leave_request",
             R.inserted_id,
         )
+        Content = f"{Emojis.tick} **{ctx.author.display_name},** loa requested. Please wait for a staff member to accept it."
+        if Warnings:
+            Content += (
+                "\n⚠️ Tu LOA se sale de los límites, así que el alto mando decidirá si lo acepta:\n"
+                + "\n".join(f"- {W}" for W in Warnings)
+            )
         try:
-            await MSG.edit(
-                content=(
-                    f"{Emojis.tick} **{ctx.author.display_name},** loa requested. Please wait for a staff member to accept it."
-                ),
-                embed=None,
-            )
+            await MSG.edit(content=Content, embed=None)
         except (discord.HTTPException, discord.Forbidden):
-            await ctx.send(
-                content=(
-                    f"{Emojis.tick} **{ctx.author.display_name},** loa requested. Please wait for a staff member to accept it."
-                ),
-                embed=None,
-            )
+            await ctx.send(content=Content, embed=None)
 
     @loa.command(description="Manage your own leave of absence")
     @Permissions("Staff")

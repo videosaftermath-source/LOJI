@@ -2,7 +2,7 @@ import logging
 import random
 import re
 import string
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Literal
 
 import pymongo
@@ -19,6 +19,7 @@ logger = logging.getLogger(__name__)
 from core.bot.permissions import Permissions
 from core.bot.Module import ModuleCheck, ModuleIsEnabled
 from core.format import LeaderboardPlace
+from core.loaquota import EffectiveQuota, QuotaWindow
 from core.bot.permissions import check_admin_and_staff
 
 environment = os.getenv("ENVIRONMENT")
@@ -444,8 +445,6 @@ class quota(commands.Cog):
             reverse=True,
         )
 
-        loa_role_id = Config.get("LOA", {}).get("role")
-
         for user in Users:
             member = ctx.guild.get_member(user.get("user_id"))
             if not member:
@@ -455,14 +454,14 @@ class quota(commands.Cog):
                     continue
             if not member or not await check_admin_and_staff(ctx.guild, member):
                 continue
-            quota, Name = self.GetQuota(member, Config)
+            quota, Name, OnLOA = await self.LOAQuota(member, Config)
 
             MessageCount = user.get("message_count", 0)
             Messages = f"• `{MessageCount}` messages" if MessageCount else ""
 
             entry = f"> **{member.mention}** {Messages}{Name}".strip()
 
-            if loa_role_id and any(role.id == loa_role_id for role in member.roles):
+            if OnLOA:
                 on_loa.append(entry)
             elif MessageCount >= quota:
                 passed.append(entry)
@@ -560,8 +559,6 @@ class quota(commands.Cog):
             reverse=True,
         )
 
-        loa_role_id = Config.get("LOA", {}).get("role")
-
         for user in Users:
             member = ctx.guild.get_member(user.get("user_id"))
             if not member:
@@ -571,14 +568,14 @@ class quota(commands.Cog):
                     continue
             if not member or not await check_admin_and_staff(ctx.guild, member):
                 continue
-            quota, Name = self.GetQuota(member, Config)
+            quota, Name, OnLOA = await self.LOAQuota(member, Config)
 
             MessageCount = user.get("message_count", 0)
             Messages = f"• `{MessageCount}` messages" if MessageCount else ""
 
-            entry = f"> **{member.mention}** {Messages}{Name[:20]}".strip()
+            entry = f"> **{member.mention}** {Messages}{Name}".strip()
 
-            if loa_role_id and any(role.id == loa_role_id for role in member.roles):
+            if OnLOA:
                 on_loa.append(entry)
             elif MessageCount >= quota:
                 passed.append(entry)
@@ -629,6 +626,16 @@ class quota(commands.Cog):
 
         await msg.edit(embeds=[passedembed, loaembed, failedembed])
 
+    async def LOAQuota(self, member: discord.Member, config: dict):
+        """Quota with LOA days taken off. Returns (quota, label, fully excused)."""
+        Cached = getattr(self, "_window", None)
+        if not Cached or Cached[0] != member.guild.id or Cached[1] < datetime.now():
+            Window = await QuotaWindow(self.client, member.guild.id)
+            # Cache it briefly so leaderboards don't look it up for every member.
+            self._window = Cached = (member.guild.id, datetime.now() + timedelta(seconds=60), Window)
+        Quota, Name, Reduction = await EffectiveQuota(self.client, member, config, Cached[2])
+        return Quota, Name, bool(Reduction) and Quota <= 0
+
     def GetQuota(self, member: discord.Member, config: dict) -> int:
         Roles = config.get("Message Quota", {}).get("Roles", [])
         Map = {
@@ -664,12 +671,7 @@ class quota(commands.Cog):
         YouPlace = None
         Name = ""
         if MessageData:
-            Quota, Name = self.GetQuota(staff, Config)
-            OnLOA = False
-            if Config.get("LOA", {}).get("role"):
-                OnLOA = any(
-                    role.id == Config.get("LOA", {}).get("role") for role in staff.roles
-                )
+            Quota, Name, OnLOA = await self.LOAQuota(staff, Config)
             YourEmoji = (
                 "`LOA`"
                 if OnLOA
@@ -715,14 +717,9 @@ class quota(commands.Cog):
                 f"{Emojis.no} **{ctx.author.display_name}**, they haven't sent any messages."
             )
         Config = await EnsureConfig(ctx, "Message Quota")
-        Quota, Name = self.GetQuota(staff, Config)
+        Quota, Name, OnLOA = await self.LOAQuota(staff, Config)
         YourEmoji = None
         YouPlace = None
-        OnLOA = False
-        if Config.get("LOA", {}).get("role"):
-            OnLOA = any(
-                role.id == Config.get("LOA", {}).get("role") for role in staff.roles
-            )
         if MessageData:
             YourEmoji = (
                 "`LOA`"
@@ -784,7 +781,7 @@ class quota(commands.Cog):
                     continue
 
             if member and await check_admin_and_staff(ctx.guild, member):
-                Quota, _ = self.GetQuota(member, Config)
+                Quota, _, _ = await self.LOAQuota(member, Config)
                 passed = (
                     "True"
                     if user.get("message_count") >= Quota
@@ -843,15 +840,13 @@ class quota(commands.Cog):
         )
         YourPlace = self.GetPlace(message_users, ctx.author)
         YourMessages = YouProgress.get("message_count") if YouProgress else 0
-        YourLOA = any(
-            role.id == Config.get("LOA", {}).get("role") for role in ctx.author.roles
-        )
+        YourQuota, _, YourLOA = await self.LOAQuota(ctx.author, Config)
         YourEmoji = (
             "`LOA`"
             if YourLOA
             else (
                 ("Met" if environment == "custom" else f"{Emojis.status_green}")
-                if YourMessages >= int(Config.get("Message Quota", {}).get("quota", 0))
+                if YourMessages >= YourQuota
                 else ("Not Met" if environment == "custom" else f"{Emojis.status_red}")
             )
         )
@@ -875,12 +870,7 @@ class quota(commands.Cog):
             if not member or not await check_admin_and_staff(ctx.guild, member):
                 continue
 
-            if Config.get("LOA", {}).get("role"):
-                OnLOA = any(
-                    role.id == Config.get("LOA", {}).get("role")
-                    for role in member.roles
-                )
-            Quota, Name = self.GetQuota(member, Config)
+            Quota, Name, OnLOA = await self.LOAQuota(member, Config)
 
             emoji = (
                 "`LOA`"

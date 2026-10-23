@@ -8,11 +8,11 @@ from datetime import timedelta, datetime
 import sentry_sdk
 from discord.ext import tasks
 
-from cogs.Modules.staff import quota as QUOTA
 from core.bot.HelpEmbeds import *
 from core.bot.Module import ModuleCheck
 from core.bot.permissions import *
 from core.format import TimeReformat
+from core.loaquota import EffectiveQuota, WEEK
 
 logger = logging.getLogger(__name__)
 
@@ -117,6 +117,8 @@ class activityauto(commands.Cog):
                 OnLOA = []
                 failedids = []
 
+                # The week being judged is the one that just ended.
+                Window = (nextdate - WEEK, nextdate)
                 semaphore = asyncio.Semaphore(2)
 
                 async def Process(userdata):
@@ -139,19 +141,15 @@ class activityauto(commands.Cog):
                         ):
                             return
 
-                        LoaRole = config.get("LOA", {}).get("role")
-                        LoaStatus = (
-                            any(role.id == LoaRole for role in user.roles)
-                            if LoaRole
-                            else False
+                        # Each day of LOA takes 1/7 off the quota instead of skipping it.
+                        quota, Name, Reduction = await EffectiveQuota(
+                            self.client, user, config, Window
                         )
-
-                        quota, Name = QUOTA.GetQuota(self, user, config)
                         Messages = message_data.get("message_count", 0)
 
                         entry = f"> **{user.mention}** • `{Messages}` messages{Name}"
 
-                        if LoaStatus:
+                        if Reduction and quota <= 0:
                             OnLOA.append(entry)
                         elif Messages >= quota:
                             passed.append(entry)

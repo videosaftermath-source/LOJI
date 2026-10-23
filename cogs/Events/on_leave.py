@@ -40,6 +40,20 @@ class on_leave(commands.Cog):
             name="Leave Request",
             value=f"> **User:** <@{L.get('user')}>\n> **Start Date:** <t:{int(L.get('start_time').timestamp())}>\n> **End Date:** <t:{int(L.get('end_time').timestamp())}>\n> **Reason:** {L.get('reason')}",
         )
+        Days = (L.get("end_time") - L.get("start_time")).total_seconds() / 86400
+        embed.add_field(
+            name="🌴 Quota",
+            value=f"> **Días:** {Days:.1f}\n> Cada día de LOA quita **1/7** de su quota semanal.",
+            inline=False,
+        )
+        if L.get("Warnings"):
+            embed.color = discord.Color.orange()
+            embed.add_field(
+                name="⚠️ Fuera de los límites",
+                value="\n".join(f"> {W}" for W in L.get("Warnings"))
+                + "\n-# Puedes aceptarlo igualmente si es una excepción.",
+                inline=False,
+            )
         embed.set_author(
             name=f"@{L.get('ExtendedUser', {}).get('name')}",
             icon_url=L.get("ExtendedUser", {}).get("thumbnail"),
