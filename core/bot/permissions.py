@@ -103,7 +103,17 @@ def RequireAdmin(Config: dict, author: discord.Member):
     return False
 
 
+# Servers listed in PREMIUM_GUILDS (plus CUSTOM_GUILD) always get premium.
+PREMIUM_GUILDS = {
+    g.strip()
+    for g in f'{os.getenv("PREMIUM_GUILDS", "")},{os.getenv("CUSTOM_GUILD", "")}'.split(",")
+    if g.strip()
+}
+
+
 async def premium(id):
+    if str(id) in PREMIUM_GUILDS:
+        return True
     R1 = await Configuration.find_one({"_id": id, "Features": {"$in": ["PREMIUM"]}})
     R2 = await premiums.find_one({"guilds": {"$in": [id]}})
     if R1 or R2:
