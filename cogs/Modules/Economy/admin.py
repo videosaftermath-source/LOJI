@@ -1,5 +1,6 @@
 import asyncio
 import io
+import logging
 from datetime import datetime, timedelta, timezone
 
 import discord
@@ -10,11 +11,12 @@ from core.bot.HelpEmbeds import NotYourPanel
 from core.bot.emojis import Emojis
 from core.bot.permissions import Permissions
 from core.economy.config import ConfigError, EcoConfig, GetPath
-from core.economy.constants import DEFAULT_CONFIG, SECTIONS, SETTINGS, SETTINGS_BY_PATH
+from core.economy.constants import DEFAULT_CONFIG, PETS, SECTIONS, SETTINGS, SETTINGS_BY_PATH, USERS
 from core.economy.charts import StatsChart
 from core.economy.rewards import Aware, FormatAmount
 from core.economy.tax import FormatBrackets
 from core.economy.registry import Eco
+from core.economy.reset import ResetUser
 from core.economy.service import EconomyError, Economy, InsufficientFunds
 
 PANEL_TIMEOUT = 600
@@ -46,6 +48,48 @@ def ConfigEmbed(guild: discord.Guild, config: dict, section: str) -> discord.Emb
     embed.set_author(name=guild.name, icon_url=guild.icon)
     return embed
 
+
+
+logger = logging.getLogger(__name__)
+RESET_TIMEOUT = 120
+
+class ResetConfirm(discord.ui.View):
+    """Second step of /eco-admin reiniciar."""
+
+    def __init__(self, author: discord.Member, target: discord.abc.User, reason: str):
+        super().__init__(timeout=RESET_TIMEOUT)
+        self.author = author
+        self.target = target
+        self.reason = reason
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.author.id:
+            await interaction.response.send_message(embed=NotYourPanel(), ephemeral=True)
+            return False
+        return True
+
+    @discord.ui.button(label="Sí, borrar todo", emoji="🗑️", style=discord.ButtonStyle.red)
+    async def Confirm(self, interaction: discord.Interaction, _):
+        await interaction.response.defer()
+        Config = await EcoConfig().Get(interaction.guild.id)
+        Done = await ResetUser(Economy(), interaction.guild.id, self.target.id, interaction.user.id, self.reason)
+        logger.warning(f"[Economy] {interaction.user.id} reset {self.target.id} in {interaction.guild.id}: {Done} ({self.reason})")
+        Lines = "\n".join(f"> {Label}: **{Count}**" for Label, Count in Done.items() if Label not in ("wallet", "bank") and Count)
+        embed = discord.Embed(
+            title=f"{Emojis.tick} Economía reiniciada",
+            description=(
+                f"{self.target.mention} empieza de cero.\n"
+                f"> 💰 Quitado: {FormatAmount(Done['wallet'] + Done['bank'], Config)}\n" + Lines
+            ),
+            color=discord.Color.green(),
+        )
+        self.stop()
+        await interaction.edit_original_response(embed=embed, view=None)
+
+    @discord.ui.button(label="Cancelar", style=discord.ButtonStyle.grey)
+    async def Cancel(self, interaction: discord.Interaction, _):
+        self.stop()
+        await interaction.response.edit_message(content="Cancelado, no se borró nada.", embed=None, view=None)
 
 class EditValue(discord.ui.Modal):
     def __init__(self, panel: "ConfigPanel", path: str, current):
@@ -262,6 +306,28 @@ class EconomyAdmin(commands.Cog):
             f"{Emojis.tick} Le quitaste {FormatAmount(cantidad, Config)} a {usuario.mention}. Le quedan {FormatAmount(Updated['balance'], Config)}.",
             ephemeral=True,
         )
+
+    @eco_admin.command(name="reiniciar", description="Borra TODA la economía de alguien: dinero, banco, mascotas, items y progreso")
+    @app_commands.describe(usuario="A quién reiniciar", motivo="Por qué (queda en el registro)")
+    @Permissions("Admin")
+    async def reiniciar(self, ctx: commands.Context, usuario: discord.User, motivo: str = "Sin motivo"):
+        Config = await EcoConfig().Get(ctx.guild.id)
+        Account = await Economy().db[USERS].find_one({"guild_id": ctx.guild.id, "user_id": usuario.id}) or {}
+        Pets = await Economy().db[PETS].count_documents({"guild_id": ctx.guild.id, "user_id": usuario.id})
+        embed = discord.Embed(
+            title="⚠️ Reiniciar economía",
+            description=(
+                f"Vas a borrar **todo** lo de {usuario.mention} en la economía:\n"
+                f"> 💰 Cartera: {FormatAmount(int(Account.get('balance', 0)), Config)}\n"
+                f"> 🏦 Banco: {FormatAmount(int(Account.get('bank', 0)), Config)}\n"
+                f"> 🐾 Mascotas: **{Pets}**\n"
+                "> 📦 Items, boosts activos, rachas, estadísticas del casino, pity del gacha y progreso de misiones\n\n"
+                "**No se puede deshacer.** Los códigos que ya canjeó siguen contando como canjeados."
+            ),
+            color=discord.Color.red(),
+        )
+        embed.set_footer(text=f"Motivo: {motivo}"[:2048])
+        await ctx.send(embed=embed, view=ResetConfirm(ctx.author, usuario, motivo), ephemeral=True)
 
     @eco_admin.command(name="config", description="Ver y editar la configuración de la economía")
     @Permissions("Admin")

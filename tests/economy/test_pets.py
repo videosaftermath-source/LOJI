@@ -298,3 +298,24 @@ def test_switching_pets_restarts_income_and_others_cant_collect():
     run(s.pets.SetActive(G, 12, shiba["pet_id"]))
     with pytest.raises(PetError):  # the timer started again when it became active
         run(s.pets.Collect(G, 12, CONFIG))
+
+
+def test_reset_user_wipes_everything_but_code_uses_and_boost_flag():
+    from core.economy.constants import CODE_USES, INVENTORY, PETS, USERS
+    from core.economy.reset import ResetUser
+
+    s = services()
+    eco = s.economy
+    run(eco.Add(G, 20, 50_000, "admin error"))
+    run(eco.users.update_one({"guild_id": G, "user_id": 20}, {"$set": {"bank": 1_000, "boost_rewarded": 123}}))
+    run(s.pets.Grant(G, 20, "HAMSTER", "test", CONFIG))
+    run(eco.db[INVENTORY].insert_one({"guild_id": G, "user_id": 20, "item_id": "x", "quantity": 2}))
+    run(eco.db[CODE_USES].insert_one({"guild_id": G, "user_id": 20, "code": "HALLOWEEN2026"}))
+    done = run(ResetUser(eco, G, 20, 1, "test"))
+    assert done["wallet"] == 50_000 and done["bank"] == 1_000 and done["mascotas"] == 1 and done["items"] == 1
+    assert run(eco.PeekBalance(G, 20)) == 0
+    assert run(eco.db[PETS].count_documents({"guild_id": G, "user_id": 20})) == 0
+    assert run(eco.db[CODE_USES].count_documents({"user_id": 20})) == 1  # can't redeem again
+    assert run(eco.db[USERS].find_one({"guild_id": G, "user_id": 20}))["boost_rewarded"] == 123
+    last = run(eco.ledger.find({"user_id": 20}).sort("ts", -1).to_list(length=1))[0]
+    assert last["kind"] == "destroyed" and last["amount"] == -50_000 and last["bank"] == -1_000
