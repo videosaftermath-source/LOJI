@@ -248,7 +248,8 @@ def BlackjackEmbed(member: discord.Member, game: Blackjack, config: dict, luck: 
             value=f"Cobras {Money(game.payout, config)} ({'+' if Net >= 0 else ''}{Net:,})".replace(",", "."),
             inline=False,
         )
-    embed.set_footer(text=EdgeNote(game.edge, luck) + " · El crupier se planta en 17 · Blackjack paga 3:2")
+    Rules = "Gana x2 · Blackjack x2.5 · Empate devuelve la apuesta · El crupier se planta en 17"
+    embed.set_footer(text=(EdgeNote(game.edge, luck) + " extra · " if game.edge else "") + Rules)
     return embed
 
 

@@ -70,7 +70,7 @@ Las apuestas aceptan **`500`**, **`1.5k`**, **`todo`** o **`mitad`**. Usa **`/ca
 
 ## 🧠 Consejos
 > 🏠 **La casa siempre gana un poco a la larga** (entre 2% y 10% según el juego). El casino es para **divertirse**, no para hacerse rico.
-> 💡 Los que pierden menos: **moneda y blackjack** (2%). Los más arriesgados: **crash, mines y mayor o menor**, que pueden dar premios enormes.
+> 💡 Los que pierden menos: **blackjack** (paga x2 y x2.5 como en un casino real; jugando bien la casa gana solo ~1,4%) y **moneda** (2%). Los más arriesgados: **crash, mines y mayor o menor**, que pueden dar premios enormes.
 > 🛑 Ponte un límite y **retírate a tiempo** en crash, mines y mayor o menor.
 > 🍀 Con una mascota **Suertuda** activa, la casa gana un poco menos.
 =====

@@ -404,3 +404,15 @@ def test_hilo_cap_cashes_out():
     while not g.finished:
         g.Guess(g.card[0] <= 7)
     assert not g.lost and g.payout == 500
+
+
+def test_blackjack_pays_classic_odds_by_default():
+    edge = CONFIG["casino"]["blackjack"]["edge"]
+    g = Blackjack(1000, edge, random.Random(0))
+    g.player, g.dealer = [card("10"), card("9")], [card("10"), card("7")]
+    g.Stand()
+    assert g.payout == 2000  # 1:1
+    g = Blackjack(1000, edge, random.Random(0))
+    g.player, g.dealer = [card("A"), card("K")], [card("10"), card("7")]
+    g.Settle()
+    assert g.payout == 2500  # 3:2

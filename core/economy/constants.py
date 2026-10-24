@@ -172,7 +172,9 @@ DEFAULT_CONFIG: dict = {
         # Same reels and paytable as slots, animated; a bit better odds since each spin takes longer.
         "deluxe": {"min": 50, "max": 5_000, "cooldown": 8, "edge": 0.08},
         "coinflip": {"min": 20, "max": 20_000, "cooldown": 3, "edge": 0.02},
-        "blackjack": {"min": 50, "max": 20_000, "cooldown": 5, "edge": 0.02},
+        # Classic payouts (x2, blackjack x2.5): the rules alone give the house ~1.4% (~5% playing badly).
+        # Any edge set here is taken from the winnings on top of that.
+        "blackjack": {"min": 50, "max": 20_000, "cooldown": 5, "edge": 0.0},
         "roulette": {"min": 20, "max": 20_000, "cooldown": 5, "edge": 0.027},
         "mines": {"min": 50, "max": 10_000, "cooldown": 5, "edge": 0.03, "max_multiplier": 100},
         "hilo": {"min": 50, "max": 10_000, "cooldown": 5, "edge": 0.03, "max_multiplier": 100},
