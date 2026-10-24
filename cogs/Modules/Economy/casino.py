@@ -25,9 +25,22 @@ from core.economy.casino import (
     SlotScale,
     SlotsPayout,
     SpinReels,
+    Winnings,
+    HORSES,
+    MINES_TILES,
+    HiLoGame,
+    MinesGame,
+    RaceFrames,
+    RaceMultiplier,
+    RaceWinner,
+    RouletteBet,
+    RouletteColor,
+    RouletteMultiplier,
+    ROULETTE_BETS,
 )
+from cogs.Modules.Economy.casino_games import HiLoView, HorseChoices, MinesView, RaceTrack
 from core.economy.config import EcoConfig
-from core.economy.constants import GAMES, MODULE
+from core.economy.constants import GAME_COMMANDS, GAMES, MODULE
 from core.economy.registry import Eco
 from core.economy.rewards import FormatAmount
 from core.economy.service import EconomyError, InsufficientFunds
@@ -106,12 +119,12 @@ def CrashEmbed(game: CrashGame, multiplier: float, config: dict, state: str = "f
     Track = "▱" * Height + ("🚀" if state != "crashed" else "💥") + "▱" * (CRASH_BAR - 1 - Height)
     if state == "flying":
         Color, Title = discord.Color.blurple(), "🚀 Crash"
-        Body = f"Si te retiras ahora: **{Money(int(game.bet * multiplier), config)}**"
+        Body = f"Si te retiras ahora: **{Money(Winnings(game.bet, multiplier), config)}**"
         if game.auto:
             Body += f"\n-# Retiro automático en {game.auto:.2f}x"
     elif state == "cashed":
         Color, Title = discord.Color.green(), "💰 ¡Te retiraste a tiempo!"
-        Body = f"Cobraste **{Money(int(game.bet * game.cashed), config)}** · el cohete explotó en **{game.crash:.2f}x**"
+        Body = f"Cobraste **{Money(Winnings(game.bet, game.cashed), config)}** · el cohete explotó en **{game.crash:.2f}x**"
     else:
         Color, Title = discord.Color.red(), f"💥 ¡CRASH en {game.crash:.2f}x!"
         Body = f"Perdiste {Money(game.bet, config)} 😭"
@@ -281,7 +294,7 @@ class EconomyCasino(commands.Cog):
             S = Config["casino"][Game]
             Edge = EffectiveEdge(S["edge"], Luck)
             embed.add_field(
-                name=f"{Label} · `/casino {'moneda' if Game == 'coinflip' else Game}`",
+                name=f"{Label} · `/casino {GAME_COMMANDS[Game]}`",
                 value=f"Apuesta: {S['min']:,} – {S['max']:,}\nCasa: {Edge:.2%} · Espera: {S['cooldown']}s".replace(",", "."),
             )
         embed.add_field(name="🎰 Premios de slots", value=SlotsTable(EffectiveEdge(Config["casino"]["slots"]["edge"], Luck), Config), inline=False)
@@ -396,7 +409,7 @@ class EconomyCasino(commands.Cog):
                     except discord.HTTPException:
                         pass
             Won = Game.cashed is not None
-            await Eco().casino.Pay(ctx.author, "crash", int(Bet * Game.cashed) if Won else 0)
+            await Eco().casino.Pay(ctx.author, "crash", Winnings(Bet, Game.cashed) if Won else 0)
         finally:
             Eco().casino.Finish(ctx.author, "crash")
             View.stop()
@@ -418,6 +431,110 @@ class EconomyCasino(commands.Cog):
             return await ctx.send(embed=BlackjackEmbed(ctx.author, Game, Config, Luck))
         View = BlackjackView(self.client, ctx.author, Game, Config, Luck)
         View.message = await ctx.send(embed=BlackjackEmbed(ctx.author, Game, Config, Luck), view=View)
+
+
+    @casino.command(name="ruleta", description="Ruleta europea: color, par/impar, mitades, docenas o número")
+    @app_commands.describe(cantidad="Cuánto apuestas (500, 1.5k, todo, mitad)", apuesta="rojo, negro, par, impar, 1-18, 19-36, docena1/2/3 o un número 0-36")
+    @ModuleIsEnabled(MODULE)
+    async def ruleta(self, ctx: commands.Context, cantidad: str, apuesta: str):
+        try:
+            Label, Winning = RouletteBet(apuesta)
+        except EconomyError as e:
+            return await ctx.send(f"{Emojis.no} {e}", ephemeral=True)
+        Started = await self.Begin(ctx, "roulette", cantidad)
+        if not Started:
+            return
+        Config, Bet, Edge, Luck = Started
+        Number = Eco().casino.rng.randrange(37)
+        Multiplier = RouletteMultiplier(Winning, Edge)
+        Won = Number in Winning
+        Payout = Winnings(Bet, Multiplier) if Won else 0
+        await Eco().casino.Pay(ctx.author, "roulette", Payout)
+        self.Played(ctx)
+        embed = discord.Embed(title="🎡 Ruleta", description=f"Apostaste a **{Label}** (paga x{Multiplier:.2f})\n# 🎡 girando...", color=discord.Color.dark_green())
+        Message = await ctx.send(embed=embed)
+        for Fake in Eco().casino.rng.sample(range(37), 2):
+            await asyncio.sleep(0.9)
+            embed.description = f"Apostaste a **{Label}** (paga x{Multiplier:.2f})\n# 🎡 {Fake} {RouletteColor(Fake)}..."
+            await Message.edit(embed=embed)
+        await asyncio.sleep(1.0)
+        embed = discord.Embed(
+            title="✅ ¡Ganaste!" if Won else "❌ Perdiste",
+            description=f"La bola cae en...\n# {Number} {RouletteColor(Number)}\n"
+            + (f"Cobras {Money(Payout, Config)}" if Won else f"Pierdes {Money(Bet, Config)}"),
+            color=discord.Color.green() if Won else discord.Color.red(),
+        )
+        embed.set_author(name=f"{ctx.author.display_name} apostó {Bet:,} a {Label}".replace(",", "."), icon_url=ctx.author.display_avatar)
+        embed.set_footer(text=EdgeNote(Edge, Luck))
+        await Message.edit(embed=embed)
+
+    @ruleta.autocomplete("apuesta")
+    async def RuletaAutocomplete(self, interaction: discord.Interaction, current: str):
+        Options = [app_commands.Choice(name=Label, value=Key) for Key, (Label, _) in ROULETTE_BETS.items()]
+        if current.strip().isdigit() and 0 <= int(current) <= 36:
+            Options.insert(0, app_commands.Choice(name=f"Número {int(current)}", value=str(int(current))))
+        return [O for O in Options if current.lower() in O.name.lower() or current.strip().isdigit()][:25]
+
+    @casino.command(name="mines", description="Abre casillas y evita las minas: cada diamante multiplica")
+    @app_commands.describe(cantidad="Cuánto apuestas (500, 1.5k, todo, mitad)", minas=f"Cuántas minas (1-{MINES_TILES - 1}); más minas, más paga cada diamante")
+    @ModuleIsEnabled(MODULE)
+    async def mines(self, ctx: commands.Context, cantidad: str, minas: app_commands.Range[int, 1, MINES_TILES - 1] = 3):
+        if not 1 <= minas < MINES_TILES:
+            return await ctx.send(f"{Emojis.no} Pon entre 1 y {MINES_TILES - 1} minas.", ephemeral=True)
+        Started = await self.Begin(ctx, "mines", cantidad, exclusive=True)
+        if not Started:
+            return
+        Config, Bet, Edge, Luck = Started
+        View = MinesView(self.client, ctx.author, MinesGame(Bet, minas, Edge, Eco().casino.rng), Config, Luck)
+        View.message = await ctx.send(embed=View.Embed(), view=View)
+
+    @casino.command(name="mayormenor", description="¿La siguiente carta será mayor o menor? Cada acierto multiplica")
+    @app_commands.describe(cantidad="Cuánto apuestas (500, 1.5k, todo, mitad)")
+    @ModuleIsEnabled(MODULE)
+    async def mayormenor(self, ctx: commands.Context, cantidad: str):
+        Started = await self.Begin(ctx, "hilo", cantidad, exclusive=True)
+        if not Started:
+            return
+        Config, Bet, Edge, Luck = Started
+        View = HiLoView(self.client, ctx.author, HiLoGame(Bet, Edge, Eco().casino.rng), Config, Luck)
+        View.message = await ctx.send(embed=View.Embed(), view=View)
+
+    @casino.command(name="carrera", description="Apuesta a un caballo: el favorito paga poco, el tapado paga mucho")
+    @app_commands.describe(cantidad="Cuánto apuestas (500, 1.5k, todo, mitad)", caballo="Tu caballo")
+    @app_commands.choices(caballo=[app_commands.Choice(name=f"{i + 1}. {Name} ({Chance:.0%})", value=i + 1) for i, (Name, Chance) in enumerate(HORSES)])
+    @ModuleIsEnabled(MODULE)
+    async def carrera(self, ctx: commands.Context, cantidad: str, caballo: int):
+        if not 1 <= caballo <= len(HORSES):
+            Config = await EcoConfig().Get(ctx.guild.id)
+            return await ctx.send(f"Elige un caballo del 1 al {len(HORSES)}:\n{HorseChoices(Config['casino']['race']['edge'])}", ephemeral=True)
+        Started = await self.Begin(ctx, "race", cantidad)
+        if not Started:
+            return
+        Config, Bet, Edge, Luck = Started
+        Picked = caballo - 1
+        Winner = RaceWinner(Eco().casino.rng)
+        Multiplier = RaceMultiplier(Picked, Edge)
+        Payout = Winnings(Bet, Multiplier) if Winner == Picked else 0
+        await Eco().casino.Pay(ctx.author, "race", Payout)
+        self.Played(ctx)
+        Frames = RaceFrames(Winner, Eco().casino.rng)
+        Length = max(max(F) for F in Frames)
+        Header = f"Apostaste {Bet:,} a **{HORSES[Picked][0]}** (paga x{Multiplier:.2f})".replace(",", ".")
+        embed = discord.Embed(title="🏇 ¡Arrancan!", description=f"{Header}\n\n{RaceTrack([0] * len(HORSES), Length, Picked)}", color=discord.Color.dark_orange())
+        Message = await ctx.send(embed=embed)
+        for Positions in Frames:
+            await asyncio.sleep(1.2)
+            embed.description = f"{Header}\n\n{RaceTrack(Positions, Length, Picked)}"
+            await Message.edit(embed=embed)
+        Won = Winner == Picked
+        embed = discord.Embed(
+            title=f"🏆 ¡Ganó {HORSES[Winner][0]}!",
+            description=f"{Header}\n\n{RaceTrack(Frames[-1], Length, Picked, Winner)}\n\n"
+            + (f"✅ ¡Tu caballo ganó! Cobras {Money(Payout, Config)}" if Won else f"❌ Perdiste {Money(Bet, Config)}"),
+            color=discord.Color.green() if Won else discord.Color.red(),
+        )
+        embed.set_footer(text=EdgeNote(Edge, Luck))
+        await Message.edit(embed=embed)
 
 
 async def setup(client: commands.Bot) -> None:

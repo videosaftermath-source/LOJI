@@ -159,11 +159,29 @@ DEFAULT_CONFIG: dict = {
         "slots": {"min": 20, "max": 20_000, "cooldown": 5, "edge": 0.04},
         "coinflip": {"min": 20, "max": 50_000, "cooldown": 3, "edge": 0.02},
         "blackjack": {"min": 50, "max": 50_000, "cooldown": 5, "edge": 0.02},
+        "roulette": {"min": 20, "max": 50_000, "cooldown": 5, "edge": 0.027},
+        "mines": {"min": 50, "max": 30_000, "cooldown": 5, "edge": 0.03},
+        "hilo": {"min": 50, "max": 30_000, "cooldown": 5, "edge": 0.03},
+        "race": {"min": 20, "max": 30_000, "cooldown": 10, "edge": 0.05},
     },
 }
 
 # Casino games: name shown to players.
-GAMES = {"crash": "🚀 Crash", "slots": "🎰 Slots", "coinflip": "🪙 Moneda", "blackjack": "🃏 Blackjack"}
+GAMES = {
+    "crash": "🚀 Crash",
+    "slots": "🎰 Slots",
+    "coinflip": "🪙 Moneda",
+    "blackjack": "🃏 Blackjack",
+    "roulette": "🎡 Ruleta",
+    "mines": "💣 Mines",
+    "hilo": "🔼 Mayor o menor",
+    "race": "🏇 Carrera",
+}
+# The subcommand that plays each game.
+GAME_COMMANDS = {
+    "crash": "crash", "slots": "slots", "coinflip": "moneda", "blackjack": "blackjack",
+    "roulette": "ruleta", "mines": "mines", "hilo": "mayormenor", "race": "carrera",
+}
 
 # How often voice time is paid (the task interval).
 VOICE_TICK_MINUTES = 5
@@ -195,6 +213,7 @@ SECTIONS = {
     "pets": "🐾 Mascotas",
     "gacha": "🎰 Gacha",
     "casino": "🎲 Casino",
+    "casino2": "🎲 Casino 2",
 }
 
 SETTINGS: list[Setting] = [
@@ -271,12 +290,21 @@ SETTINGS: list[Setting] = [
     Setting("gacha", "gacha.featured_chance", "50/50: prob. de que salga la destacada", float, 0, 1),
     *[
         S
-        for Game, Label in (("crash", "Crash"), ("slots", "Slots"), ("coinflip", "Moneda"), ("blackjack", "Blackjack"))
+        for Section, Game, Label in (
+            ("casino", "crash", "Crash"),
+            ("casino", "slots", "Slots"),
+            ("casino", "coinflip", "Moneda"),
+            ("casino", "blackjack", "Blackjack"),
+            ("casino2", "roulette", "Ruleta"),
+            ("casino2", "mines", "Mines"),
+            ("casino2", "hilo", "Mayor o menor"),
+            ("casino2", "race", "Carrera"),
+        )
         for S in (
-            Setting("casino", f"casino.{Game}.min", f"{Label}: apuesta mínima", int, 1, 10_000_000),
-            Setting("casino", f"casino.{Game}.max", f"{Label}: apuesta máxima", int, 1, 100_000_000),
-            Setting("casino", f"casino.{Game}.cooldown", f"{Label}: espera (segundos)", int, 0, 3600),
-            Setting("casino", f"casino.{Game}.edge", f"{Label}: ventaja casa (0.03 = 3%)", float, 0, 0.5),
+            Setting(Section, f"casino.{Game}.min", f"{Label}: apuesta mínima", int, 1, 10_000_000),
+            Setting(Section, f"casino.{Game}.max", f"{Label}: apuesta máxima", int, 1, 100_000_000),
+            Setting(Section, f"casino.{Game}.cooldown", f"{Label}: espera (segundos)", int, 0, 3600),
+            Setting(Section, f"casino.{Game}.edge", f"{Label}: ventaja casa (0.03 = 3%)", float, 0, 0.5),
         )
     ],
     Setting("casino", "casino.crash.max_multiplier", "Crash: multiplicador máximo", int, 2, 1000),

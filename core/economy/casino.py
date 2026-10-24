@@ -26,6 +26,11 @@ class CasinoError(EconomyError):
     """Message is safe to show to users."""
 
 
+def Winnings(bet: int, multiplier: float) -> int:
+    """bet x multiplier, rounded down, ignoring float noise (20 x 0.99999999 must give 20)."""
+    return int(bet * multiplier + 1e-6)
+
+
 def EffectiveEdge(edge: float, luck: float) -> float:
     return max(0.0, edge * (1 - max(0.0, min(1.0, luck))))
 
@@ -54,7 +59,7 @@ def ParseBet(raw: str, balance: int, settings: dict) -> int:
 
 
 def CoinflipPayout(bet: int, won: bool, edge: float) -> int:
-    return int(bet * 2 * (1 - edge)) if won else 0
+    return Winnings(bet, 2 * (1 - edge)) if won else 0
 
 
 # ---------------- slots ----------------
@@ -98,7 +103,7 @@ def SpinReels(rng: random.Random) -> tuple[str, str, str]:
 
 
 def SlotsPayout(bet: int, reels, edge: float) -> int:
-    return int(bet * BaseMultiplier(reels) * SlotScale(edge))
+    return Winnings(bet, BaseMultiplier(reels) * SlotScale(edge))
 
 
 # ---------------- crash ----------------
@@ -202,13 +207,13 @@ class Blackjack:
         if IsBlackjack(self.player) and IsBlackjack(self.dealer):
             self.result, self.payout = "push", self.bet
         elif IsBlackjack(self.player):
-            self.result, self.payout = "blackjack", self.bet + int(self.bet * 1.5 * Fee)
+            self.result, self.payout = "blackjack", self.bet + Winnings(self.bet, 1.5 * Fee)
         elif IsBlackjack(self.dealer):
             self.result, self.payout = "lose", 0
         elif Player > 21:
             self.result, self.payout = "bust", 0
         elif Dealer > 21 or Player > Dealer:
-            self.result, self.payout = "win", self.bet + int(self.bet * Fee)
+            self.result, self.payout = "win", self.bet + Winnings(self.bet, Fee)
         elif Player == Dealer:
             self.result, self.payout = "push", self.bet
         else:
@@ -284,3 +289,191 @@ class Casino:
 
     def Finish(self, member, game: str):
         self.active.discard((member.guild.id, member.id, game))
+
+
+# ---------------- roulette (European, single zero) ----------------
+
+ROULETTE_NUMBERS = 37
+RED = {1, 3, 5, 7, 9, 12, 14, 16, 18, 19, 21, 23, 25, 27, 30, 32, 34, 36}
+ROULETTE_BETS = {
+    "rojo": ("🔴 Rojo", RED),
+    "negro": ("⚫ Negro", set(range(1, 37)) - RED),
+    "par": ("Par", {n for n in range(1, 37) if n % 2 == 0}),
+    "impar": ("Impar", {n for n in range(1, 37) if n % 2 == 1}),
+    "1-18": ("Del 1 al 18", set(range(1, 19))),
+    "19-36": ("Del 19 al 36", set(range(19, 37))),
+    "docena1": ("1ª docena (1-12)", set(range(1, 13))),
+    "docena2": ("2ª docena (13-24)", set(range(13, 25))),
+    "docena3": ("3ª docena (25-36)", set(range(25, 37))),
+}
+
+
+def RouletteColor(number: int) -> str:
+    return "🟢" if number == 0 else ("🔴" if number in RED else "⚫")
+
+
+def RouletteBet(choice: str) -> tuple[str, set[int]]:
+    """'rojo', 'docena2', '17'... -> (label, winning numbers)."""
+    Text = choice.strip().lower().replace("ª", "").replace(" ", "")
+    if Text in ROULETTE_BETS:
+        return ROULETTE_BETS[Text]
+    if Text.isdigit() and 0 <= int(Text) <= 36:
+        return f"Número {int(Text)} {RouletteColor(int(Text))}", {int(Text)}
+    raise CasinoError("Apuesta a `rojo`, `negro`, `par`, `impar`, `1-18`, `19-36`, `docena1/2/3` o un número del 0 al 36.")
+
+
+def RouletteMultiplier(winning: set[int], edge: float) -> float:
+    """Fair odds (37 / winning numbers) minus the house edge."""
+    return (1 - edge) * ROULETTE_NUMBERS / len(winning)
+
+
+# ---------------- mines ----------------
+
+MINES_TILES = 20  # 4 rows of 5 buttons; the 5th row holds the cash-out button
+
+
+def MinesFair(tiles: int, mines: int, revealed: int) -> float:
+    """Fair multiplier after `revealed` safe tiles: 1 / chance of surviving them."""
+    Multiplier = 1.0
+    for i in range(revealed):
+        Multiplier *= (tiles - i) / (tiles - mines - i)
+    return Multiplier
+
+
+@dataclass
+class MinesGame:
+    bet: int
+    mines: int
+    edge: float
+    rng: random.Random
+    tiles: int = MINES_TILES
+    bombs: set = field(default_factory=set)
+    revealed: set = field(default_factory=set)
+    finished: bool = False
+    exploded: int | None = None
+    payout: int = 0
+
+    def __post_init__(self):
+        if not 1 <= self.mines < self.tiles:
+            raise CasinoError(f"Pon entre 1 y {self.tiles - 1} minas.")
+        self.bombs = set(self.rng.sample(range(self.tiles), self.mines))
+
+    def Multiplier(self, revealed: int | None = None) -> float:
+        Count = len(self.revealed) if revealed is None else revealed
+        return (1 - self.edge) * MinesFair(self.tiles, self.mines, Count)
+
+    def Reveal(self, tile: int) -> bool:
+        """Opens a tile. Returns True if it was safe."""
+        if self.finished or tile in self.revealed:
+            return True
+        if tile in self.bombs:
+            self.exploded = tile
+            self.finished, self.payout = True, 0
+            return False
+        self.revealed.add(tile)
+        if len(self.revealed) == self.tiles - self.mines:
+            self.CashOut()  # nothing left to open
+        return True
+
+    def CashOut(self):
+        if self.finished:
+            return
+        self.finished = True
+        # Leaving without opening anything just returns the bet.
+        self.payout = Winnings(self.bet, self.Multiplier()) if self.revealed else self.bet
+
+
+# ---------------- higher / lower ----------------
+
+HILO_RANKS = 13  # A=1 ... K=13, every card equally likely
+
+
+def HiLoChance(value: int, higher: bool) -> float:
+    """Chance the next card is strictly higher/lower (a tie loses)."""
+    return (HILO_RANKS - value) / HILO_RANKS if higher else (value - 1) / HILO_RANKS
+
+
+@dataclass
+class HiLoGame:
+    bet: int
+    edge: float
+    rng: random.Random
+    card: tuple = None
+    fair: float = 1.0
+    streak: int = 0
+    finished: bool = False
+    lost: bool = False
+    payout: int = 0
+    previous: tuple = None
+
+    def __post_init__(self):
+        self.card = self.Draw()
+
+    def Draw(self) -> tuple[int, str]:
+        return self.rng.randint(1, HILO_RANKS), self.rng.choice(SUITS)
+
+    def Next(self, higher: bool) -> float:
+        """Multiplier you'd have after a correct guess."""
+        Chance = HiLoChance(self.card[0], higher)
+        return (1 - self.edge) * self.fair / Chance if Chance else 0.0
+
+    def Guess(self, higher: bool) -> bool:
+        Chance = HiLoChance(self.card[0], higher)
+        if self.finished or not Chance:
+            return False
+        New = self.Draw()
+        Right = New[0] > self.card[0] if higher else New[0] < self.card[0]
+        self.previous, self.card = self.card, New
+        if Right:
+            self.fair /= Chance
+            self.streak += 1
+        else:
+            self.finished, self.lost, self.payout = True, True, 0
+        return Right
+
+    def CashOut(self):
+        if self.finished:
+            return
+        self.finished = True
+        self.payout = Winnings(self.bet, (1 - self.edge) * self.fair) if self.streak else self.bet
+
+
+def HiLoName(card: tuple[int, str]) -> str:
+    return f"{RANKS[card[0] - 1]}{card[1]}"
+
+
+# ---------------- horse race ----------------
+
+# (name, chance of winning)
+HORSES = [
+    ("Relámpago", 0.35),
+    ("Tortilla", 0.25),
+    ("Pegaso", 0.20),
+    ("Don Galopín", 0.12),
+    ("Turbo Burro", 0.08),
+]
+RACE_LENGTH = 16
+RACE_FRAMES = 5
+
+
+def RaceMultiplier(horse: int, edge: float) -> float:
+    return (1 - edge) / HORSES[horse][1]
+
+
+def RaceWinner(rng: random.Random) -> int:
+    return rng.choices(range(len(HORSES)), [C for _, C in HORSES])[0]
+
+
+def RaceFrames(winner: int, rng: random.Random, frames: int = RACE_FRAMES, length: int = RACE_LENGTH) -> list[list[int]]:
+    """Positions of every horse per frame. The winner crosses the line first, on the last frame."""
+    Finish = [length if H == winner else rng.randint(length // 2, length - 1) for H in range(len(HORSES))]
+    Steps = []
+    for F in range(1, frames + 1):
+        T = F / frames
+        Row = []
+        for H, End in enumerate(Finish):
+            # Wobble along the way so the race doesn't look scripted.
+            Wobble = 0 if F == frames else rng.randint(-2, 2)
+            Row.append(max(0, min(length - (0 if H == winner and F == frames else 1), round(End * T) + Wobble)))
+        Steps.append(Row)
+    return Steps

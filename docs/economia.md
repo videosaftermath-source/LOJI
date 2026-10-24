@@ -11,7 +11,7 @@ Documento vivo para no perder decisiones entre sesiones.
 | 4 | ✅ | Mascotas: especies, rarezas, arquetipos, niveles, cuidado con desgaste perezoso, evolución, catálogo de 16 especies |
 | 5a | ✅ | Gacha: banners, pity (soft/hard), 50/50, x1/x10, GIFs y tarjetas con Pillow |
 | 5b | ✅ | Casino (`/casino`): crash, slots, moneda, blackjack. Ventaja de la casa exacta por juego, suerte del Suertudo baja la ventaja (nunca la invierte), estadísticas por usuario |
-| 5c | ⏳ | Resto del casino: ruleta, mines, higher/lower, carrera de caballos (mismo patrón: `Casino.Start` / `Casino.Pay`, lógica pura en `core/economy/casino.py`) |
+| 5c | ✅ | Ruleta europea, mines (20 casillas), mayor o menor y carrera de caballos. Todos con ventaja exacta y `Winnings()` para redondear sin errores de decimales |
 | 6 | ⏳ | Impuestos progresivos (sustituir `transfer.fee_percent` por tramos en `core/economy/tax.py`), inflación, precios dinámicos por demanda (`shop.Price`), `/economy stats`, banco opcional |
 | 7 | ⏳ | **Imágenes de mascotas**: tarjeta generada con Pillow para `/mascota ver` (estilo de las tarjetas del gacha en `core/economy/cards.py`), con barras de cuidado, nivel, estado de ánimo y quizá animación al subir de nivel o evolucionar |
 

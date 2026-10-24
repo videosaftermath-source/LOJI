@@ -224,3 +224,152 @@ def test_lucky_pet_lowers_edge():
     run(s.economy.Add(G, 5, 1000, "seed"))
     _, edge, luck = run(s.casino.Start(member(5), "slots", "100", CONFIG))
     assert luck > 0 and edge < CONFIG["casino"]["slots"]["edge"]
+
+
+# ---- roulette ----
+
+from core.economy.casino import (  # noqa: E402
+    HORSES,
+    MINES_TILES,
+    HiLoChance,
+    HiLoGame,
+    MinesFair,
+    MinesGame,
+    RaceFrames,
+    RaceMultiplier,
+    RaceWinner,
+    RouletteBet,
+    RouletteMultiplier,
+    ROULETTE_BETS,
+)
+
+
+@pytest.mark.parametrize("choice", list(ROULETTE_BETS) + ["0", "17", "36"])
+def test_roulette_every_bet_returns_one_minus_edge(choice):
+    _, winning = RouletteBet(choice)
+    assert len(winning) / 37 * RouletteMultiplier(winning, 0.027) == pytest.approx(0.973)
+
+
+def test_roulette_classic_payouts_at_default_edge():
+    assert RouletteMultiplier(RouletteBet("rojo")[1], 0.027) == pytest.approx(2.0, abs=0.001)
+    assert RouletteMultiplier(RouletteBet("7")[1], 0.027) == pytest.approx(36.0, abs=0.001)
+    assert len(RouletteBet("rojo")[1]) == len(RouletteBet("negro")[1]) == 18
+    assert 0 not in RouletteBet("par")[1]
+
+
+@pytest.mark.parametrize("choice", ["azul", "37", "-1", "docena4"])
+def test_roulette_bad_bets(choice):
+    with pytest.raises(CasinoError):
+        RouletteBet(choice)
+
+
+# ---- mines ----
+
+
+@pytest.mark.parametrize("mines", [1, 3, 10, 19])
+def test_mines_any_cashout_point_returns_one_minus_edge(mines):
+    safe = MINES_TILES - mines
+    for k in range(1, safe + 1):
+        survive = 1 / MinesFair(MINES_TILES, mines, k)
+        g = MinesGame(1000, mines, 0.03, random.Random(0))
+        assert survive * g.Multiplier(k) == pytest.approx(0.97)
+
+
+def test_mines_simulated_strategy():
+    rng = random.Random(5)
+    n, bet, paid = 50_000, 1000, 0
+    for _ in range(n):
+        g = MinesGame(bet, 3, 0.03, rng)
+        for tile in rng.sample(range(MINES_TILES), 4):
+            if not g.Reveal(tile):
+                break
+        g.CashOut()
+        paid += g.payout
+    assert paid / (n * bet) == pytest.approx(0.97, abs=0.02)
+
+
+def test_mines_flow():
+    g = MinesGame(1000, 1, 0.0, random.Random(1))
+    bomb = next(iter(g.bombs))
+    safe = [t for t in range(MINES_TILES) if t != bomb]
+    assert g.Reveal(safe[0]) and g.Multiplier() == pytest.approx(20 / 19)
+    assert g.Reveal(safe[0])  # same tile twice: no change
+    assert len(g.revealed) == 1
+    assert not g.Reveal(bomb) and g.finished and g.payout == 0 and g.exploded == bomb
+    g = MinesGame(1000, 1, 0.0, random.Random(2))
+    for t in range(MINES_TILES):
+        if t not in g.bombs:
+            g.Reveal(t)
+    assert g.finished and g.payout == 20_000  # opened everything: auto cash-out at 20x
+    g = MinesGame(1000, 5, 0.03, random.Random(3))
+    g.CashOut()
+    assert g.payout == 1000  # leaving without opening returns the bet
+    with pytest.raises(CasinoError):
+        MinesGame(1000, MINES_TILES, 0.03, random.Random(0))
+
+
+# ---- higher / lower ----
+
+
+def test_hilo_chances_and_ties_lose():
+    assert HiLoChance(1, False) == 0 and HiLoChance(13, True) == 0
+    assert HiLoChance(7, True) == HiLoChance(7, False) == 6 / 13
+
+
+def test_hilo_one_guess_returns_one_minus_edge():
+    for value in range(1, 14):
+        for higher in (True, False):
+            p = HiLoChance(value, higher)
+            if p:
+                g = HiLoGame(1000, 0.03, random.Random(0))
+                g.card = (value, "♠")
+                assert p * g.Next(higher) == pytest.approx(0.97)
+
+
+def test_hilo_simulated_streaks():
+    rng = random.Random(6)
+    n, bet, paid = 60_000, 1000, 0
+    for _ in range(n):
+        g = HiLoGame(bet, 0.03, rng)
+        for _ in range(3):
+            higher = g.card[0] <= 7
+            if not g.Guess(higher):
+                break
+        g.CashOut()
+        paid += g.payout
+    assert paid / (n * bet) == pytest.approx(0.97, abs=0.02)
+
+
+def test_hilo_flow():
+    g = HiLoGame(1000, 0.0, random.Random(0))
+    g.card = (13, "♠")
+    assert not g.Guess(True) and not g.finished  # impossible guess is refused
+    g.CashOut()
+    assert g.payout == 1000  # no streak: bet back
+
+
+# ---- horse race ----
+
+
+def test_race_every_horse_returns_one_minus_edge():
+    assert sum(c for _, c in HORSES) == pytest.approx(1)
+    for i, (_, chance) in enumerate(HORSES):
+        assert chance * RaceMultiplier(i, 0.05) == pytest.approx(0.95)
+
+
+def test_race_winner_frequencies():
+    rng = random.Random(7)
+    wins = [0] * len(HORSES)
+    for _ in range(100_000):
+        wins[RaceWinner(rng)] += 1
+    for i, (_, chance) in enumerate(HORSES):
+        assert wins[i] / 100_000 == pytest.approx(chance, abs=0.01)
+
+
+def test_race_frames_end_with_the_winner_first():
+    rng = random.Random(8)
+    for winner in range(len(HORSES)):
+        frames = RaceFrames(winner, rng)
+        last = frames[-1]
+        assert last[winner] == max(last) and last.count(max(last)) == 1
+        assert all(max(f) <= last[winner] for f in frames)
