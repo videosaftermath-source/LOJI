@@ -9,6 +9,7 @@ from core.bot.HelpEmbeds import NotYourPanel
 from core.bot.emojis import Emojis
 from core.economy.config import EcoConfig
 from core.economy.constants import (
+    ARCHETYPES,
     BOOSTS,
     COLLECTIBLE,
     CONSUMABLE,
@@ -16,10 +17,13 @@ from core.economy.constants import (
     MAX_CODES,
     MAX_ITEMS,
     MAX_QUESTS,
+    MAX_SPECIES,
     OBJECTIVES,
     QUEST_PERIODS,
+    RARITIES,
     ROLE,
 )
+from core.economy.pets import PerkValue
 from core.economy.registry import Eco
 from core.economy.rewards import Aware, FormatAmount
 from core.economy.service import EconomyError
@@ -538,3 +542,228 @@ class QuestKind(Panel):
     @discord.ui.button(label="Cancelar", style=discord.ButtonStyle.grey, row=3)
     async def Cancel(self, interaction: discord.Interaction, _):
         await QuestsPanel.Open(interaction, self.author)
+
+
+# ======================= PETS =======================
+
+
+def SpeciesLine(species: dict, by_id: dict) -> str:
+    Evolves = by_id.get(species.get("evolves_to") or "")
+    Evo = f" → {Evolves.get('emoji') or ''} {Evolves['name']} (nv. {species['evolve_level']})" if Evolves else ""
+    Paused = "" if species.get("enabled") else "⏸️ "
+    return (
+        f"{Paused}{species.get('emoji') or '🐾'} **{species['name']}** · {RARITIES[species['rarity']]['stars']} · "
+        f"{ARCHETYPES[species['archetype']]['label']}{Evo}"
+    )
+
+
+async def SpeciesEmbed(guild: discord.Guild) -> discord.Embed:
+    All = await Eco().pets.AllSpecies(guild.id)
+    ById = {S["species_id"]: S for S in All}
+    embed = discord.Embed(title="🐾 Especies de mascotas", color=discord.Color.teal())
+    embed.description = ("\n".join(SpeciesLine(S, ById) for S in All) or "No hay especies. Carga el catálogo de ejemplo o crea una.")[:4096]
+    embed.set_footer(text=f"{len(All)}/{MAX_SPECIES} · ⏸️ = pausada (no sale en el gacha) · Regala con /eco-admin regalar-mascota")
+    return embed
+
+
+class SpeciesPanel(Panel):
+    def __init__(self, author: discord.Member, species: list[dict]):
+        super().__init__(author)
+        if species:
+            Select = discord.ui.Select(
+                placeholder="Gestionar una especie",
+                options=[discord.SelectOption(label=S["name"][:100], value=S["species_id"], emoji=S.get("emoji") or "🐾") for S in species],
+            )
+            Select.callback = self.Manage
+            self.add_item(Select)
+        self.Create.disabled = len(species) >= MAX_SPECIES
+        if species:
+            self.remove_item(self.Seed)
+
+    @classmethod
+    async def Open(cls, interaction: discord.Interaction, author: discord.Member, content: str | None = None):
+        All = await Eco().pets.AllSpecies(interaction.guild.id)
+        await interaction.response.edit_message(content=content, embed=await SpeciesEmbed(interaction.guild), view=cls(author, All))
+
+    async def Manage(self, interaction: discord.Interaction):
+        Species = await Eco().pets.GetSpecies(interaction.guild.id, interaction.data["values"][0])
+        if not Species:
+            return await SpeciesPanel.Open(interaction, self.author)
+        await interaction.response.edit_message(content=None, embed=await SpeciesCard(interaction.guild, Species), view=SpeciesItem(self.author, Species))
+
+    @discord.ui.button(label="Crear especie", emoji="➕", style=discord.ButtonStyle.green, row=1)
+    async def Create(self, interaction: discord.Interaction, _):
+        await interaction.response.send_modal(SpeciesInfo(self.author))
+
+    @discord.ui.button(label="Cargar catálogo de ejemplo (16)", emoji="📦", style=discord.ButtonStyle.blurple, row=1)
+    async def Seed(self, interaction: discord.Interaction, _):
+        try:
+            Added = await Eco().pets.SeedStarter(interaction.guild.id)
+        except EconomyError as e:
+            return await Fail(interaction, e)
+        await SpeciesPanel.Open(interaction, self.author, f"{Emojis.tick} Añadí {Added} especies.")
+
+
+async def SpeciesCard(guild: discord.Guild, species: dict) -> discord.Embed:
+    Config = await EcoConfig().Get(guild.id)
+    Rarity, Archetype = RARITIES[species["rarity"]], ARCHETYPES[species["archetype"]]
+    MaxLevel = Config["pets"]["max_level"]
+    embed = discord.Embed(
+        title=f"{species.get('emoji') or '🐾'} {species['name']}",
+        description=species.get("description") or "*Sin descripción.*",
+        color=Rarity["color"],
+    )
+    embed.add_field(name="Rareza", value=f"{Rarity['stars']} {Rarity['label']}")
+    embed.add_field(name="Arquetipo", value=Archetype["label"])
+    embed.add_field(
+        name="Perk",
+        value=f"Nivel 1: +{PerkValue(species, 1):.1%} · Nivel {MaxLevel}: +{PerkValue(species, MaxLevel):.1%}\n-# {Archetype['perk']} (antes de topes)",
+        inline=False,
+    )
+    Target = await Eco().pets.GetSpecies(guild.id, species.get("evolves_to") or "")
+    embed.add_field(
+        name="Evolución",
+        value=f"→ {Target.get('emoji') or ''} {Target['name']} al nivel {species['evolve_level']}" if Target else "No evoluciona",
+        inline=False,
+    )
+    if species.get("image"):
+        embed.set_thumbnail(url=species["image"])
+    embed.set_footer(text=f"ID: {species['species_id']} · {'Activa' if species.get('enabled') else 'Pausada'}")
+    return embed
+
+
+class SpeciesInfo(discord.ui.Modal):
+    def __init__(self, author: discord.Member, species: dict | None = None):
+        super().__init__(title="Editar especie" if species else "Nueva especie")
+        self.author = author
+        self.species_doc = species
+        S = species or {}
+        Name = f"{S['emoji']} {S['name']}" if S.get("emoji") else S.get("name")
+        self.name = discord.ui.TextInput(label="Nombre (puede empezar con un emoji)", default=Name, max_length=50, placeholder="🐹 Hámster Currante")
+        self.description = discord.ui.TextInput(label="Descripción", default=S.get("description"), max_length=200, required=False, style=discord.TextStyle.paragraph)
+        self.image = discord.ui.TextInput(label="Imagen (URL, opcional)", default=S.get("image"), max_length=300, required=False)
+        for Input in (self.name, self.description, self.image):
+            self.add_item(Input)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        Emoji, Name = SplitEmoji(self.name.value)
+        Image = self.image.value.strip() or None
+        if Image and not Image.startswith(("http://", "https://")):
+            return await Fail(interaction, "La imagen tiene que ser un enlace (https://...).")
+        Data = {"name": Name, "emoji": Emoji, "description": self.description.value.strip(), "image": Image}
+        if self.species_doc:
+            Species = await Eco().pets.UpdateSpecies(interaction.guild.id, self.species_doc["species_id"], Data)
+            return await interaction.response.edit_message(embed=await SpeciesCard(interaction.guild, Species), view=SpeciesItem(self.author, Species))
+        await interaction.response.edit_message(
+            content=f"**{Emoji or '🐾'} {Name}**: elige rareza y arquetipo.", embed=None, view=SpeciesKind(self.author, Data)
+        )
+
+
+class SpeciesKind(Panel):
+    def __init__(self, author: discord.Member, draft: dict):
+        super().__init__(author)
+        self.draft = draft
+        self.rarity = discord.ui.Select(placeholder="Rareza", options=[discord.SelectOption(label=f"{R['stars']} {R['label']}", value=K) for K, R in RARITIES.items()], row=0)
+        self.archetype = discord.ui.Select(placeholder="Arquetipo", options=[discord.SelectOption(label=A["label"], value=K, description=A["perk"][:100]) for K, A in ARCHETYPES.items()], row=1)
+        for Select in (self.rarity, self.archetype):
+            Select.callback = self.Pick
+            self.add_item(Select)
+
+    async def Pick(self, interaction: discord.Interaction):
+        await interaction.response.defer()
+
+    @discord.ui.button(label="Guardar", emoji="💾", style=discord.ButtonStyle.green, row=2)
+    async def Save(self, interaction: discord.Interaction, _):
+        if not self.rarity.values or not self.archetype.values:
+            return await Fail(interaction, "Elige la rareza y el arquetipo.")
+        try:
+            Species = await Eco().pets.CreateSpecies(
+                interaction.guild.id, {**self.draft, "rarity": self.rarity.values[0], "archetype": self.archetype.values[0]}
+            )
+        except EconomyError as e:
+            return await Fail(interaction, e)
+        await interaction.response.edit_message(
+            content=f"{Emojis.tick} Especie creada.", embed=await SpeciesCard(interaction.guild, Species), view=SpeciesItem(self.author, Species)
+        )
+
+    @discord.ui.button(label="Cancelar", style=discord.ButtonStyle.grey, row=2)
+    async def Cancel(self, interaction: discord.Interaction, _):
+        await SpeciesPanel.Open(interaction, self.author)
+
+
+class SpeciesItem(Panel):
+    def __init__(self, author: discord.Member, species: dict):
+        super().__init__(author)
+        self.species_doc = species
+        self.Toggle.label = "Pausar" if species.get("enabled") else "Activar"
+        self.confirming = False
+
+    @discord.ui.button(label="Editar", emoji="✏️", style=discord.ButtonStyle.blurple)
+    async def Edit(self, interaction: discord.Interaction, _):
+        await interaction.response.send_modal(SpeciesInfo(self.author, self.species_doc))
+
+    @discord.ui.button(label="Evolución", emoji="✨", style=discord.ButtonStyle.blurple)
+    async def Evolution(self, interaction: discord.Interaction, _):
+        Others = [S for S in await Eco().pets.AllSpecies(interaction.guild.id) if S["species_id"] != self.species_doc["species_id"]]
+        await interaction.response.edit_message(view=EvolutionPicker(self.author, self.species_doc, Others))
+
+    @discord.ui.button(label="Pausar", style=discord.ButtonStyle.grey)
+    async def Toggle(self, interaction: discord.Interaction, _):
+        Species = await Eco().pets.UpdateSpecies(interaction.guild.id, self.species_doc["species_id"], {"enabled": not self.species_doc.get("enabled")})
+        await interaction.response.edit_message(embed=await SpeciesCard(interaction.guild, Species), view=SpeciesItem(self.author, Species))
+
+    @discord.ui.button(label="Borrar", emoji="🗑️", style=discord.ButtonStyle.red)
+    async def Remove(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if not self.confirming:
+            self.confirming = True
+            button.label = "¿Seguro? Pulsa otra vez"
+            return await interaction.response.edit_message(view=self)
+        try:
+            await Eco().pets.DeleteSpecies(interaction.guild.id, self.species_doc["species_id"])
+        except EconomyError as e:
+            return await Fail(interaction, e)
+        await SpeciesPanel.Open(interaction, self.author, "🗑️ Especie borrada.")
+
+    @discord.ui.button(label="Volver", emoji="⬅️", style=discord.ButtonStyle.grey)
+    async def Back(self, interaction: discord.Interaction, _):
+        await SpeciesPanel.Open(interaction, self.author)
+
+
+class EvolutionPicker(Panel):
+    def __init__(self, author: discord.Member, species: dict, others: list[dict]):
+        super().__init__(author)
+        self.species_doc = species
+        Options = [discord.SelectOption(label="Sin evolución", value="none", emoji="🚫")] + [
+            discord.SelectOption(label=S["name"][:100], value=S["species_id"], emoji=S.get("emoji") or "🐾") for S in others[:24]
+        ]
+        Select = discord.ui.Select(placeholder="¿En qué evoluciona?", options=Options)
+        Select.callback = self.Pick
+        self.add_item(Select)
+
+    async def Pick(self, interaction: discord.Interaction):
+        Target = interaction.data["values"][0]
+        if Target == "none":
+            Species = await Eco().pets.UpdateSpecies(interaction.guild.id, self.species_doc["species_id"], {"evolves_to": None, "evolve_level": None})
+            return await interaction.response.edit_message(embed=await SpeciesCard(interaction.guild, Species), view=SpeciesItem(self.author, Species))
+        await interaction.response.send_modal(EvolutionLevel(self.author, self.species_doc, Target))
+
+
+class EvolutionLevel(discord.ui.Modal, title="Nivel de evolución"):
+    level = discord.ui.TextInput(label="¿A qué nivel evoluciona?", max_length=3, default="10")
+
+    def __init__(self, author: discord.Member, species: dict, target: str):
+        super().__init__()
+        self.author = author
+        self.species_doc = species
+        self.target = target
+
+    async def on_submit(self, interaction: discord.Interaction):
+        Config = await EcoConfig().Get(interaction.guild.id)
+        try:
+            Level = Number(self.level.value, "Nivel", 2)
+            if Level > Config["pets"]["max_level"]:
+                raise InputError(f"El nivel máximo es {Config['pets']['max_level']}.")
+        except InputError as e:
+            return await Fail(interaction, e)
+        Species = await Eco().pets.UpdateSpecies(interaction.guild.id, self.species_doc["species_id"], {"evolves_to": self.target, "evolve_level": Level})
+        await interaction.response.edit_message(embed=await SpeciesCard(interaction.guild, Species), view=SpeciesItem(self.author, Species))

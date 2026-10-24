@@ -15,12 +15,16 @@ CODES = "eco_codes"
 CODE_USES = "eco_code_uses"
 QUESTS = "eco_quests"
 QUEST_PROGRESS = "eco_quest_progress"
+SPECIES = "eco_pet_species"
+PETS = "eco_pets"
 
 # Discord select menus hold at most 25 options, so these are capped there.
 MAX_ITEMS = 25
 MAX_CODES = 25
 MAX_QUESTS = 25
 MAX_BUY_AT_ONCE = 100
+MAX_SPECIES = 25
+MAX_PETS = 25
 
 # Item types
 ROLE = "role"
@@ -46,6 +50,22 @@ OBJECTIVES = {
     "play": "🎲 Partidas jugadas (casino)",
 }
 QUEST_PERIODS = {"daily": "📅 Diaria", "weekly": "🗓️ Semanal", "once": "⭐ Única"}
+
+# Rarities (shared with the gacha). Perk = base + per_level * (level - 1).
+RARITIES = {
+    "common": {"label": "Común", "stars": "⭐", "color": 0x95A5A6, "base": 0.03, "per_level": 0.003},
+    "rare": {"label": "Rara", "stars": "⭐⭐", "color": 0x3498DB, "base": 0.05, "per_level": 0.005},
+    "epic": {"label": "Épica", "stars": "⭐⭐⭐", "color": 0x9B59B6, "base": 0.08, "per_level": 0.007},
+    "legendary": {"label": "Legendaria", "stars": "⭐⭐⭐⭐", "color": 0xF1C40F, "base": 0.12, "per_level": 0.010},
+}
+
+# Pet archetypes: which bonus they give, and how strong compared to the rarity table.
+ARCHETYPES = {
+    "farmer": {"label": "🌾 Farmeador", "bonus": "work", "scale": 1.0, "perk": "extra en /trabajar"},
+    "talker": {"label": "🗣️ Charlatán", "bonus": "chat", "scale": 1.0, "perk": "extra por chatear"},
+    "lucky": {"label": "🍀 Suertudo", "bonus": "luck", "scale": 0.4, "perk": "más suerte en el casino"},
+    "saver": {"label": "💰 Ahorrador", "bonus": "discount", "scale": 0.6, "perk": "de descuento en tienda y comisiones"},
+}
 
 # Ledger kinds: money entering the economy, leaving it, or moving between users.
 CREATED = "created"
@@ -92,6 +112,27 @@ DEFAULT_CONFIG: dict = {
     },
     "voice": {"enabled": False, "per_minute": 2, "daily_cap": 300, "min_members": 2},
     "bonuses": {"max": 1.0},
+    "pets": {
+        "max_level": 30,
+        "xp_base": 40,
+        "xp_per_level": 20,
+        "hunger_decay": 2.0,
+        "happiness_decay": 1.5,
+        "food_price": 60,
+        "food_amount": 35,
+        "play_price": 40,
+        "play_amount": 30,
+        "care_cooldown": 30 * 60,
+        "xp_care": 15,
+        "xp_work": 5,
+        "xp_daily": 10,
+        "xp_message": 1,
+        "xp_game": 2,
+        "xp_duplicate": 150,
+        "evolve_price": 2500,
+        "max_luck": 0.15,
+        "max_discount": 0.25,
+    },
 }
 
 # How often voice time is paid (the task interval).
@@ -121,6 +162,7 @@ SECTIONS = {
     "activity": "💬 Pago por chat",
     "antispam": "🛡️ Anti-spam",
     "voice": "🔊 Pago por voz",
+    "pets": "🐾 Mascotas",
 }
 
 SETTINGS: list[Setting] = [
@@ -168,6 +210,22 @@ SETTINGS: list[Setting] = [
     Setting("voice", "voice.per_minute", "Créditos por minuto", int, 0, 10_000),
     Setting("voice", "voice.daily_cap", "Tope diario por voz", int, 0, 10_000_000),
     Setting("voice", "voice.min_members", "Mínimo de personas en el canal", int, 1, 25),
+    Setting("pets", "pets.max_level", "Nivel máximo", int, 1, 100),
+    Setting("pets", "pets.food_price", "Precio de la comida", int, 0, 1_000_000),
+    Setting("pets", "pets.food_amount", "Hambre que quita la comida (0-100)", int, 1, 100),
+    Setting("pets", "pets.play_price", "Precio de jugar", int, 0, 1_000_000),
+    Setting("pets", "pets.play_amount", "Felicidad que da jugar (0-100)", int, 1, 100),
+    Setting("pets", "pets.care_cooldown", "Espera entre cuidados (segundos)", int, 0, DAY),
+    Setting("pets", "pets.hunger_decay", "Hambre que pierde por hora", float, 0, 100),
+    Setting("pets", "pets.happiness_decay", "Felicidad que pierde por hora", float, 0, 100),
+    Setting("pets", "pets.xp_care", "XP por cuidarla", int, 0, 10_000),
+    Setting("pets", "pets.xp_work", "XP cuando trabajas", int, 0, 10_000),
+    Setting("pets", "pets.xp_daily", "XP cuando reclamas el diario", int, 0, 10_000),
+    Setting("pets", "pets.xp_message", "XP por mensaje pagado", int, 0, 10_000),
+    Setting("pets", "pets.xp_duplicate", "XP por mascota repetida", int, 0, 1_000_000),
+    Setting("pets", "pets.evolve_price", "Precio de evolucionar", int, 0, 10_000_000),
+    Setting("pets", "pets.max_luck", "Tope de suerte (0.15 = 15%)", float, 0, 1),
+    Setting("pets", "pets.max_discount", "Tope de descuento (0.25 = 25%)", float, 0, 0.9),
 ]
 
 SETTINGS_BY_PATH = {S.path: S for S in SETTINGS}

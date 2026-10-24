@@ -28,9 +28,9 @@ def NewId(length: int = 6) -> str:
     return "".join(random.choices(string.ascii_uppercase + string.digits, k=length))
 
 
-def Price(item: dict, config: dict) -> int:
-    """Current price of one unit. (Inflation and demand come in phase 6.)"""
-    return int(item["price"])
+def Price(item: dict, config: dict, discount: float = 0.0) -> int:
+    """Current price of one unit, after a discount (0.1 = 10% off). Inflation and demand come in phase 6."""
+    return max(1, int(round(int(item["price"]) * (1 - discount))))
 
 
 def CanGiveRole(guild: discord.Guild, role: discord.Role | None) -> str | None:
@@ -51,6 +51,7 @@ class Shop:
         self.inventory = db[INVENTORY]
         self.economy = economy
         self.bonuses = Bonuses(db)
+        self.pets = None  # set by the registry (Ahorrador discount)
 
     async def Setup(self):
         await self.items.create_index([("guild_id", 1), ("item_id", 1)], unique=True)
@@ -108,6 +109,9 @@ class Shop:
 
     # ---- buying ----
 
+    async def Discount(self, guild_id: int, user_id: int, config: dict) -> float:
+        return await self.pets.Perk(guild_id, user_id, "discount", config) if self.pets else 0.0
+
     async def Buy(self, member: discord.Member, item_id: str, qty: int, config: dict) -> tuple[dict, int, dict]:
         """Buys `qty` units. Returns (item, total paid, updated account)."""
         Guild = member.guild
@@ -133,7 +137,7 @@ class Shop:
                 Left = max(0, Limit - int(Owned.get("bought", 0)))
                 raise ShopError(f"Solo puedes comprar {Limit} de este item" + (f" (te quedan {Left})." if Left else " y ya llegaste al límite."))
 
-            Total = Price(Item, config) * qty
+            Total = Price(Item, config, await self.Discount(Guild.id, member.id, config)) * qty
             async with self.economy.Transaction() as Session:
                 await self.ReserveStock(Item, qty, Session)
                 try:

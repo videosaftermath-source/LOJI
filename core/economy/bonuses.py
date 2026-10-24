@@ -6,8 +6,9 @@ from core.economy.constants import EFFECTS
 
 
 class Bonuses:
-    def __init__(self, db):
+    def __init__(self, db, pets=None):
         self.effects = db[EFFECTS]
+        self.pets = pets  # set by the registry; pets add to work/chat boosts
 
     async def Setup(self):
         await self.effects.create_index([("guild_id", 1), ("user_id", 1), ("kind", 1)])
@@ -34,8 +35,10 @@ class Bonuses:
         ).to_list(length=100)
 
     async def Total(self, guild_id: int, user_id: int, kind: str, config: dict) -> float:
-        """Extra multiplier for `kind` (0.25 = +25%), capped by config."""
+        """Extra multiplier for `kind` (0.25 = +25%): boosts plus the active pet, capped by config."""
         Sum = sum(E["value"] for E in await self.Active(guild_id, user_id) if E["kind"] == kind)
+        if self.pets is not None:
+            Sum += await self.pets.Perk(guild_id, user_id, kind, config)
         return Capped(Sum, config)
 
 

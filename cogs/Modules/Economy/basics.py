@@ -201,7 +201,7 @@ class EconomyBasics(commands.Cog):
         except ConditionFailed:
             return await ctx.send("😮‍💨 Tranqui, ya trabajaste hace nada.", ephemeral=True)
         self.client.dispatch("economy_progress", ctx.guild.id, ctx.author.id, "work", 1)
-        Extra = f" (🧪 +{Bonus:.0%})" if Bonus else ""
+        Extra = f" (⚡ +{Bonus:.0%} por boosts y mascota)" if Bonus else ""
         embed = discord.Embed(
             description=f"💼 {random.choice(WORK_LINES)} y ganaste {FormatAmount(Amount, Config)}{Extra}.\n-# Ahora tienes {FormatAmount(Updated['balance'], Config)}. Vuelve {Relative(Now + Cooldown)}.",
             color=discord.Color.green(),
@@ -257,11 +257,14 @@ class EconomyBasics(commands.Cog):
             return await ctx.send(
                 f"{Emojis.no} El mínimo para pagar es {FormatAmount(Config['transfer']['min'], Config)}.", ephemeral=True
             )
-        Fee = TransferFee(cantidad, Config)
+        Discount = await Eco().pets.Perk(ctx.guild.id, ctx.author.id, "discount", Config)
+        Fee = TransferFee(cantidad, Config, Discount)
         Lines = [f"¿Seguro que le quieres pagar {FormatAmount(cantidad, Config)} a {usuario.mention}?"]
         if Fee:
             Lines.append(
-                f"-# Comisión del {Config['transfer']['fee_percent']:g}%: {FormatAmount(Fee, Config)} · "
+                f"-# Comisión del {Config['transfer']['fee_percent'] * (1 - Discount):.3g}%"
+                + (f" (🐾 -{Discount:.0%})" if Discount else "")
+                + f": {FormatAmount(Fee, Config)} · "
                 f"Total que pagas: {FormatAmount(cantidad + Fee, Config)}"
             )
         await ctx.send(

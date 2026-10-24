@@ -161,7 +161,11 @@ class EconomyShop(commands.Cog):
             return await ctx.send(embed=embed)
         embed.description = "\n".join(ItemLine(I, Config) for I in Items)[:4096]
         Balance = await Eco().economy.Balance(ctx.guild.id, ctx.author.id)
-        embed.set_footer(text=f"Tu saldo: {Balance:,}".replace(",", "."))
+        Discount = await Eco().shop.Discount(ctx.guild.id, ctx.author.id, Config)
+        Footer = f"Tu saldo: {Balance:,}".replace(",", ".")
+        if Discount:
+            Footer += f" · 🐾 Tu mascota te da {Discount:.1%} de descuento al pagar"
+        embed.set_footer(text=Footer)
         View = discord.ui.View(timeout=VIEW_TIMEOUT)
         View.add_item(ShopSelect(Items))
         await ctx.send(embed=embed, view=View)

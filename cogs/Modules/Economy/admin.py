@@ -9,7 +9,7 @@ from core.economy.config import ConfigError, EcoConfig, GetPath
 from core.economy.constants import DEFAULT_CONFIG, SECTIONS, SETTINGS, SETTINGS_BY_PATH
 from core.economy.rewards import FormatAmount
 from core.economy.registry import Eco
-from core.economy.service import Economy, InsufficientFunds
+from core.economy.service import EconomyError, Economy, InsufficientFunds
 
 PANEL_TIMEOUT = 600
 
@@ -209,6 +209,39 @@ class EconomyAdmin(commands.Cog):
 
         Quests = await Eco().quests.List(ctx.guild.id)
         await ctx.send(embed=await QuestsEmbed(ctx.guild), view=QuestsPanel(ctx.author, Quests), ephemeral=True)
+
+    @eco_admin.command(name="mascotas", description="Crear y editar las especies de mascotas")
+    @Permissions("Admin")
+    async def mascotas(self, ctx: commands.Context):
+        from cogs.Modules.Economy.admin_panels import SpeciesEmbed, SpeciesPanel
+
+        All = await Eco().pets.AllSpecies(ctx.guild.id)
+        await ctx.send(embed=await SpeciesEmbed(ctx.guild), view=SpeciesPanel(ctx.author, All), ephemeral=True)
+
+    @eco_admin.command(name="regalar-mascota", description="Regalarle una mascota a alguien (para pruebas o premios)")
+    @app_commands.describe(usuario="A quién", especie="Qué especie")
+    @Permissions("Admin")
+    async def regalar_mascota(self, ctx: commands.Context, usuario: discord.Member, especie: str):
+        Config = await EcoConfig().Get(ctx.guild.id)
+        try:
+            Pet, New = await Eco().pets.Grant(ctx.guild.id, usuario.id, especie.upper(), f"admin:{ctx.author.id}", Config)
+        except EconomyError as e:
+            return await ctx.send(f"{Emojis.no} {e}", ephemeral=True)
+        Species = await Eco().pets.GetSpecies(ctx.guild.id, Pet["species_id"])
+        Text = (
+            f"🎁 Le regalaste un {Species.get('emoji') or '🐾'} **{Species['name']}** a {usuario.mention}."
+            if New
+            else f"{usuario.mention} ya tenía un {Species['name']}: le di +{Config['pets']['xp_duplicate']} XP."
+        )
+        await ctx.send(Text, ephemeral=True)
+
+    @regalar_mascota.autocomplete("especie")
+    async def EspecieAutocomplete(self, interaction: discord.Interaction, current: str):
+        return [
+            app_commands.Choice(name=f"{S['name']} ({S['rarity']})"[:100], value=S["species_id"])
+            for S in await Eco().pets.AllSpecies(interaction.guild.id)
+            if current.lower() in S["name"].lower()
+        ][:25]
 
     @eco_admin.command(name="desbloquear", description="Quitarle el bloqueo anti-spam a alguien")
     @app_commands.describe(usuario="A quién")
