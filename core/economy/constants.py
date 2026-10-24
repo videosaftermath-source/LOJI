@@ -17,6 +17,9 @@ QUESTS = "eco_quests"
 QUEST_PROGRESS = "eco_quest_progress"
 SPECIES = "eco_pet_species"
 PETS = "eco_pets"
+BANNERS = "eco_banners"
+PITY = "eco_pity"
+PULLS = "eco_pulls"
 
 # Discord select menus hold at most 25 options, so these are capped there.
 MAX_ITEMS = 25
@@ -25,6 +28,9 @@ MAX_QUESTS = 25
 MAX_BUY_AT_ONCE = 100
 MAX_SPECIES = 25
 MAX_PETS = 25
+MAX_BANNERS = 25
+MAX_POOL = 25
+PULL_HISTORY_DAYS = 90
 
 # Item types
 ROLE = "role"
@@ -48,6 +54,7 @@ OBJECTIVES = {
     "buy": "📦 Items comprados",
     "pay": "💸 Créditos enviados con /pagar",
     "play": "🎲 Partidas jugadas (casino)",
+    "gacha": "🎰 Tiradas en el gacha",
 }
 QUEST_PERIODS = {"daily": "📅 Diaria", "weekly": "🗓️ Semanal", "once": "⭐ Única"}
 
@@ -133,6 +140,18 @@ DEFAULT_CONFIG: dict = {
         "max_luck": 0.15,
         "max_discount": 0.25,
     },
+    "gacha": {
+        "cost": 150,
+        "cooldown": 8,
+        "rate_legendary": 0.006,
+        "rate_epic": 0.051,
+        "rate_rare": 0.20,
+        "soft_pity": 74,
+        "soft_step": 0.06,
+        "hard_pity": 90,
+        "epic_pity": 10,
+        "featured_chance": 0.5,
+    },
 }
 
 # How often voice time is paid (the task interval).
@@ -163,6 +182,7 @@ SECTIONS = {
     "antispam": "🛡️ Anti-spam",
     "voice": "🔊 Pago por voz",
     "pets": "🐾 Mascotas",
+    "gacha": "🎰 Gacha",
 }
 
 SETTINGS: list[Setting] = [
@@ -226,6 +246,17 @@ SETTINGS: list[Setting] = [
     Setting("pets", "pets.evolve_price", "Precio de evolucionar", int, 0, 10_000_000),
     Setting("pets", "pets.max_luck", "Tope de suerte (0.15 = 15%)", float, 0, 1),
     Setting("pets", "pets.max_discount", "Tope de descuento (0.25 = 25%)", float, 0, 0.9),
+    Setting("gacha", "gacha.cost", "Precio por tirada (banners nuevos)", int, 1, 10_000_000),
+    Setting("gacha", "gacha.cooldown", "Espera entre tiradas (segundos)", int, 3, 3600,
+            "Mínimo 3 para no chocar con los límites de Discord."),
+    Setting("gacha", "gacha.rate_legendary", "Prob. legendaria (0.006 = 0.6%)", float, 0, 0.5),
+    Setting("gacha", "gacha.rate_epic", "Prob. épica (0.051 = 5.1%)", float, 0, 0.9),
+    Setting("gacha", "gacha.rate_rare", "Prob. rara (0.2 = 20%)", float, 0, 0.95),
+    Setting("gacha", "gacha.soft_pity", "Soft pity: desde la tirada nº", int, 1, 1000),
+    Setting("gacha", "gacha.soft_step", "Soft pity: prob. extra por tirada", float, 0, 1),
+    Setting("gacha", "gacha.hard_pity", "Hard pity: legendaria segura en la nº", int, 1, 1000),
+    Setting("gacha", "gacha.epic_pity", "Épica (o mejor) segura cada X", int, 1, 100),
+    Setting("gacha", "gacha.featured_chance", "50/50: prob. de que salga la destacada", float, 0, 1),
 ]
 
 SETTINGS_BY_PATH = {S.path: S for S in SETTINGS}

@@ -78,6 +78,11 @@ def Validate(config: dict):
         raise ConfigError("El mínimo por mensaje no puede ser mayor que el máximo.")
     if Activity["soft_cap"] > Activity["hard_cap"]:
         raise ConfigError("El tope suave no puede ser mayor que el tope máximo.")
+    Gacha = config["gacha"]
+    if Gacha["rate_legendary"] + Gacha["rate_epic"] + Gacha["rate_rare"] >= 1:
+        raise ConfigError("Las probabilidades legendaria + épica + rara tienen que sumar menos de 1 (el resto es común).")
+    if Gacha["soft_pity"] > Gacha["hard_pity"]:
+        raise ConfigError("El soft pity tiene que empezar antes del hard pity.")
 
 
 class EconomyConfig:

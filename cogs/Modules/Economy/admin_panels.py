@@ -16,6 +16,7 @@ from core.economy.constants import (
     ITEM_TYPES,
     MAX_CODES,
     MAX_ITEMS,
+    MAX_POOL,
     MAX_QUESTS,
     MAX_SPECIES,
     OBJECTIVES,
@@ -23,12 +24,14 @@ from core.economy.constants import (
     RARITIES,
     ROLE,
 )
+from core.economy.gacha import ORDER, Problems, Status, Now as GachaNow
 from core.economy.pets import PerkValue
 from core.economy.registry import Eco
 from core.economy.rewards import Aware, FormatAmount
 from core.economy.service import EconomyError
 from core.economy.shop import CanGiveRole
 from cogs.Modules.Economy.shop import ItemCard, ItemLine
+from cogs.Modules.Economy.gacha import PrizeNames
 
 PANEL_TIMEOUT = 900
 LEADING_EMOJI = re.compile(r"^(<a?:\w+:\d+>|[^\w\s]{1,8})\s+(.+)$")
@@ -767,3 +770,293 @@ class EvolutionLevel(discord.ui.Modal, title="Nivel de evolución"):
             return await Fail(interaction, e)
         Species = await Eco().pets.UpdateSpecies(interaction.guild.id, self.species_doc["species_id"], {"evolves_to": self.target, "evolve_level": Level})
         await interaction.response.edit_message(embed=await SpeciesCard(interaction.guild, Species), view=SpeciesItem(self.author, Species))
+
+
+# ======================= GACHA =======================
+
+STATUS_LABEL = {"active": "🟢 Activo", "scheduled": "🕓 Programado", "ended": "⚫ Terminado", "paused": "⏸️ Pausado"}
+RARITY_OPTIONS = [discord.SelectOption(label=f"{R['stars']} {R['label']}", value=K) for K, R in RARITIES.items()]
+
+
+async def BannersEmbed(guild: discord.Guild) -> discord.Embed:
+    Banners = await Eco().gacha.List(guild.id)
+    Now_ = GachaNow()
+    embed = discord.Embed(title="🎰 Banners del gacha", color=discord.Color.gold())
+    embed.description = "\n".join(
+        f"{STATUS_LABEL[Status(B, Now_)]} **{B['name']}** · {len(B['pool'])} premios · "
+        f"{discord.utils.format_dt(Aware(B['start']), 'd')} → {discord.utils.format_dt(Aware(B['end']), 'd')}"
+        for B in Banners
+    ) or "No hay banners. ¡Crea uno!"
+    embed.set_footer(text="Un banner nuevo empieza pausado: añade premios de las 4 rarezas y actívalo.")
+    return embed
+
+
+class BannersPanel(Panel):
+    def __init__(self, author: discord.Member, banners: list[dict]):
+        super().__init__(author)
+        if banners:
+            Select = discord.ui.Select(
+                placeholder="Gestionar un banner",
+                options=[discord.SelectOption(label=B["name"][:100], value=B["banner_id"]) for B in banners],
+            )
+            Select.callback = self.Manage
+            self.add_item(Select)
+
+    @classmethod
+    async def Open(cls, interaction: discord.Interaction, author: discord.Member, content: str | None = None):
+        Banners = await Eco().gacha.List(interaction.guild.id)
+        await interaction.response.edit_message(content=content, embed=await BannersEmbed(interaction.guild), view=cls(author, Banners))
+
+    async def Manage(self, interaction: discord.Interaction):
+        await ShowBanner(interaction, self.author, interaction.data["values"][0])
+
+    @discord.ui.button(label="Crear banner", emoji="➕", style=discord.ButtonStyle.green, row=1)
+    async def Create(self, interaction: discord.Interaction, _):
+        Config = await EcoConfig().Get(interaction.guild.id)
+        await interaction.response.send_modal(BannerInfo(self.author, None, Config["gacha"]["cost"]))
+
+
+async def BannerCard(guild: discord.Guild, banner: dict) -> discord.Embed:
+    Config = await EcoConfig().Get(guild.id)
+    Names = await PrizeNames(guild.id, banner["pool"], Config)
+    embed = discord.Embed(title=f"🎰 {banner['name']}", description=banner.get("description") or None, color=discord.Color.gold())
+    embed.add_field(name="Estado", value=STATUS_LABEL[Status(banner, GachaNow())])
+    embed.add_field(name="Precio", value=FormatAmount(banner["cost"], Config))
+    embed.add_field(
+        name="Fechas",
+        value=f"{discord.utils.format_dt(Aware(banner['start']), 'f')}\n→ {discord.utils.format_dt(Aware(banner['end']), 'f')}",
+    )
+    for Rarity in reversed(ORDER):
+        Lines = [("🌟 " if P.get("featured") else "") + Names[P["key"]] for P in banner["pool"] if P["rarity"] == Rarity]
+        embed.add_field(
+            name=f"{RARITIES[Rarity]['stars']} {RARITIES[Rarity]['label']} ({len(Lines)})",
+            value="\n".join(Lines)[:1024] or "*vacío*",
+            inline=False,
+        )
+    Issues = Problems(banner)
+    if Issues:
+        embed.add_field(name="⚠️ Para activarlo", value="\n".join(Issues), inline=False)
+    embed.set_footer(text=f"{len(banner['pool'])}/{MAX_POOL} premios · 🌟 = destacado (50/50)")
+    return embed
+
+
+async def ShowBanner(interaction: discord.Interaction, author: discord.Member, banner_id: str, content: str | None = None):
+    Banner = await Eco().gacha.Get(interaction.guild.id, banner_id)
+    if not Banner:
+        return await BannersPanel.Open(interaction, author)
+    await interaction.response.edit_message(content=content, embed=await BannerCard(interaction.guild, Banner), view=BannerPanel(author, Banner))
+
+
+class BannerInfo(discord.ui.Modal):
+    def __init__(self, author: discord.Member, banner: dict | None, default_cost: int):
+        super().__init__(title="Editar banner" if banner else "Nuevo banner")
+        self.author = author
+        self.banner = banner
+        B = banner or {}
+        self.name = discord.ui.TextInput(label="Nombre", default=B.get("name"), max_length=50, placeholder="Banner del Dragón")
+        self.description = discord.ui.TextInput(label="Descripción", default=B.get("description"), max_length=300, required=False, style=discord.TextStyle.paragraph)
+        self.cost = discord.ui.TextInput(label="Precio por tirada", default=str(B.get("cost", default_cost)), max_length=10)
+        self.add_item(self.name)
+        self.add_item(self.description)
+        self.add_item(self.cost)
+        if not banner:
+            self.start = discord.ui.TextInput(label="Empieza dentro de X días (0 = ya)", default="0", max_length=3)
+            self.add_item(self.start)
+        Left = None
+        if banner:
+            Left = max(1, round((Aware(banner["end"]) - datetime.now(timezone.utc)).total_seconds() / 86400))
+        self.days = discord.ui.TextInput(label="Dura X días" if not banner else "Termina dentro de X días", default=str(Left or 14), max_length=4)
+        self.add_item(self.days)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        try:
+            Cost = Number(self.cost.value, "Precio", 1)
+            Days = Number(self.days.value, "Días", 1)
+            Start = Number(self.start.value, "Empieza", 0) if not self.banner else None
+        except InputError as e:
+            return await Fail(interaction, e)
+        Now_ = datetime.now(timezone.utc)
+        Data = {"name": self.name.value.strip(), "description": self.description.value.strip(), "cost": Cost}
+        if self.banner:
+            Data["end"] = Now_ + timedelta(days=Days)
+            await Eco().gacha.Update(interaction.guild.id, self.banner["banner_id"], Data)
+            return await ShowBanner(interaction, self.author, self.banner["banner_id"])
+        Begin = Now_ + timedelta(days=Start)
+        try:
+            Banner = await Eco().gacha.Create(interaction.guild.id, {**Data, "start": Begin, "end": Begin + timedelta(days=Days)})
+        except EconomyError as e:
+            return await Fail(interaction, e)
+        await ShowBanner(interaction, self.author, Banner["banner_id"], f"{Emojis.tick} Banner creado. Añádele premios.")
+
+
+class BannerPanel(Panel):
+    def __init__(self, author: discord.Member, banner: dict):
+        super().__init__(author)
+        self.banner = banner
+        self.Toggle.label = "Pausar" if banner.get("enabled") else "Activar"
+        self.Toggle.style = discord.ButtonStyle.grey if banner.get("enabled") else discord.ButtonStyle.green
+        HasPool = bool(banner["pool"])
+        self.Featured.disabled = not any(P["rarity"] in ("epic", "legendary") for P in banner["pool"])
+        self.RemovePrize.disabled = not HasPool
+        self.confirming = False
+
+    async def Reload(self, interaction: discord.Interaction, content: str | None = None):
+        await ShowBanner(interaction, self.author, self.banner["banner_id"], content)
+
+    async def Sub(self, interaction: discord.Interaction, view: "Panel", content: str):
+        await interaction.response.edit_message(content=content, view=view)
+
+    @discord.ui.button(label="Editar", emoji="✏️", style=discord.ButtonStyle.blurple, row=0)
+    async def Edit(self, interaction: discord.Interaction, _):
+        await interaction.response.send_modal(BannerInfo(self.author, self.banner, self.banner["cost"]))
+
+    @discord.ui.button(label="Mascotas", emoji="🐾", style=discord.ButtonStyle.blurple, row=0)
+    async def AddPets(self, interaction: discord.Interaction, _):
+        Species = [S for S in await Eco().pets.AllSpecies(interaction.guild.id) if S.get("enabled")]
+        if not Species:
+            return await Fail(interaction, "No hay especies activas. Créalas en `/eco-admin mascotas`.")
+        View = Panel(self.author)
+        Select = discord.ui.Select(
+            placeholder="Elige mascotas (su rareza es la de la especie)",
+            min_values=1,
+            max_values=min(25, len(Species)),
+            options=[discord.SelectOption(label=S["name"][:100], value=S["species_id"], emoji=S.get("emoji") or "🐾", description=RARITIES[S["rarity"]]["label"]) for S in Species[:25]],
+        )
+
+        async def Pick(i: discord.Interaction):
+            ById = {S["species_id"]: S for S in Species}
+            await self.Add(i, [{"type": "pet", "ref": V, "rarity": ById[V]["rarity"]} for V in Select.values])
+
+        Select.callback = Pick
+        View.add_item(Select)
+        await self.Sub(interaction, View, "¿Qué mascotas entran en el banner?")
+
+    @discord.ui.button(label="Item", emoji="📦", style=discord.ButtonStyle.blurple, row=0)
+    async def AddItem(self, interaction: discord.Interaction, _):
+        Items = [I for I in await Eco().shop.List(interaction.guild.id) if I["type"] != ROLE]
+        if not Items:
+            return await Fail(interaction, "No hay items (que no sean roles). Créalos en `/eco-admin tienda`.")
+        View = Panel(self.author)
+        ItemSelect = discord.ui.Select(placeholder="Item", options=[discord.SelectOption(label=I["name"][:100], value=I["item_id"], emoji=I.get("emoji") or "📦") for I in Items[:25]], row=0)
+        RaritySelect = discord.ui.Select(placeholder="Rareza en el banner", options=RARITY_OPTIONS, row=1)
+
+        async def Ack(i: discord.Interaction):
+            await i.response.defer()
+
+        ItemSelect.callback = Ack
+        RaritySelect.callback = Ack
+        Save = discord.ui.Button(label="Añadir", emoji="💾", style=discord.ButtonStyle.green, row=2)
+
+        async def DoSave(i: discord.Interaction):
+            if not ItemSelect.values or not RaritySelect.values:
+                return await Fail(i, "Elige el item y la rareza.")
+            await self.Add(i, [{"type": "item", "ref": ItemSelect.values[0], "rarity": RaritySelect.values[0]}])
+
+        Save.callback = DoSave
+        for Item in (ItemSelect, RaritySelect, Save):
+            View.add_item(Item)
+        await self.Sub(interaction, View, "Elige el item y con qué rareza sale.")
+
+    @discord.ui.button(label="Créditos", emoji="🪙", style=discord.ButtonStyle.blurple, row=0)
+    async def AddCredits(self, interaction: discord.Interaction, _):
+        View = Panel(self.author)
+        Select = discord.ui.Select(placeholder="Rareza del premio", options=RARITY_OPTIONS)
+
+        async def Pick(i: discord.Interaction):
+            await i.response.send_modal(CreditsPrize(self, Select.values[0]))
+
+        Select.callback = Pick
+        View.add_item(Select)
+        await self.Sub(interaction, View, "¿Con qué rareza sale este premio de créditos?")
+
+    @discord.ui.button(label="Autocompletar", emoji="🪄", style=discord.ButtonStyle.grey, row=0)
+    async def Fill(self, interaction: discord.Interaction, _):
+        Before = len(self.banner["pool"])
+        try:
+            Banner = await Eco().gacha.FillMissing(interaction.guild.id, self.banner["banner_id"])
+        except EconomyError as e:
+            return await Fail(interaction, e)
+        Added = len(Banner["pool"]) - Before
+        await self.Reload(interaction, f"🪄 Añadí {Added} premio(s) de créditos a las rarezas vacías." if Added else "Todas las rarezas ya tienen premios 👌")
+
+    @discord.ui.button(label="Destacados", emoji="🌟", style=discord.ButtonStyle.blurple, row=1)
+    async def Featured(self, interaction: discord.Interaction, _):
+        Config = await EcoConfig().Get(interaction.guild.id)
+        Names = await PrizeNames(interaction.guild.id, self.banner["pool"], Config)
+        Options = [
+            discord.SelectOption(label=Names[P["key"]][:100], value=P["key"], description=RARITIES[P["rarity"]]["label"], default=bool(P.get("featured")))
+            for P in self.banner["pool"]
+            if P["rarity"] in ("epic", "legendary")
+        ]
+        View = Panel(self.author)
+        Select = discord.ui.Select(placeholder="Premios destacados (50/50)", min_values=0, max_values=len(Options), options=Options)
+
+        async def Pick(i: discord.Interaction):
+            await Eco().gacha.SetFeatured(i.guild.id, self.banner["banner_id"], Select.values)
+            await ShowBanner(i, self.author, self.banner["banner_id"], "🌟 Destacados guardados.")
+
+        Select.callback = Pick
+        View.add_item(Select)
+        await self.Sub(interaction, View, "Marca los destacados. Al sacar una épica o legendaria hay un 50/50 de que sea destacada; si no lo es, la siguiente lo será seguro.")
+
+    @discord.ui.button(label="Quitar premio", emoji="➖", style=discord.ButtonStyle.grey, row=1)
+    async def RemovePrize(self, interaction: discord.Interaction, _):
+        Config = await EcoConfig().Get(interaction.guild.id)
+        Names = await PrizeNames(interaction.guild.id, self.banner["pool"], Config)
+        View = Panel(self.author)
+        Select = discord.ui.Select(
+            placeholder="¿Cuál quitas?",
+            options=[discord.SelectOption(label=Names[P["key"]][:100], value=P["key"], description=RARITIES[P["rarity"]]["label"]) for P in self.banner["pool"]],
+        )
+
+        async def Pick(i: discord.Interaction):
+            await Eco().gacha.RemovePrize(i.guild.id, self.banner["banner_id"], Select.values[0])
+            await ShowBanner(i, self.author, self.banner["banner_id"], "➖ Premio quitado.")
+
+        Select.callback = Pick
+        View.add_item(Select)
+        await self.Sub(interaction, View, "Elige el premio a quitar.")
+
+    @discord.ui.button(label="Activar", row=1)
+    async def Toggle(self, interaction: discord.Interaction, _):
+        try:
+            await Eco().gacha.SetEnabled(interaction.guild.id, self.banner["banner_id"], not self.banner.get("enabled"))
+        except EconomyError as e:
+            return await Fail(interaction, e)
+        await self.Reload(interaction)
+
+    @discord.ui.button(label="Borrar", emoji="🗑️", style=discord.ButtonStyle.red, row=1)
+    async def Remove(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if not self.confirming:
+            self.confirming = True
+            button.label = "¿Seguro? Pulsa otra vez"
+            return await interaction.response.edit_message(view=self)
+        await Eco().gacha.Delete(interaction.guild.id, self.banner["banner_id"])
+        await BannersPanel.Open(interaction, self.author, "🗑️ Banner borrado.")
+
+    @discord.ui.button(label="Volver", emoji="⬅️", style=discord.ButtonStyle.grey, row=1)
+    async def Back(self, interaction: discord.Interaction, _):
+        await BannersPanel.Open(interaction, self.author)
+
+    async def Add(self, interaction: discord.Interaction, prizes: list[dict]):
+        try:
+            await Eco().gacha.AddPrizes(interaction.guild.id, self.banner["banner_id"], prizes)
+        except EconomyError as e:
+            return await Fail(interaction, e)
+        await self.Reload(interaction, f"{Emojis.tick} Premio(s) añadido(s).")
+
+
+class CreditsPrize(discord.ui.Modal, title="Premio de créditos"):
+    amount = discord.ui.TextInput(label="¿Cuántos créditos?", max_length=10, default="500")
+
+    def __init__(self, panel: BannerPanel, rarity: str):
+        super().__init__()
+        self.panel = panel
+        self.rarity = rarity
+
+    async def on_submit(self, interaction: discord.Interaction):
+        try:
+            Amount = Number(self.amount.value, "Créditos", 1)
+        except InputError as e:
+            return await Fail(interaction, e)
+        await self.panel.Add(interaction, [{"type": "credits", "amount": Amount, "rarity": self.rarity}])

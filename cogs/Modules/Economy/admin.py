@@ -243,6 +243,14 @@ class EconomyAdmin(commands.Cog):
             if current.lower() in S["name"].lower()
         ][:25]
 
+    @eco_admin.command(name="gacha", description="Crear y editar los banners del gacha")
+    @Permissions("Admin")
+    async def gacha(self, ctx: commands.Context):
+        from cogs.Modules.Economy.admin_panels import BannersEmbed, BannersPanel
+
+        Banners = await Eco().gacha.List(ctx.guild.id)
+        await ctx.send(embed=await BannersEmbed(ctx.guild), view=BannersPanel(ctx.author, Banners), ephemeral=True)
+
     @eco_admin.command(name="desbloquear", description="Quitarle el bloqueo anti-spam a alguien")
     @app_commands.describe(usuario="A quién")
     @Permissions("Admin")

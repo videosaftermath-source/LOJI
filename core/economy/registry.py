@@ -4,6 +4,7 @@ from dataclasses import dataclass
 
 from core.economy.bonuses import Bonuses
 from core.economy.codes import Codes
+from core.economy.gacha import Gacha
 from core.economy.pets import Pets
 from core.economy.quests import Quests
 from core.economy.service import Economy, EconomyService
@@ -18,6 +19,7 @@ class Services:
     quests: Quests
     bonuses: Bonuses
     pets: Pets
+    gacha: Gacha
 
     async def Setup(self):
         await self.economy.Setup()
@@ -25,6 +27,7 @@ class Services:
         await self.codes.Setup()
         await self.quests.Setup()
         await self.pets.Setup()
+        await self.gacha.Setup()
 
 
 _services: Services | None = None
@@ -35,7 +38,7 @@ def Build(economy: EconomyService) -> Services:
     P = Pets(economy.db, economy)
     S.pets = P
     S.bonuses.pets = P
-    return Services(economy, S, Codes(economy.db, S), Quests(economy.db, economy, S), S.bonuses, P)
+    return Services(economy, S, Codes(economy.db, S), Quests(economy.db, economy, S), S.bonuses, P, Gacha(economy.db, economy, S, P))
 
 
 def Eco() -> Services:
