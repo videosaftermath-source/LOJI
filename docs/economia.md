@@ -32,6 +32,7 @@ Objetivo: progreso **"middle game" estilo Mudae**: semanas o meses de grindeo, p
 - **Gacha** (200 por tirada): una legendaria sale de media a las **62 tiradas (~12.500)** y está asegurada a las 90 (18.000). Una épica está asegurada cada 10 tiradas (2.000). Si alguien activo gasta la mitad de lo que gana, consigue una legendaria cada ~2 semanas; alguien casual, cada ~4 semanas. Los boosters necesitan un 10% menos de tiradas.
 - **Mascotas**: mantener una al 100% cuesta ~130 al día (comida 82, juego 48). Sube al nivel 10 (evolución) en ~8 días, al 20 en ~1 mes y al 30 en ~2 meses.
 - **Ventaja de una mascota al nivel 30**: común +11,7%, rara +19,5%, épica +28,3%, legendaria +41%. La suerte se queda en un máximo del 15% y el descuento en un máximo del 25%. Todos los bonus juntos suman como mucho +100%.
+- **💸 Rentistas**: generan su ventaja en créditos. Por ejemplo, +10% da el 10% de `income_base` (800) al día y se acumula hasta 24 h. Así valen lo mismo que una Farmeadora para alguien activo, y la persona casual sale ganando. Una épica da 64 al día en nivel 1 y 226 en nivel 30; una legendaria, 96 y 328.
 - **Inflación**: empieza a subir precios cuando la media de los activos pasa de 25.000 (~2 semanas de un jugador activo).
 
 ### Casino

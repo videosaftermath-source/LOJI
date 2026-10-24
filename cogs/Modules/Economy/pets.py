@@ -12,7 +12,8 @@ from core.economy.cards import AnimationSeconds
 from core.economy.config import EcoConfig
 from core.economy.constants import ARCHETYPES, MODULE, RARITIES
 from core.economy.petcards import AlbumCard, EvolutionGif, PetCard
-from core.economy.pets import CurrentCare, Now, PetView
+from core.economy import boost
+from core.economy.pets import CurrentCare, Now, PerkText, PetView
 from core.economy.registry import Eco
 from core.economy.rewards import FormatAmount
 from core.economy.service import EconomyError, InsufficientFunds
@@ -50,7 +51,7 @@ def Plain(label: str) -> str:
     return label.split(" ", 1)[1] if " " in label else label
 
 
-def CardData(view: PetView, owner: discord.abc.User, costs: dict) -> dict:
+def CardData(view: PetView, owner: discord.abc.User, costs: dict, config: dict) -> dict:
     S, Archetype = view.species, ARCHETYPES[view.species["archetype"]]
     Footer = (
         f"Evoluciona al nivel {S['evolve_level']} · {costs['evolve_price']:,}".replace(",", ".")
@@ -71,7 +72,7 @@ def CardData(view: PetView, owner: discord.abc.User, costs: dict) -> dict:
         "hunger": view.hunger,
         "happiness": view.happiness,
         "care": view.care,
-        "perk": f"+{view.perk:.1%} {Archetype['perk']}",
+        "perk": PerkText(S["archetype"], view.perk, config),
         "perk_note": f"Funciona al {view.care:.0%} porque no está bien cuidada" if view.care < 1 else "",
         "owner": owner.display_name,
         "footer": Footer,
@@ -81,14 +82,14 @@ def CardData(view: PetView, owner: discord.abc.User, costs: dict) -> dict:
 async def PetCardMessage(view: PetView, owner: discord.abc.User, config: dict, costs: dict | None = None) -> tuple[discord.Embed, discord.File]:
     """The pet card image, plus a short text summary for people with images turned off."""
     Costs = costs or await PetCosts(owner.guild.id, config)
-    Png = await asyncio.to_thread(PetCard, CardData(view, owner, Costs))
+    Png = await asyncio.to_thread(PetCard, CardData(view, owner, Costs, config))
     S, Archetype = view.species, ARCHETYPES[view.species["archetype"]]
     embed = discord.Embed(
         title=f"{S.get('emoji') or '🐾'} {PetName(view)}",
         description=(
             f"*{S.get('description') or ''}*\n"
             f"-# Nivel {view.level} · 🍖 {view.hunger:.0f}% · 🎾 {view.happiness:.0f}% · {Mood(view.hunger, view.happiness)} · "
-            f"+{view.perk:.1%} {Archetype['perk']}"
+            f"{PerkText(S['archetype'], view.perk, config)}"
         ),
         color=RARITIES[S["rarity"]]["color"],
     )
@@ -138,6 +139,8 @@ class PetPanel(discord.ui.View):
         CanEvolve = S.get("evolves_to") and S.get("evolve_level") and view.level >= S["evolve_level"]
         if not CanEvolve:
             self.remove_item(self.Evolve)
+        if ARCHETYPES[S["archetype"]]["bonus"] != "income":
+            self.remove_item(self.Collect)
         if len(others) > 1:
             self.add_item(SwitchSelect(others[:25]))
 
@@ -178,6 +181,16 @@ class PetPanel(discord.ui.View):
     async def Name(self, interaction: discord.Interaction, _):
         await interaction.response.send_modal(Rename(self))
 
+    @discord.ui.button(label="Cobrar", emoji="💸", style=discord.ButtonStyle.green, row=0)
+    async def Collect(self, interaction: discord.Interaction, _):
+        await interaction.response.defer()
+        Config = await EcoConfig().Get(interaction.guild.id)
+        try:
+            Note = await CollectNote(interaction.user, Config)
+        except EconomyError as e:
+            return await interaction.followup.send(f"{Emojis.no} {e}", ephemeral=True)
+        await self.Refresh(interaction, Note)
+
     @discord.ui.button(label="Evolucionar", emoji="✨", style=discord.ButtonStyle.red, row=0)
     async def Evolve(self, interaction: discord.Interaction, _):
         await interaction.response.defer()
@@ -201,6 +214,15 @@ class PetPanel(discord.ui.View):
         except discord.HTTPException as e:
             logger.warning(f"[Economy] Evolution animation failed: {e}")
         await self.Refresh(interaction, f"✨ ¡{Old.get('emoji', '')} {Old['name']} evolucionó en {New.get('emoji', '')} **{New['name']}**!")
+
+
+async def CollectNote(member: discord.Member, config: dict) -> str:
+    """Collects the active Rentista's income and describes it. Raises EconomyError if there's nothing."""
+    Amount, Hours, _ = await Eco().pets.Collect(member.guild.id, member.id, config, boost.EarningsMultiplier(member, config))
+    Note = f"💸 Tu mascota trajo {FormatAmount(Amount, config)} ({Hours:.1f} h)"
+    if Hours >= config["pets"]["income_max_hours"]:
+        Note += f"\n-# Llegó al máximo de {config['pets']['income_max_hours']} h: cobra más seguido para no perder nada."
+    return Note
 
 
 async def PetMessage(owner: discord.Member) -> tuple[discord.Embed, discord.ui.View | None, discord.File | None]:
@@ -293,7 +315,7 @@ class EconomyPets(commands.Cog):
         for Pet in await Eco().pets.List(ctx.guild.id, Owner.id):
             View_ = await Eco().pets.View(Pet, Config)
             if View_:
-                Data = CardData(View_, Owner, Costs)
+                Data = CardData(View_, Owner, Costs, Config)
                 Data["active"] = Pet["pet_id"] == ActiveId
                 Album.append(Data)
         embed = discord.Embed(title=f"🐾 Mascotas de {Owner.display_name}", color=discord.Color.teal())
@@ -345,6 +367,19 @@ class EconomyPets(commands.Cog):
     @ModuleIsEnabled(MODULE)
     async def jugar(self, ctx: commands.Context):
         await self.Care(ctx, "play")
+
+    @mascota.command(name="cobrar", description="Cobra lo que generó tu mascota 💸 Rentista")
+    @ModuleIsEnabled(MODULE)
+    async def cobrar(self, ctx: commands.Context):
+        await ctx.defer()
+        Config = await EcoConfig().Get(ctx.guild.id)
+        try:
+            Note = await CollectNote(ctx.author, Config)
+        except EconomyError as e:
+            return await ctx.send(f"{Emojis.no} {e}", ephemeral=True)
+        View = await Eco().pets.View(await Eco().pets.Active(ctx.guild.id, ctx.author.id), Config)
+        embed, File = await PetCardMessage(View, ctx.author, Config)
+        await ctx.send(Note, embed=embed, file=File)
 
     @mascota.command(name="renombrar", description="Cambia el nombre de tu mascota activa")
     @app_commands.describe(nombre="El nombre nuevo")

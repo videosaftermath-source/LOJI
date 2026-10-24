@@ -73,7 +73,7 @@ def test_perk_by_rarity_level_and_care():
 def test_seed_catalog_and_evolution_chain():
     s = services()
     species = run(s.pets.AllSpecies(G))
-    assert len(species) == 18
+    assert len(species) == 19
     assert run(s.pets.GetSpecies(G, "DOLPHIN"))["evolves_to"] == "EAGLE"  # the gacha-only wolf doesn't steal the chain
     assert run(s.pets.GetSpecies(G, "WOLF"))["rarity"] == "legendary"
     pumpkin = run(s.pets.GetSpecies(G, "PUMPKIN"))
@@ -256,3 +256,45 @@ def test_care_xp_is_a_share_of_the_level():
     assert CareXp(high, CONFIG) == math.ceil(XpToNext(29, CONFIG) * pct)
     top = sum(XpToNext(l, CONFIG) for l in range(1, P["max_level"]))
     assert CareXp(top, CONFIG) == 0
+
+
+def test_rentista_income():
+    from datetime import timedelta
+
+    from core.economy.pets import IncomePerDay, PerkText, PerkValue
+
+    s = services()
+    pet, _ = run(s.pets.Grant(G, 11, "SHIBA", "test", CONFIG))
+    shiba = run(s.pets.GetSpecies(G, "SHIBA"))
+    assert shiba["archetype"] == "earner" and shiba["exclusive"] and shiba["art"] == "shiba"
+    per_day = IncomePerDay(PerkValue(shiba, 1), CONFIG)
+    assert per_day == round(0.08 * P["income_base"])  # epic level 1 = +8% -> 8% of the base
+    assert PerkText("earner", PerkValue(shiba, 1), CONFIG).startswith(f"{per_day} ")
+    with pytest.raises(PetError):  # nothing yet
+        run(s.pets.Collect(G, 11, CONFIG))
+    start = datetime.now(timezone.utc) - timedelta(hours=12)
+    run(s.pets.pets.update_one({"_id": pet["_id"]}, {"$set": {"income_at": start, "care_at": datetime.now(timezone.utc)}}))
+    amount, hours, _ = run(s.pets.Collect(G, 11, CONFIG))
+    assert abs(hours - 12) < 0.01 and abs(amount - per_day / 2) <= 1
+    assert run(s.economy.PeekBalance(G, 11)) == amount
+    with pytest.raises(PetError):  # just collected
+        run(s.pets.Collect(G, 11, CONFIG))
+    # Capped at income_max_hours, and the booster multiplier applies.
+    run(s.pets.pets.update_one({"_id": pet["_id"]}, {"$set": {"income_at": start - timedelta(days=5)}}))
+    amount, hours, _ = run(s.pets.Collect(G, 11, CONFIG, multiplier=1.3))
+    assert hours == P["income_max_hours"] and abs(amount - per_day * 1.3) <= 1
+
+
+def test_switching_pets_restarts_income_and_others_cant_collect():
+    from datetime import timedelta
+
+    s = services()
+    shiba, _ = run(s.pets.Grant(G, 12, "SHIBA", "test", CONFIG))
+    other, _ = run(s.pets.Grant(G, 12, "HAMSTER", "test", CONFIG))
+    run(s.pets.pets.update_one({"_id": shiba["_id"]}, {"$set": {"income_at": datetime.now(timezone.utc) - timedelta(hours=20)}}))
+    run(s.pets.SetActive(G, 12, other["pet_id"]))
+    with pytest.raises(PetError):  # a hamster isn't a Rentista
+        run(s.pets.Collect(G, 12, CONFIG))
+    run(s.pets.SetActive(G, 12, shiba["pet_id"]))
+    with pytest.raises(PetError):  # the timer started again when it became active
+        run(s.pets.Collect(G, 12, CONFIG))

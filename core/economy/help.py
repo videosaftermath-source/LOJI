@@ -17,6 +17,7 @@ Gana créditos, colecciona mascotas y gástalos en la tienda, el gacha o el casi
 Las mascotas salen del gacha. La **activa** te da una ventaja según su tipo:
 🌾 **Farmeador**: más dinero en `/trabajar` · 🗣️ **Charlatán**: más dinero por chatear
 🍀 **Suertudo**: menos ventaja para la casa en el casino · 💰 **Ahorrador**: descuento en tienda e impuestos
+💸 **Rentista**: genera créditos con el tiempo. Cóbralos con **`/mascota cobrar`** (o el botón 💸). Se acumulan hasta 24 h y solo mientras esté activa, así que cobra antes de cambiarla.
 
 **`/mascota ver [usuario]`**: la tarjeta de tu mascota, con botones para cuidarla.
 **`/mascota lista`**: el álbum con todas tus mascotas.

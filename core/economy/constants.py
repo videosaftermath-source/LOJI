@@ -77,6 +77,8 @@ ARCHETYPES = {
     "talker": {"label": "🗣️ Charlatán", "bonus": "chat", "scale": 1.0, "perk": "extra por chatear"},
     "lucky": {"label": "🍀 Suertudo", "bonus": "luck", "scale": 0.4, "perk": "más suerte en el casino"},
     "saver": {"label": "💰 Ahorrador", "bonus": "discount", "scale": 0.6, "perk": "de descuento en tienda y comisiones"},
+    # Its perk is paid as credits over time: +10% = 10% of pets.income_base per day.
+    "earner": {"label": "💸 Rentista", "bonus": "income", "scale": 1.0, "perk": "créditos al día (/mascota cobrar)"},
 }
 
 # Ledger kinds: money entering the economy, leaving it, or moving between users.
@@ -138,7 +140,9 @@ DEFAULT_CONFIG: dict = {
         "play_price": 40,
         "play_amount": 30,
         "care_cooldown": 30 * 60,
-        "xp_care_percent": 0.05,  # each feed/play gives this share of the current level
+        "xp_care_percent": 0.05,
+        "income_base": 800,  # a Rentista with +10% makes 10% of this per day (~what an active player earns working)
+        "income_max_hours": 24,  # uncollected income stops growing after this  # each feed/play gives this share of the current level
         "xp_work": 5,
         "xp_daily": 10,
         "xp_message": 1,
@@ -297,6 +301,10 @@ SETTINGS: list[Setting] = [
     Setting("pets", "pets.care_cooldown", "Espera entre cuidados (segundos)", int, 0, DAY),
     Setting("pets", "pets.hunger_decay", "Hambre que pierde por hora", float, 0, 100),
     Setting("pets", "pets.happiness_decay", "Felicidad que pierde por hora", float, 0, 100),
+    Setting("pets", "pets.income_base", "Rentista: créditos al día por +100%", int, 0, 10_000_000,
+            "Una Rentista con +10% genera el 10% de esto al día. 800 ≈ lo que alguien activo gana trabajando."),
+    Setting("pets", "pets.income_max_hours", "Rentista: horas máximas sin cobrar", int, 1, 24 * 7,
+            "Lo que no se cobra deja de acumularse después de estas horas."),
     Setting("pets", "pets.xp_care_percent", "XP por cuidarla (0.05 = 5% del nivel)", float, 0, 1,
             "Porcentaje del XP que pide su nivel actual; así vale lo mismo en nivel 1 que en nivel 29."),
     Setting("pets", "pets.xp_work", "XP cuando trabajas", int, 0, 10_000),

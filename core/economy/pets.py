@@ -14,7 +14,7 @@ from datetime import datetime, timezone
 from pymongo import ReturnDocument
 from pymongo.errors import DuplicateKeyError
 
-from core.economy.constants import ARCHETYPES, MAX_PETS, MAX_SPECIES, MAX_SPECIES_PER_RARITY, PETS, RARITIES, SPECIES, USERS
+from core.economy.constants import ARCHETYPES, CREATED, MAX_PETS, MAX_SPECIES, MAX_SPECIES_PER_RARITY, PETS, RARITIES, SPECIES, USERS
 from core.economy.pet_catalog import STANDALONE, StarterDocs
 from core.economy.rewards import Aware
 from core.economy.service import EconomyError, EconomyService
@@ -75,6 +75,19 @@ def CareXp(xp: int, config: dict) -> int:
     """XP for one feed/play: a share of what the current level needs (at least 1, 0 at max level)."""
     Needed = LevelFor(xp, config)[2]
     return max(1, math.ceil(Needed * config["pets"]["xp_care_percent"])) if Needed else 0
+
+
+def IncomePerDay(perk: float, config: dict) -> int:
+    """Credits a Rentista pet makes per day for its perk value."""
+    return int(round(perk * config["pets"]["income_base"]))
+
+
+def PerkText(archetype: str, perk: float, config: dict) -> str:
+    """How a perk value reads to players ('+12.0% extra en /trabajar', '96 al día ...')."""
+    Info = ARCHETYPES[archetype]
+    if Info["bonus"] == "income":
+        return f"{IncomePerDay(perk, config):,} {Info['perk']}".replace(",", ".")
+    return f"+{perk:.1%} {Info['perk']}"
 
 
 def PerkValue(species: dict, level: int, care: float = 1.0) -> float:
@@ -214,7 +227,11 @@ class Pets:
         if not Pet:
             raise PetError("Esa mascota no es tuya.")
         await self.economy.Account(guild_id, user_id)
+        Previous = await self.ActiveId(guild_id, user_id)
         await self.users.update_one({"guild_id": guild_id, "user_id": user_id}, {"$set": {"pet_active": pet_id}})
+        if Previous != pet_id:
+            # Only the active pet makes income: it starts counting now.
+            await self.pets.update_one({"_id": Pet["_id"]}, {"$set": {"income_at": Now()}})
         return Pet
 
     async def Grant(self, guild_id: int, user_id: int, species_id: str, source: str, config: dict) -> tuple[dict, bool]:
@@ -242,6 +259,7 @@ class Pets:
             "hunger": FULL,
             "happiness": FULL,
             "care_at": Now(),
+            "income_at": Now(),
             "last_care": {},
             "source": source,
             "obtained_at": Now(),
@@ -349,6 +367,45 @@ class Pets:
         return await self.economics.Price(guild_id, base, config, "pets") if self.economics and base else base
 
     # ---- perks ----
+
+    async def Collect(self, guild_id: int, user_id: int, config: dict, multiplier: float = 1.0) -> tuple[int, float, PetView]:
+        """
+        Pays what the active Rentista made since the last collection (up to income_max_hours).
+        Returns (credits, hours counted, view). `multiplier` is the booster bonus.
+        """
+        Settings = config["pets"]
+        async with self.economy.Lock(guild_id, user_id):
+            Pet = await self.Active(guild_id, user_id)
+            if not Pet:
+                raise PetError("No tienes una mascota activa.")
+            Species = await self.GetSpecies(guild_id, Pet["species_id"])
+            if not Species or ARCHETYPES[Species["archetype"]]["bonus"] != "income":
+                raise PetError("Tu mascota activa no es 💸 Rentista, así que no genera créditos.")
+            Now_ = Now()
+            Since = Aware(Pet.get("income_at"))
+            if not Since:
+                await self.pets.update_one({"_id": Pet["_id"]}, {"$set": {"income_at": Now_}})
+                raise PetError("¡Empezó a generar créditos ahora! Vuelve en un rato.")
+            View = Describe(Pet, Species, Now_, config)
+            Hours = min((Now_ - Since).total_seconds() / 3600, Settings["income_max_hours"])
+            Amount = int(IncomePerDay(View.perk, config) * Hours / 24 * multiplier)
+            if Amount < 1:
+                PerHour = IncomePerDay(View.perk, config) / 24
+                if PerHour <= 0:
+                    raise PetError("Está tan descuidada que no genera nada 😿 Aliméntala y juega con ella.")
+                Ready = int(Since.timestamp() + 3600 / PerHour)
+                raise PetError(f"Todavía no generó nada. Vuelve <t:{Ready}:R>.")
+            async with self.economy.Transaction() as Session:
+                Claimed = await self.pets.update_one(
+                    {"_id": Pet["_id"], "income_at": Pet["income_at"]}, {"$set": {"income_at": Now_}}, session=Session
+                )
+                if not Claimed.modified_count:
+                    raise PetError("Ya lo cobraste.")
+                await self.economy.Add(
+                    guild_id, user_id, Amount, f"Ingresos de {Species['name']}", kind=CREATED,
+                    ref=f"pet:{Pet['pet_id']}", session=Session,
+                )
+        return Amount, Hours, View
 
     async def Perk(self, guild_id: int, user_id: int, bonus: str, config: dict) -> float:
         """What the active pet gives for `bonus` (work, chat, luck or discount)."""

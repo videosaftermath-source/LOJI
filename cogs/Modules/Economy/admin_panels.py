@@ -26,7 +26,7 @@ from core.economy.constants import (
     ROLE,
 )
 from core.economy.gacha import ORDER, Problems, Status, Now as GachaNow
-from core.economy.pets import PerkValue
+from core.economy.pets import PerkText, PerkValue
 from core.economy.pet_catalog import StarterDocs
 from core.economy.registry import Eco
 from core.economy.rewards import Aware, FormatAmount
@@ -717,7 +717,10 @@ async def SpeciesCard(guild: discord.Guild, species: dict) -> discord.Embed:
     embed.add_field(name="Arquetipo", value=Archetype["label"])
     embed.add_field(
         name="Perk",
-        value=f"Nivel 1: +{PerkValue(species, 1):.1%} · Nivel {MaxLevel}: +{PerkValue(species, MaxLevel):.1%}\n-# {Archetype['perk']} (antes de topes)",
+        value=(
+            f"Nivel 1: {PerkText(species['archetype'], PerkValue(species, 1), Config)} · "
+            f"Nivel {MaxLevel}: {PerkText(species['archetype'], PerkValue(species, MaxLevel), Config)}\n-# antes de topes y cuidados"
+        ),
         inline=False,
     )
     Target = await Eco().pets.GetSpecies(guild.id, species.get("evolves_to") or "")
