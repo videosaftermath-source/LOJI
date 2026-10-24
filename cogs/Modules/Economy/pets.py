@@ -55,12 +55,13 @@ def CardData(view: PetView, owner: discord.abc.User, costs: dict) -> dict:
     Footer = (
         f"Evoluciona al nivel {S['evolve_level']} · {costs['evolve_price']:,}".replace(",", ".")
         if S.get("evolves_to") and S.get("evolve_level")
-        else "Forma final"
+        else "Exclusiva · no evoluciona" if S.get("exclusive") else "Forma final"
     )
     return {
         "name": PetName(view),
         "species": S["name"],
         "emoji": S.get("emoji"),
+        "art": S.get("art"),
         "rarity": S["rarity"],
         "rarity_label": RARITIES[S["rarity"]]["label"],
         "archetype": Plain(Archetype["label"]),

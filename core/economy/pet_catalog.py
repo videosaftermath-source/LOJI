@@ -25,9 +25,12 @@ STARTER_SPECIES = [
     ("turtle", "Tortuga Millonaria", "🐢", "legendary", "saver", "Lenta pero con interés compuesto."),
     # Exclusivas del gacha (no son parte de ninguna cadena de evolución)
     ("wolf", "Lobo de Luna Llena", "🐺", "legendary", "talker", "Aúlla a la luna llena... y el chat entero le contesta."),
+    ("pumpkin", "Calabaza Traviesa", "🎃", "legendary", "lucky", "Nació la noche de Halloween. ¿Truco o trato? Siempre trato... para ti."),
 ]
-# Species that don't evolve from the archetype's epic (gacha-only).
-STANDALONE = {"wolf"}
+# Bundled drawings (assets/pets/<name>.png) used on the cards instead of the emoji.
+ART = {"pumpkin": "pumpkin"}
+# Exclusive species: outside every evolution chain, only obtainable from the gacha (or an admin gift).
+STANDALONE = {"wolf", "pumpkin"}
 
 ORDER = ["common", "rare", "epic", "legendary"]
 
@@ -53,6 +56,8 @@ def StarterDocs(guild_id: int) -> list[dict]:
                 "archetype": Archetype,
                 "description": Description,
                 "image": None,
+                "art": ART.get(Key),
+                "exclusive": Key in STANDALONE,
                 "evolves_to": EvolvesTo.upper() if EvolvesTo else None,
                 "evolve_level": EVOLVE_LEVELS.get(Rarity) if EvolvesTo else None,
                 "enabled": True,

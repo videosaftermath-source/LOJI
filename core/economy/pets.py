@@ -14,7 +14,7 @@ from pymongo import ReturnDocument
 from pymongo.errors import DuplicateKeyError
 
 from core.economy.constants import ARCHETYPES, MAX_PETS, MAX_SPECIES, MAX_SPECIES_PER_RARITY, PETS, RARITIES, SPECIES, USERS
-from core.economy.pet_catalog import StarterDocs
+from core.economy.pet_catalog import STANDALONE, StarterDocs
 from core.economy.rewards import Aware
 from core.economy.service import EconomyError, EconomyService
 from core.economy.shop import NewId
@@ -178,6 +178,11 @@ class Pets:
             await self.CheckRarityRoom(guild_id, Rarity, sum(1 for D in Docs if D["rarity"] == Rarity))
         if Docs:
             await self.species.insert_many(Docs)
+        # Gacha-only species loaded before the "exclusive" flag existed.
+        await self.species.update_many(
+            {"guild_id": guild_id, "species_id": {"$in": [K.upper() for K in STANDALONE]}},
+            {"$set": {"exclusive": True, "evolves_to": None, "evolve_level": None}},
+        )
         self._cache.pop(guild_id, None)
         return len(Docs)
 
@@ -314,7 +319,7 @@ class Pets:
                 raise PetError("No tienes una mascota activa.")
             Species = await self.GetSpecies(guild_id, Pet["species_id"])
             Target = await self.GetSpecies(guild_id, Species.get("evolves_to") or "") if Species else None
-            if not Species or not Target:
+            if not Species or not Target or Species.get("exclusive") or Target.get("exclusive"):
                 raise PetError("Esta mascota no evoluciona.")
             Level = LevelFor(Pet.get("xp", 0), config)[0]
             if Level < int(Species["evolve_level"] or 0):

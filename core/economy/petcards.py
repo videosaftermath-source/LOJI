@@ -129,7 +129,7 @@ def PetCard(pet: dict) -> bytes:
     Shadow = Image.new("RGBA", (W, H), (0, 0, 0, 0))
     ImageDraw.Draw(Shadow).ellipse((130, 388, 330, 420), fill=(0, 0, 0, 130))
     Card = Image.alpha_composite(Card, Glow(Shadow, 8))
-    Picture = Icon(pet.get("emoji"), pet["name"], Rarity, 240)
+    Picture = Icon(pet.get("emoji"), pet["name"], Rarity, 240, art=pet.get("art"))
     if Mood_ == "abandoned":
         Picture = Picture.rotate(-12, resample=Image.BICUBIC)
     Card.alpha_composite(Picture, (110, 150))
@@ -198,7 +198,7 @@ def AlbumTile(pet: dict, size) -> Image.Image:
     Rarity = pet["rarity"]
     Main, Light, Dark = PALETTE[Rarity]
     Tile = Radial(size, (W / 2, 80), W * 0.8, Lerp(Main, Dark, 0.3), Lerp(Dark, BG_TOP, 0.5)).convert("RGBA")
-    Picture = Icon(pet.get("emoji"), pet["name"], Rarity, 104)
+    Picture = Icon(pet.get("emoji"), pet["name"], Rarity, 104, art=pet.get("art"))
     if Mood(pet["hunger"], pet["happiness"]) in ("sad", "abandoned"):
         Picture.putalpha(Picture.getchannel("A").point(lambda A: int(A * 0.75)))
     Tile.alpha_composite(Picture, ((W - 104) // 2, 22))
@@ -267,8 +267,8 @@ def EvolutionGif(old: dict, new: dict) -> bytes:
     Center = (W / 2, H / 2 - 6)
     OldColor, NewColor = PALETTE[old["rarity"]][1], PALETTE[new["rarity"]][1]
     Size = 150
-    OldPic = Icon(old.get("emoji"), old["name"], old["rarity"], Size)
-    NewPic = Icon(new.get("emoji"), new["name"], new["rarity"], Size)
+    OldPic = Icon(old.get("emoji"), old["name"], old["rarity"], Size, art=old.get("art"))
+    NewPic = Icon(new.get("emoji"), new["name"], new["rarity"], Size, art=new.get("art"))
     Rng = random.Random(f"{old['name']}>{new['name']}")
     Particles = [[Center[0], Center[1], math.cos(A) * V, math.sin(A) * V] for A, V in ((Rng.uniform(0, math.tau), Rng.uniform(2, 7)) for _ in range(70))]
     Frames = []

@@ -282,6 +282,18 @@ class ItemPanel(Panel):
         Config = await EcoConfig().Get(interaction.guild.id)
         await interaction.response.edit_message(embed=ItemCard(Item, Config), view=ItemPanel(self.author, Item))
 
+    @discord.ui.button(label="Hacer exclusiva", emoji="🔒", style=discord.ButtonStyle.grey)
+    async def Exclusive(self, interaction: discord.Interaction, _):
+        """Exclusive: never evolves and no other species evolves into it (gacha or gift only)."""
+        Id, GuildId = self.species_doc["species_id"], interaction.guild.id
+        Making = not self.species_doc.get("exclusive")
+        Data = {"exclusive": Making}
+        if Making:
+            Data |= {"evolves_to": None, "evolve_level": None}
+            await Eco().pets.species.update_many({"guild_id": GuildId, "evolves_to": Id}, {"$set": {"evolves_to": None, "evolve_level": None}})
+        Species = await Eco().pets.UpdateSpecies(GuildId, Id, Data)
+        await interaction.response.edit_message(embed=await SpeciesCard(interaction.guild, Species), view=SpeciesItem(self.author, Species))
+
     @discord.ui.button(label="Borrar", emoji="🗑️", style=discord.ButtonStyle.red)
     async def Remove(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not self.confirming:
@@ -606,7 +618,7 @@ class QuestKind(Panel):
 def SpeciesLine(species: dict, by_id: dict) -> str:
     Evolves = by_id.get(species.get("evolves_to") or "")
     Evo = f" → {Evolves.get('emoji') or ''} {Evolves['name']} (nv. {species['evolve_level']})" if Evolves else ""
-    Paused = "" if species.get("enabled") else "⏸️ "
+    Paused = ("" if species.get("enabled") else "⏸️ ") + ("🔒 " if species.get("exclusive") else "")
     return (
         f"{Paused}{species.get('emoji') or '🐾'} **{species['name']}** · {RARITIES[species['rarity']]['stars']} · "
         f"{ARCHETYPES[species['archetype']]['label']}{Evo}"
@@ -651,7 +663,7 @@ async def SpeciesEmbed(guild: discord.Guild) -> discord.Embed:
                     break
                 Text += ("\n" if Text else "") + Line
             embed.add_field(name=f"{Info['stars']} {Info['label']} ({len(Lines)}/{MAX_SPECIES_PER_RARITY})", value=Text, inline=False)
-    embed.set_footer(text=f"{len(All)}/{MAX_SPECIES} · ⏸️ = pausada (no sale en el gacha) · Regala con /eco-admin regalar-mascota")
+    embed.set_footer(text=f"{len(All)}/{MAX_SPECIES} · 🔒 = exclusiva · ⏸️ = pausada (no sale en el gacha) · Regala con /eco-admin regalar-mascota")
     return embed
 
 
@@ -711,7 +723,11 @@ async def SpeciesCard(guild: discord.Guild, species: dict) -> discord.Embed:
     Target = await Eco().pets.GetSpecies(guild.id, species.get("evolves_to") or "")
     embed.add_field(
         name="Evolución",
-        value=f"→ {Target.get('emoji') or ''} {Target['name']} al nivel {species['evolve_level']}" if Target else "No evoluciona",
+        value=(
+            "🔒 **Exclusiva**: no evoluciona y ninguna otra evoluciona en ella. Solo sale en el gacha (o regalándola)."
+            if species.get("exclusive")
+            else f"→ {Target.get('emoji') or ''} {Target['name']} al nivel {species['evolve_level']}" if Target else "No evoluciona"
+        ),
         inline=False,
     )
     if species.get("image"):
@@ -784,6 +800,8 @@ class SpeciesItem(Panel):
         super().__init__(author)
         self.species_doc = species
         self.Toggle.label = "Pausar" if species.get("enabled") else "Activar"
+        self.Exclusive.label = "Quitar exclusiva" if species.get("exclusive") else "Hacer exclusiva"
+        self.Evolution.disabled = bool(species.get("exclusive"))
         self.confirming = False
 
     @discord.ui.button(label="Editar", emoji="✏️", style=discord.ButtonStyle.blurple)
@@ -792,7 +810,10 @@ class SpeciesItem(Panel):
 
     @discord.ui.button(label="Evolución", emoji="✨", style=discord.ButtonStyle.blurple)
     async def Evolution(self, interaction: discord.Interaction, _):
-        Others = [S for S in await Eco().pets.AllSpecies(interaction.guild.id) if S["species_id"] != self.species_doc["species_id"]]
+        Others = [
+            S for S in await Eco().pets.AllSpecies(interaction.guild.id)
+            if S["species_id"] != self.species_doc["species_id"] and not S.get("exclusive")
+        ]
         await interaction.response.edit_message(view=EvolutionPicker(self.author, self.species_doc, Others))
 
     @discord.ui.button(label="Pausar", style=discord.ButtonStyle.grey)

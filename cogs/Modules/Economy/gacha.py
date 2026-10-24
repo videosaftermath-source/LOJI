@@ -127,6 +127,7 @@ def CardData(result, config: dict) -> dict:
     return {
         "name": result.name,
         "emoji": result.emoji,
+        "art": result.art,
         "rarity": result.rarity,
         "rarity_label": RARITIES[result.rarity]["label"],
         "subtitle": Subtitle,

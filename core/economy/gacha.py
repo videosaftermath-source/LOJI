@@ -152,6 +152,7 @@ class PullResult:
     detail: str = ""  # e.g. "+150 XP"
     name: str = ""
     emoji: str | None = None
+    art: str | None = None  # bundled drawing (assets/pets), for pets that have one
 
 
 @dataclass
@@ -303,6 +304,7 @@ class Gacha:
         if prize["type"] == "pet":
             Species = await self.pets.GetSpecies(Guild.id, prize["ref"])
             Result.name, Result.emoji = (Species["name"], Species.get("emoji")) if Species else ("Mascota perdida", "🐾")
+            Result.art = Species.get("art") if Species else None
             if Species:
                 try:
                     _, Result.new = await self.pets.Grant(Guild.id, member.id, prize["ref"], "gacha", config)

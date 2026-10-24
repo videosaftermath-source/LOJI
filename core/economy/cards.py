@@ -170,10 +170,24 @@ def FallbackIcon(name: str, rarity: str, size: int) -> Image.Image:
     return Icon
 
 
-def Icon(emoji: str | None, name: str, rarity: str, size: int, custom: dict | None = None) -> Image.Image:
-    """The picture for a prize: custom Discord emoji (pre-downloaded in `custom`), unicode emoji, or a fallback."""
-    Picture = None
-    if emoji:
+ART_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "assets", "pets")
+_art: dict[str, Image.Image | None] = {}
+
+
+def Art(name: str | None) -> Image.Image | None:
+    """A drawing bundled in assets/pets (e.g. 'pumpkin' -> assets/pets/pumpkin.png)."""
+    if not name or not name.replace("_", "").replace("-", "").isalnum():
+        return None
+    if name not in _art:
+        Path = os.path.join(ART_DIR, f"{name}.png")
+        _art[name] = Image.open(Path).convert("RGBA") if os.path.exists(Path) else None
+    return _art[name]
+
+
+def Icon(emoji: str | None, name: str, rarity: str, size: int, custom: dict | None = None, art: str | None = None) -> Image.Image:
+    """The picture for a prize: bundled art, custom Discord emoji (pre-downloaded in `custom`), unicode emoji, or a fallback."""
+    Picture = Art(art)
+    if Picture is None and emoji:
         Match = CUSTOM_EMOJI.match(emoji)
         if Match and custom and custom.get(Match.group(1)) is not None:
             Picture = custom[Match.group(1)]
@@ -423,7 +437,7 @@ def SingleCard(result: dict, info: dict, custom: dict | None = None) -> bytes:
     Halo = Image.new("RGBA", (W, H), (0, 0, 0, 0))
     ImageDraw.Draw(Halo).ellipse((130, 100, 410, 380), fill=Main + (190,))
     Card = Image.alpha_composite(Card, Glow(Halo, 45))
-    Picture = Icon(result.get("emoji"), result["name"], Rarity, 230, custom)
+    Picture = Icon(result.get("emoji"), result["name"], Rarity, 230, custom, result.get("art"))
     Shadow = Image.new("RGBA", (W, H), (0, 0, 0, 0))
     Shadow.paste((0, 0, 0, 120), (155 + 8, 125 + 14), Picture)
     Card = Image.alpha_composite(Card, Glow(Shadow, 10))
@@ -473,7 +487,7 @@ def Tile(result: dict, size, custom: dict | None) -> Image.Image:
     Halo = Image.new("RGBA", size, (0, 0, 0, 0))
     ImageDraw.Draw(Halo).ellipse((W * 0.18, 18, W * 0.82, 18 + W * 0.64), fill=Light + (120,))
     Bg = Image.alpha_composite(Bg, Glow(Halo, 22))
-    Picture = Icon(result.get("emoji"), result["name"], Rarity, 112, custom)
+    Picture = Icon(result.get("emoji"), result["name"], Rarity, 112, custom, result.get("art"))
     Bg.paste(Picture, ((W - 112) // 2, 26), Picture)
     D = ImageDraw.Draw(Bg)
     Stars = STAR_COUNT[Rarity]

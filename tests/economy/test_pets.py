@@ -72,9 +72,11 @@ def test_perk_by_rarity_level_and_care():
 def test_seed_catalog_and_evolution_chain():
     s = services()
     species = run(s.pets.AllSpecies(G))
-    assert len(species) == 17
+    assert len(species) == 18
     assert run(s.pets.GetSpecies(G, "DOLPHIN"))["evolves_to"] == "EAGLE"  # the gacha-only wolf doesn't steal the chain
     assert run(s.pets.GetSpecies(G, "WOLF"))["rarity"] == "legendary"
+    pumpkin = run(s.pets.GetSpecies(G, "PUMPKIN"))
+    assert pumpkin["exclusive"] and pumpkin["art"] == "pumpkin" and pumpkin["evolves_to"] is None
     hamster = run(s.pets.GetSpecies(G, "HAMSTER"))
     assert hamster["evolves_to"] == "BEAVER" and hamster["evolve_level"] == 10
     assert run(s.pets.GetSpecies(G, "DRAGON"))["evolves_to"] is None
@@ -224,3 +226,21 @@ def test_species_limit_is_per_rarity():
     run(s.pets.CreateSpecies(G, {"name": "R", "emoji": "🐾", "rarity": "rare", "archetype": "farmer", "description": ""}))  # other rarities still fit
     with pytest.raises(PetError):
         run(s.pets.UpdateSpecies(G, "HAMSTER", {"rarity": "epic"}))
+
+
+def test_exclusive_species_never_evolve():
+    s = services()
+    pet, _ = run(s.pets.Grant(G, 9, "PUMPKIN", "test", CONFIG))
+    run(s.pets.pets.update_one({"_id": pet["_id"]}, {"$set": {"xp": 10**7}}))
+    run(s.pets.UpdateSpecies(G, "PUMPKIN", {"evolves_to": "DRAGON", "evolve_level": 1}))  # even if someone sets it
+    with pytest.raises(PetError):
+        run(s.pets.Evolve(G, 9, CONFIG))
+
+
+def test_bundled_art_is_used():
+    from core.economy.cards import Art, Icon
+
+    assert Art("pumpkin") is not None and Art("../secret") is None and Art("missing") is None
+    a = Icon("🎃", "Calabaza", "legendary", 100, art="pumpkin")
+    b = Icon("🎃", "Calabaza", "legendary", 100)
+    assert a.tobytes() != b.tobytes()
