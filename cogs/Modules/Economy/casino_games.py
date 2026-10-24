@@ -5,6 +5,7 @@ import discord
 from core.economy.casino import HORSES, MINES_TILES, HiLoChance, HiLoGame, HiLoName, MinesGame, RaceMultiplier, Winnings
 from core.economy.registry import Eco
 from core.economy.rewards import FormatAmount
+from core.economy.service import EconomyError
 
 GAME_TIMEOUT = 180
 TILES_PER_ROW = 5
@@ -28,6 +29,7 @@ class GameView(discord.ui.View):
     """Shared plumbing: owner-only, ignores clicks while busy or after the end, settles on timeout."""
 
     game_name = ""
+    replayable = False  # keeps listening after the end, for a "play again" button
 
     def __init__(self, client: discord.Client, member: discord.Member, game, config: dict, luck: float):
         super().__init__(timeout=GAME_TIMEOUT)
@@ -62,7 +64,8 @@ class GameView(discord.ui.View):
         if self.game.finished and not self.settled:
             self.settled = True
             await Settle(self.client, self.member, self.game_name, self.game.payout)
-            self.stop()
+            if not self.replayable:
+                self.stop()
         self.Refresh()
         Kwargs = {"embed": self.Embed(), "view": self}
         if interaction is not None:
@@ -101,6 +104,7 @@ class Tile(discord.ui.Button):
 
 class MinesView(GameView):
     game_name = "mines"
+    replayable = True
 
     def __init__(self, *args):
         super().__init__(*args)
@@ -110,11 +114,34 @@ class MinesView(GameView):
         self.cash = discord.ui.Button(emoji="💰", style=discord.ButtonStyle.green, row=MINES_TILES // TILES_PER_ROW)
 
         async def Cash(interaction: discord.Interaction):
+            if self.game.finished:
+                return await self.Replay(interaction)
             await self.Act(interaction, self.game.CashOut)
 
         self.cash.callback = Cash
         self.add_item(self.cash)
         self.Refresh()
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        Replay = self.game.finished and interaction.data.get("custom_id") == self.cash.custom_id
+        if Replay and interaction.user.id == self.member.id and not self.busy:
+            return True
+        return await super().interaction_check(interaction)
+
+    async def Replay(self, interaction: discord.Interaction):
+        """New game with the same bet and mines, in the same message."""
+        self.busy = True
+        await interaction.response.defer()
+        Game: MinesGame = self.game
+        try:
+            Bet, Edge, Luck = await Eco().casino.Start(self.member, "mines", str(Game.bet), self.config, exclusive=True)
+        except EconomyError as e:
+            self.busy = False
+            return await interaction.followup.send(f"❌ {e}", ephemeral=True)
+        New = MinesView(self.client, self.member, MinesGame(Bet, Game.mines, Edge, Eco().casino.rng, cap=Game.cap), self.config, Luck)
+        New.message = self.message or interaction.message
+        self.stop()
+        await interaction.edit_original_response(embed=New.Embed(), view=New)
 
     def Refresh(self):
         Game: MinesGame = self.game
@@ -128,8 +155,10 @@ class MinesView(GameView):
             elif Game.finished:
                 T.emoji, T.disabled = "▫️", True
         if Game.finished:
-            self.cash.disabled = True
-            self.cash.label = "Fin"
+            # The cash-out button becomes "play again" with the same bet and mines.
+            self.cash.disabled = False
+            self.cash.emoji, self.cash.style = "🔁", discord.ButtonStyle.blurple
+            self.cash.label = f"Jugar de nuevo ({Game.bet:,} · {Game.mines} minas)".replace(",", ".")
         else:
             Value = Winnings(Game.bet, Game.Multiplier()) if Game.revealed else Game.bet
             self.cash.label = f"Retirarse ({Value:,})".replace(",", ".")

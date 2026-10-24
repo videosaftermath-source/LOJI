@@ -1,4 +1,5 @@
 import asyncio
+import io
 import logging
 import math
 import time
@@ -39,7 +40,9 @@ from core.economy.casino import (
     ROULETTE_BETS,
 )
 from cogs.Modules.Economy.casino_games import HiLoView, HorseChoices, MinesView, RaceTrack
+from core.economy.cards import AnimationSeconds
 from core.economy.config import EcoConfig
+from core.economy.slotgif import HOLD_MS, SlotsAnimation
 from core.economy.constants import GAME_COMMANDS, GAMES, MODULE
 from core.economy.registry import Eco
 from core.economy.rewards import FormatAmount
@@ -373,6 +376,39 @@ class EconomyCasino(commands.Cog):
             await Message.edit(embed=Frame(Shown))
         await asyncio.sleep(SPIN_STEP)
         await Message.edit(embed=Frame(3, final=True))
+
+    @casino.command(name="tragamonedas", description="Tragamonedas de lujo animada: mira girar los rodillos")
+    @app_commands.describe(cantidad="Cuánto apuestas (500, 1.5k, todo, mitad)")
+    @ModuleIsEnabled(MODULE)
+    async def tragamonedas(self, ctx: commands.Context, cantidad: str):
+        Started = await self.Begin(ctx, "deluxe", cantidad)
+        if not Started:
+            return
+        Config, Bet, Edge, Luck = Started
+        Reels = SpinReels(Eco().casino.rng)
+        Payout = SlotsPayout(Bet, Reels, Edge)
+        await Eco().casino.Pay(ctx.author, "deluxe", Payout)
+        self.Played(ctx)
+        Gif, Png = await asyncio.to_thread(SlotsAnimation, Reels, Payout / Bet)
+        Name = f"{ctx.author.display_name} apostó {Bet:,}".replace(",", ".")
+        embed = discord.Embed(title="🎰✨ Tragamonedas de lujo", description="Girando...", color=discord.Color.purple())
+        embed.set_author(name=Name, icon_url=ctx.author.display_avatar)
+        embed.set_image(url="attachment://tragamonedas.gif")
+        Message = await ctx.send(embed=embed, file=discord.File(io.BytesIO(Gif), "tragamonedas.gif"))
+        await asyncio.sleep(AnimationSeconds(Gif) - HOLD_MS / 1000)
+        # The GIF loops in Discord, so swap it for the final picture with the result.
+        if Payout > Bet:
+            Color, Text = (discord.Color.gold() if Payout >= Bet * 10 else discord.Color.green()), f"✅ Cobras {Money(Payout, Config)} (x{Payout / Bet:.2f})"
+        else:
+            Color, Text = discord.Color.red(), f"❌ Pierdes {Money(Bet, Config)}"
+        Result = discord.Embed(title="🎰✨ Tragamonedas de lujo", description=f"# ┃ {' ┃ '.join(Reels)} ┃\n{Text}", color=Color)
+        Result.set_author(name=Name, icon_url=ctx.author.display_avatar)
+        Result.set_image(url="attachment://resultado.png")
+        Result.set_footer(text=EdgeNote(Edge, Luck) + " · Mismos premios que /casino slots")
+        try:
+            await Message.edit(embed=Result, attachments=[discord.File(io.BytesIO(Png), "resultado.png")])
+        except discord.HTTPException:
+            pass
 
     @casino.command(name="crash", description="El cohete sube... ¡retírate antes de que explote!")
     @app_commands.describe(cantidad="Cuánto apuestas (500, 1.5k, todo, mitad)", retiro_auto="Retirarte solo al llegar a este multiplicador (ej. 2)")

@@ -48,6 +48,7 @@ La casa siempre gana un poco a la larga (eso quita dinero de la economía), pero
 | 💣 Mines | 3% | 10.000 | x100 (cobra solo al llegar) |
 | 🔼 Mayor o menor | 3% | 10.000 | x100 (cobra solo al llegar) |
 | 🎰 Slots | 10% (como una tragamonedas real) | 5.000 | x832 (7️⃣7️⃣7️⃣, 1 de cada 125.000) |
+| 🎰✨ Tragamonedas de lujo (animada) | 8% | 5.000 | x832, la misma tabla que Slots |
 | 🏇 Carrera | 4% | 10.000 | x12 (Turbo Burro) |
 
 - **Slots**: se gana en 1 de cada 3 tiradas y **todo premio paga más de lo apostado**, pero las parejas pagan poco (x1,28 a x5,35). La casa se queda con el 10%. Antes un 53% de las tiradas "ganaba", pero casi todas devolvían menos de lo apostado.

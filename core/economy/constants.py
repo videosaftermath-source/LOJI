@@ -169,6 +169,8 @@ DEFAULT_CONFIG: dict = {
         # so one lucky round can't break the economy (see docs/economia.md).
         "crash": {"min": 50, "max": 10_000, "cooldown": 10, "edge": 0.03, "max_multiplier": 100},
         "slots": {"min": 20, "max": 5_000, "cooldown": 5, "edge": 0.10},
+        # Same reels and paytable as slots, animated; a bit better odds since each spin takes longer.
+        "deluxe": {"min": 50, "max": 5_000, "cooldown": 8, "edge": 0.08},
         "coinflip": {"min": 20, "max": 20_000, "cooldown": 3, "edge": 0.02},
         "blackjack": {"min": 50, "max": 20_000, "cooldown": 5, "edge": 0.02},
         "roulette": {"min": 20, "max": 20_000, "cooldown": 5, "edge": 0.027},
@@ -200,6 +202,7 @@ STATS_DAYS = 14
 GAMES = {
     "crash": "🚀 Crash",
     "slots": "🎰 Slots",
+    "deluxe": "🎰✨ Tragamonedas de lujo",
     "coinflip": "🪙 Moneda",
     "blackjack": "🃏 Blackjack",
     "roulette": "🎡 Ruleta",
@@ -209,7 +212,7 @@ GAMES = {
 }
 # The subcommand that plays each game.
 GAME_COMMANDS = {
-    "crash": "crash", "slots": "slots", "coinflip": "moneda", "blackjack": "blackjack",
+    "crash": "crash", "slots": "slots", "deluxe": "tragamonedas", "coinflip": "moneda", "blackjack": "blackjack",
     "roulette": "ruleta", "mines": "mines", "hilo": "mayormenor", "race": "carrera",
 }
 
@@ -336,6 +339,7 @@ SETTINGS: list[Setting] = [
             ("casino2", "mines", "Mines"),
             ("casino2", "hilo", "Mayor o menor"),
             ("casino2", "race", "Carrera"),
+            ("casino2", "deluxe", "Tragamonedas de lujo"),
         )
         for S in (
             Setting(Section, f"casino.{Game}.min", f"{Label}: apuesta mínima", int, 1, 10_000_000),
