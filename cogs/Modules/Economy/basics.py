@@ -165,9 +165,9 @@ class EconomyBasics(commands.Cog):
             if Blocked and Member == ctx.author:
                 Value += f"\n> 🚫 **Bloqueado por spam** {Relative(Now + timedelta(seconds=Blocked))}"
             embed.add_field(name="💬 Chat", value=Value, inline=False)
-        Multiplier = boost.EarningsMultiplier(Member, Config)
-        if Multiplier > 1:
-            embed.add_field(name="💎 Booster", value=f"> Gana **x{Multiplier:g}** en trabajar, diario, chat y voz. ¡Gracias por boostear!", inline=False)
+        BoostRate = boost.EarningsMultiplier(Member, Config)
+        if BoostRate > 1:
+            embed.add_field(name="💎 Booster", value=f"> Gana **x{BoostRate:g}** en trabajar, diario, chat y voz. ¡Gracias por boostear!", inline=False)
         if Member == ctx.author:
             embed.add_field(
                 name="⏰ Disponibles",

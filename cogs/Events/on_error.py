@@ -1,3 +1,4 @@
+import logging
 import random
 import string
 import traceback
@@ -256,10 +257,13 @@ class On_error(commands.Cog):
                     True if isinstance(interactionType, discord.Interaction) else False
                 ),
             )
+            logging.getLogger(__name__).error(f"Command error {error_id}:\n{TRACEBACK}")
             Channel = self.client.get_channel(1333545239930994801)
+            if Channel is None:  # the original bot's error channel; not in this server
+                return
             embed = discord.Embed(
                 title="",
-                description=f"```py\n{TRACEBACK}```",
+                description=f"```py\n{TRACEBACK[:3900]}```",
                 color=discord.Color.dark_embed(),
             )
             embed.add_field(
