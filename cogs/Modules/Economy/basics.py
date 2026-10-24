@@ -1,4 +1,5 @@
 import random
+import time
 from datetime import datetime, timedelta, timezone
 
 import discord
@@ -8,10 +9,12 @@ from discord.ext import commands
 from core.bot.HelpEmbeds import NotYourPanel
 from core.bot.Module import ModuleIsEnabled
 from core.bot.emojis import Emojis
+from core.economy.activity import CurrentStreak, LocalDay, Multiplier
 from core.economy.config import EcoConfig
 from core.economy.constants import MODULE, WORK_LINES
 from core.economy.rewards import Aware, DailyStatus, FormatAmount, WorkAmount, WorkReadyAt
 from core.economy.service import ConditionFailed, EconomyError, Economy, InsufficientFunds
+from core.economy.tax import TransferFee
 
 CONFIRM_TIMEOUT = 60
 TOP_TIMEOUT = 300
@@ -23,12 +26,13 @@ def Relative(dt: datetime) -> str:
 
 
 class ConfirmPay(discord.ui.View):
-    def __init__(self, cog: "EconomyBasics", author: discord.Member, target: discord.Member, amount: int):
+    def __init__(self, cog: "EconomyBasics", author: discord.Member, target: discord.Member, amount: int, fee: int):
         super().__init__(timeout=CONFIRM_TIMEOUT)
         self.cog = cog
         self.author = author
         self.target = target
         self.amount = amount
+        self.fee = fee
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id != self.author.id:
@@ -50,16 +54,19 @@ class ConfirmPay(discord.ui.View):
                 self.target.id,
                 self.amount,
                 f"Pago a {self.target.id}",
+                fee=self.fee,
             )
         except InsufficientFunds as e:
             return await interaction.response.edit_message(
-                content=f"{Emojis.no} No te alcanza, pobre 😔 Tienes {FormatAmount(e.balance, Config)}.",
+                content=f"{Emojis.no} No te alcanza, pobre 😔 Necesitas {FormatAmount(self.amount + self.fee, Config)} (con comisión) y tienes {FormatAmount(e.balance, Config)}.",
                 view=None,
             )
         except EconomyError as e:
             return await interaction.response.edit_message(content=f"{Emojis.no} {e}", view=None)
         await interaction.response.edit_message(
-            content=f"{Emojis.tick} Le pagaste {FormatAmount(self.amount, Config)} a {self.target.mention}. Te quedan {FormatAmount(From['balance'], Config)}.",
+            content=f"{Emojis.tick} Le pagaste {FormatAmount(self.amount, Config)} a {self.target.mention}"
+            + (f" (+{FormatAmount(self.fee, Config)} de comisión)" if self.fee else "")
+            + f". Te quedan {FormatAmount(From['balance'], Config)}.",
             view=None,
         )
 
@@ -131,6 +138,25 @@ class EconomyBasics(commands.Cog):
             f"> **Puesto:** {f'#{Rank}' if Rank else 'Sin rankear'}\n"
             f"> **Racha diaria:** 🔥 {Streak} día(s)"
         )
+        Chat = Config["activity"]
+        if Chat["channels"]:
+            Activity = Account.get("activity", {})
+            Today = LocalDay(Now, Chat["utc_offset"])
+            ChatStreak = CurrentStreak(Activity, Today)
+            SameDay = Activity.get("day") == Today.isoformat()
+            Paid = int(Activity.get("paid_today", 0)) if SameDay else 0
+            Earned = int(Activity.get("earned_today", 0)) if SameDay else 0
+            Goal = Chat["streak_messages"]
+            Value = (
+                f"> **Racha de chat:** 🔥 {ChatStreak} día(s) · x{Multiplier(ChatStreak, Chat):.2f}\n"
+                f"> **Hoy:** {FormatAmount(Earned, Config)} de {FormatAmount(Chat['hard_cap'], Config)} · "
+                f"{min(Paid, Goal)}/{Goal} mensajes para la racha"
+            )
+            Guard = getattr(self.client.get_cog("EconomyActivity"), "guard", None)
+            Blocked = Guard.BlockedFor((ctx.guild.id, Member.id), time.monotonic()) if Guard else 0
+            if Blocked and Member == ctx.author:
+                Value += f"\n> 🚫 **Bloqueado por spam** {Relative(Now + timedelta(seconds=Blocked))}"
+            embed.add_field(name="💬 Chat", value=Value, inline=False)
         if Member == ctx.author:
             embed.add_field(
                 name="⏰ Disponibles",
@@ -219,9 +245,16 @@ class EconomyBasics(commands.Cog):
             return await ctx.send(
                 f"{Emojis.no} El mínimo para pagar es {FormatAmount(Config['transfer']['min'], Config)}.", ephemeral=True
             )
+        Fee = TransferFee(cantidad, Config)
+        Lines = [f"¿Seguro que le quieres pagar {FormatAmount(cantidad, Config)} a {usuario.mention}?"]
+        if Fee:
+            Lines.append(
+                f"-# Comisión del {Config['transfer']['fee_percent']:g}%: {FormatAmount(Fee, Config)} · "
+                f"Total que pagas: {FormatAmount(cantidad + Fee, Config)}"
+            )
         await ctx.send(
-            f"¿Seguro que le quieres pagar {FormatAmount(cantidad, Config)} a {usuario.mention}?",
-            view=ConfirmPay(self, ctx.author, usuario, cantidad),
+            "\n".join(Lines),
+            view=ConfirmPay(self, ctx.author, usuario, cantidad, Fee),
             ephemeral=True,
         )
 

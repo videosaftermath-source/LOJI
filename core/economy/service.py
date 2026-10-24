@@ -105,7 +105,7 @@ class EconomyService:
     async def Balance(self, guild_id: int, user_id: int) -> int:
         return int((await self.Account(guild_id, user_id)).get("balance", 0))
 
-    async def Log(self, guild_id, user_id, amount, reason, kind, balance_after, ref=None, session=None):
+    async def Log(self, guild_id, user_id, amount, reason, kind, balance_after, ref=None, session=None, extra=None):
         await self.ledger.insert_one(
             {
                 "guild_id": guild_id,
@@ -116,6 +116,7 @@ class EconomyService:
                 "balance_after": balance_after,
                 "ref": ref,
                 "ts": Now(),
+                **(extra or {}),
             },
             session=session,
         )
@@ -132,6 +133,7 @@ class EconomyService:
         when: dict | None = None,
         also_set: dict | None = None,
         session=None,
+        extra: dict | None = None,
     ) -> dict:
         """
         Adds `amount` (negative to remove) in one atomic update.
@@ -158,7 +160,7 @@ class EconomyService:
             if amount < 0 and Balance < -amount:
                 raise InsufficientFunds(Balance)
             raise ConditionFailed("No se cumplen las condiciones.")
-        await self.Log(guild_id, user_id, amount, reason, kind, Updated["balance"], ref, session)
+        await self.Log(guild_id, user_id, amount, reason, kind, Updated["balance"], ref, session, extra)
         return Updated
 
     async def Add(self, guild_id: int, user_id: int, amount: int, reason: str, **kw) -> dict:
@@ -174,28 +176,33 @@ class EconomyService:
         return await self.Change(guild_id, user_id, -amount, reason, kind=kw.pop("kind", DESTROYED), **kw)
 
     async def Transfer(
-        self, guild_id: int, sender: int, receiver: int, amount: int, reason: str
+        self, guild_id: int, sender: int, receiver: int, amount: int, reason: str, fee: int = 0
     ) -> tuple[dict, dict]:
-        """Moves money between users, in a transaction when available."""
+        """
+        Moves money between users, in a transaction when available.
+        The sender also pays `fee`, which is destroyed (logged as `fee` on their entry).
+        """
         if sender == receiver:
             raise InvalidAmount("No puedes pagarte a ti mismo.")
-        if not isinstance(amount, int) or amount <= 0:
+        if not isinstance(amount, int) or amount <= 0 or not isinstance(fee, int) or fee < 0:
             raise InvalidAmount("La cantidad tiene que ser mayor que 0.")
+        Total = amount + fee
+        Fee = {"fee": fee} if fee else None
         Ref = f"transfer:{sender}:{receiver}:{Now().timestamp()}"
         Active = {"last_active": Now()}
         async with self.Lock(guild_id, sender, receiver):
             if self.transactions:
                 async with self.client.start_session() as Session:
                     async with await Session.start_transaction():
-                        From = await self.Change(guild_id, sender, -amount, reason, kind=TRANSFER, ref=Ref, also_set=Active, session=Session)
+                        From = await self.Change(guild_id, sender, -Total, reason, kind=TRANSFER, ref=Ref, also_set=Active, session=Session, extra=Fee)
                         To = await self.Change(guild_id, receiver, amount, reason, kind=TRANSFER, ref=Ref, session=Session)
                         return From, To
-            From = await self.Change(guild_id, sender, -amount, reason, kind=TRANSFER, ref=Ref, also_set=Active)
+            From = await self.Change(guild_id, sender, -Total, reason, kind=TRANSFER, ref=Ref, also_set=Active, extra=Fee)
             try:
                 To = await self.Change(guild_id, receiver, amount, reason, kind=TRANSFER, ref=Ref)
             except Exception:
                 # No transaction to roll back: give the sender their money back.
-                await self.Change(guild_id, sender, amount, f"Reembolso: {reason}", kind=TRANSFER, ref=Ref)
+                await self.Change(guild_id, sender, Total, f"Reembolso: {reason}", kind=TRANSFER, ref=Ref)
                 raise
             return From, To
 

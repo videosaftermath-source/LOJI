@@ -6,37 +6,50 @@ from core.bot.HelpEmbeds import NotYourPanel
 from core.bot.emojis import Emojis
 from core.bot.permissions import Permissions
 from core.economy.config import ConfigError, EcoConfig, GetPath
-from core.economy.constants import DEFAULT_CONFIG, SETTINGS, SETTINGS_BY_PATH
+from core.economy.constants import DEFAULT_CONFIG, SECTIONS, SETTINGS, SETTINGS_BY_PATH
 from core.economy.rewards import FormatAmount
 from core.economy.service import Economy, InsufficientFunds
 
 PANEL_TIMEOUT = 600
 
 
-def ConfigEmbed(guild: discord.Guild, config: dict) -> discord.Embed:
-    embed = discord.Embed(title="⚙️ Configuración de la economía", color=discord.Color.dark_embed())
+def Show(value) -> str:
+    if isinstance(value, bool):
+        return "sí" if value else "no"
+    if isinstance(value, float):
+        return f"{value:g}"
+    return str(value)
+
+
+def ConfigEmbed(guild: discord.Guild, config: dict, section: str) -> discord.Embed:
+    embed = discord.Embed(title=f"⚙️ Economía · {SECTIONS[section]}", color=discord.Color.dark_embed())
     Lines = []
+    if section == "activity":
+        Channels = ", ".join(f"<#{C}>" for C in config["activity"]["channels"]) or "**ninguno** (no se paga por chat)"
+        Lines.append(f"> **Canales que pagan:** {Channels}")
     for S in SETTINGS:
+        if S.section != section:
+            continue
         Value = GetPath(config, S.path)
         Default = GetPath(DEFAULT_CONFIG, S.path)
-        Lines.append(f"> **{S.label}:** `{Value}`" + ("" if Value == Default else " ✏️"))
+        Lines.append(f"> **{S.label}:** `{Show(Value)}`" + ("" if Value == Default else " ✏️"))
     embed.description = "\n".join(Lines) + "\n\n-# ✏️ = cambiado. Elige una opción abajo para editarla (déjala vacía para volver al valor por defecto)."
     embed.set_author(name=guild.name, icon_url=guild.icon)
     return embed
 
 
 class EditValue(discord.ui.Modal):
-    def __init__(self, path: str, current, message: discord.Message):
+    def __init__(self, panel: "ConfigPanel", path: str, current):
         S = SETTINGS_BY_PATH[path]
         super().__init__(title=S.label[:45])
+        self.panel = panel
         self.path = path
-        self.message = message
         self.value = discord.ui.TextInput(
             label="Nuevo valor (vacío = por defecto)",
-            default=str(current),
+            default=Show(current),
             required=False,
             max_length=64,
-            placeholder=S.help[:100] or None,
+            placeholder=(S.help or ("sí / no" if S.kind is bool else ""))[:100] or None,
         )
         self.add_item(self.value)
 
@@ -45,33 +58,81 @@ class EditValue(discord.ui.Modal):
             Config = await EcoConfig().Set(interaction.guild.id, self.path, self.value.value)
         except ConfigError as e:
             return await interaction.response.send_message(f"{Emojis.no} {e}", ephemeral=True)
-        await interaction.response.edit_message(embed=ConfigEmbed(interaction.guild, Config))
+        await interaction.response.edit_message(embed=ConfigEmbed(interaction.guild, Config, self.panel.section))
+
+
+class SectionSelect(discord.ui.Select):
+    def __init__(self, current: str):
+        super().__init__(
+            placeholder="Sección",
+            options=[discord.SelectOption(label=L, value=K, default=K == current) for K, L in SECTIONS.items()],
+            row=0,
+        )
+
+    async def callback(self, interaction: discord.Interaction):
+        Panel: ConfigPanel = self.view
+        Panel.Build(self.values[0])
+        Config = await EcoConfig().Get(interaction.guild.id)
+        await interaction.response.edit_message(embed=ConfigEmbed(interaction.guild, Config, Panel.section), view=Panel)
 
 
 class SettingSelect(discord.ui.Select):
-    def __init__(self):
+    def __init__(self, section: str):
         super().__init__(
             placeholder="Editar una opción",
-            options=[discord.SelectOption(label=S.label[:100], value=S.path) for S in SETTINGS],
+            options=[
+                discord.SelectOption(label=S.label[:100], value=S.path)
+                for S in SETTINGS
+                if S.section == section
+            ],
+            row=1,
         )
 
     async def callback(self, interaction: discord.Interaction):
         Config = await EcoConfig().Get(interaction.guild.id)
         await interaction.response.send_modal(
-            EditValue(self.values[0], GetPath(Config, self.values[0]), interaction.message)
+            EditValue(self.view, self.values[0], GetPath(Config, self.values[0]))
         )
 
 
+class ChannelsSelect(discord.ui.ChannelSelect):
+    def __init__(self, guild: discord.Guild, current: list[int]):
+        super().__init__(
+            placeholder="Canales donde chatear paga",
+            channel_types=[discord.ChannelType.text, discord.ChannelType.news],
+            min_values=0,
+            max_values=10,
+            default_values=[C for C in (guild.get_channel(i) for i in current) if C],
+            row=2,
+        )
+
+    async def callback(self, interaction: discord.Interaction):
+        Config = await EcoConfig().SetChannels(interaction.guild.id, [C.id for C in self.values])
+        await interaction.response.edit_message(embed=ConfigEmbed(interaction.guild, Config, "activity"))
+
+
 class ConfigPanel(discord.ui.View):
-    def __init__(self, author: discord.Member):
+    def __init__(self, author: discord.Member, guild: discord.Guild, config: dict, section: str = "general"):
         super().__init__(timeout=PANEL_TIMEOUT)
         self.author = author
-        self.add_item(SettingSelect())
+        self.guild = guild
+        self.config = config
+        self.Build(section)
+
+    def Build(self, section: str):
+        self.section = section
+        self.clear_items()
+        self.add_item(SectionSelect(section))
+        self.add_item(SettingSelect(section))
+        if section == "activity":
+            self.add_item(ChannelsSelect(self.guild, self.config["activity"]["channels"]))
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id != self.author.id:
             await interaction.response.send_message(embed=NotYourPanel(), ephemeral=True)
             return False
+        # Keep the channel picker's defaults up to date.
+        self.config = await EcoConfig().Get(interaction.guild.id)
         return True
 
 
@@ -118,7 +179,20 @@ class EconomyAdmin(commands.Cog):
     @Permissions("Admin")
     async def config(self, ctx: commands.Context):
         Config = await EcoConfig().Get(ctx.guild.id)
-        await ctx.send(embed=ConfigEmbed(ctx.guild, Config), view=ConfigPanel(ctx.author), ephemeral=True)
+        await ctx.send(
+            embed=ConfigEmbed(ctx.guild, Config, "general"),
+            view=ConfigPanel(ctx.author, ctx.guild, Config),
+            ephemeral=True,
+        )
+
+    @eco_admin.command(name="desbloquear", description="Quitarle el bloqueo anti-spam a alguien")
+    @app_commands.describe(usuario="A quién")
+    @Permissions("Admin")
+    async def desbloquear(self, ctx: commands.Context, usuario: discord.Member):
+        Activity = self.client.get_cog("EconomyActivity")
+        if Activity:
+            Activity.guard.Unblock((ctx.guild.id, usuario.id))
+        await ctx.send(f"{Emojis.tick} {usuario.mention} ya puede volver a ganar por chatear.", ephemeral=True)
 
 
 async def setup(client: commands.Bot) -> None:

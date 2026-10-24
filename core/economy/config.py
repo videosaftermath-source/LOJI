@@ -6,6 +6,8 @@ import time
 from core.economy.constants import CONFIG, DEFAULT_CONFIG, SETTINGS_BY_PATH, Setting
 
 CACHE_SECONDS = 30
+YES = ("si", "sí", "s", "yes", "y", "true", "1", "on")
+NO = ("no", "n", "false", "0", "off")
 
 
 class ConfigError(ValueError):
@@ -33,9 +35,24 @@ def GetPath(config: dict, path: str):
 def Parse(setting: Setting, raw: str):
     """Turns admin input into a validated value."""
     raw = raw.strip()
+    if setting.kind is bool:
+        Lowered = raw.lower()
+        if Lowered in YES:
+            return True
+        if Lowered in NO:
+            return False
+        raise ConfigError(f"**{setting.label}**: responde `sí` o `no`.")
+    if setting.kind is float:
+        try:
+            Value = float(raw.replace(",", ".").rstrip("%"))
+        except ValueError:
+            raise ConfigError(f"**{setting.label}** tiene que ser un número (puede tener decimales, ej. `0.5`).")
+        if not setting.minimum <= Value <= setting.maximum:
+            raise ConfigError(f"**{setting.label}** tiene que estar entre {setting.minimum} y {setting.maximum}.")
+        return Value
     if setting.kind is int:
         try:
-            Value = int(raw.replace(".", "").replace(",", "").replace("_", ""))
+            Value = int(raw.replace(".", "").replace(",", "").replace("_", "").replace(" ", ""))
         except ValueError:
             raise ConfigError(f"**{setting.label}** tiene que ser un número entero.")
         if not setting.minimum <= Value <= setting.maximum:
@@ -56,6 +73,11 @@ def Validate(config: dict):
         raise ConfigError("El mínimo de trabajar no puede ser mayor que el máximo.")
     if config["daily"]["grace"] <= config["daily"]["cooldown"]:
         raise ConfigError("El tiempo para perder la racha tiene que ser mayor que la espera del diario.")
+    Activity = config["activity"]
+    if Activity["min"] > Activity["max"]:
+        raise ConfigError("El mínimo por mensaje no puede ser mayor que el máximo.")
+    if Activity["soft_cap"] > Activity["hard_cap"]:
+        raise ConfigError("El tope suave no puede ser mayor que el tope máximo.")
 
 
 class EconomyConfig:
@@ -91,6 +113,14 @@ class EconomyConfig:
         else:
             Update = {"$set": {path: Value}}
         await self.db[CONFIG].update_one({"_id": guild_id}, Update, upsert=True)
+        self._cache.pop(guild_id, None)
+        return await self.Get(guild_id)
+
+    async def SetChannels(self, guild_id: int, channel_ids: list[int]) -> dict:
+        """Sets the channels where chatting pays."""
+        await self.db[CONFIG].update_one(
+            {"_id": guild_id}, {"$set": {"activity.channels": list(channel_ids)}}, upsert=True
+        )
         self._cache.pop(guild_id, None)
         return await self.Get(guild_id)
 
