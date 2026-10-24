@@ -138,7 +138,7 @@ DEFAULT_CONFIG: dict = {
         "play_price": 40,
         "play_amount": 30,
         "care_cooldown": 30 * 60,
-        "xp_care": 15,
+        "xp_care_percent": 0.05,  # each feed/play gives this share of the current level
         "xp_work": 5,
         "xp_daily": 10,
         "xp_message": 1,
@@ -297,7 +297,8 @@ SETTINGS: list[Setting] = [
     Setting("pets", "pets.care_cooldown", "Espera entre cuidados (segundos)", int, 0, DAY),
     Setting("pets", "pets.hunger_decay", "Hambre que pierde por hora", float, 0, 100),
     Setting("pets", "pets.happiness_decay", "Felicidad que pierde por hora", float, 0, 100),
-    Setting("pets", "pets.xp_care", "XP por cuidarla", int, 0, 10_000),
+    Setting("pets", "pets.xp_care_percent", "XP por cuidarla (0.05 = 5% del nivel)", float, 0, 1,
+            "Porcentaje del XP que pide su nivel actual; así vale lo mismo en nivel 1 que en nivel 29."),
     Setting("pets", "pets.xp_work", "XP cuando trabajas", int, 0, 10_000),
     Setting("pets", "pets.xp_daily", "XP cuando reclamas el diario", int, 0, 10_000),
     Setting("pets", "pets.xp_message", "XP por mensaje pagado", int, 0, 10_000),

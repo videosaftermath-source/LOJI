@@ -161,7 +161,7 @@ class PetPanel(discord.ui.View):
             return await interaction.followup.send(f"{Emojis.no} No te alcanza 😢 Tienes {FormatAmount(e.balance, Config)}.", ephemeral=True)
         except EconomyError as e:
             return await interaction.followup.send(f"{Emojis.no} {e}", ephemeral=True)
-        Note = ("🍖 ¡Ñam ñam!" if kind == "food" else "🎾 ¡Qué divertido!") + f" +{Config['pets']['xp_care']} XP"
+        Note = ("🍖 ¡Ñam ñam!" if kind == "food" else "🎾 ¡Qué divertido!") + (f" +{View.gained} XP" if View.gained else "")
         if New > Old:
             Note += f"\n🎉 **¡{PetName(View)} subió al nivel {New}!**"
         await self.Refresh(interaction, Note)
@@ -330,7 +330,7 @@ class EconomyPets(commands.Cog):
             return await ctx.send(f"{Emojis.no} No te alcanza 😢 Tienes {FormatAmount(e.balance, Config)}.", ephemeral=True)
         except EconomyError as e:
             return await ctx.send(f"{Emojis.no} {e}", ephemeral=True)
-        Note = ("🍖 ¡Ñam ñam!" if kind == "food" else "🎾 ¡Qué divertido!") + f" +{Config['pets']['xp_care']} XP"
+        Note = ("🍖 ¡Ñam ñam!" if kind == "food" else "🎾 ¡Qué divertido!") + (f" +{View.gained} XP" if View.gained else "")
         if New > Old:
             Note += f"\n🎉 **¡{PetName(View)} subió al nivel {New}!**"
         embed, File = await PetCardMessage(View, ctx.author, Config)

@@ -6,6 +6,7 @@ plus the time since `care_at` give the current ones (lazy decay). Every write
 saves the current values and resets `care_at`.
 """
 
+import math
 import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -70,6 +71,12 @@ def LevelFor(xp: int, config: dict) -> tuple[int, int, int]:
     return Level, Left, (XpToNext(Level, config) if Level < Max else 0)
 
 
+def CareXp(xp: int, config: dict) -> int:
+    """XP for one feed/play: a share of what the current level needs (at least 1, 0 at max level)."""
+    Needed = LevelFor(xp, config)[2]
+    return max(1, math.ceil(Needed * config["pets"]["xp_care_percent"])) if Needed else 0
+
+
 def PerkValue(species: dict, level: int, care: float = 1.0) -> float:
     """Raw perk (0.10 = +10%) before caps."""
     Rarity = RARITIES[species["rarity"]]
@@ -99,6 +106,7 @@ class PetView:
     happiness: float
     care: float
     perk: float  # after care and caps
+    gained: int = 0  # XP from the care action that produced this view
 
 
 def Describe(pet: dict, species: dict, now: datetime, config: dict) -> PetView:
@@ -299,8 +307,11 @@ class Pets:
                     session=Session,
                 )
                 Pet.update(Current, care_at=Now_)
-                Pet, Old, New = await self.GainXp(Pet, Settings["xp_care"], config, session=Session)
-        return await self.View(Pet, config), Old, New
+                Gained = CareXp(Pet.get("xp", 0), config)
+                Pet, Old, New = await self.GainXp(Pet, Gained, config, session=Session)
+        View = await self.View(Pet, config)
+        View.gained = Gained
+        return View, Old, New
 
     async def Rename(self, guild_id: int, user_id: int, name: str) -> dict:
         Name = " ".join(name.replace("@", "").replace("`", "").split())[:NICKNAME_MAX]

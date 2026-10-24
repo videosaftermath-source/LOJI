@@ -1,3 +1,4 @@
+import math
 import asyncio
 from datetime import datetime, timedelta, timezone
 
@@ -117,7 +118,7 @@ def test_feeding_costs_credits_gives_xp_and_respects_cooldown():
     s.pets.pets.c.update_one({"pet_id": pet["pet_id"]}, {"$set": {"hunger": 20}})
     view, old, new = run(s.pets.Care(G, 5, "food", CONFIG))
     assert view.hunger == pytest.approx(20 + P["food_amount"], abs=0.1)
-    assert view.pet["xp"] == P["xp_care"]
+    assert view.pet["xp"] == view.gained == math.ceil(XpToNext(1, CONFIG) * P["xp_care_percent"])
     assert run(s.economy.Balance(G, 5)) == 1000 - P["food_price"]
     with pytest.raises(PetError):
         run(s.pets.Care(G, 5, "food", CONFIG))  # cooldown
@@ -244,3 +245,14 @@ def test_bundled_art_is_used():
     a = Icon("🎃", "Calabaza", "legendary", 100, art="pumpkin")
     b = Icon("🎃", "Calabaza", "legendary", 100)
     assert a.tobytes() != b.tobytes()
+
+
+def test_care_xp_is_a_share_of_the_level():
+    from core.economy.pets import CareXp
+
+    pct = P["xp_care_percent"]
+    assert CareXp(0, CONFIG) == math.ceil(XpToNext(1, CONFIG) * pct)
+    high = sum(XpToNext(l, CONFIG) for l in range(1, 29))  # start of level 29
+    assert CareXp(high, CONFIG) == math.ceil(XpToNext(29, CONFIG) * pct)
+    top = sum(XpToNext(l, CONFIG) for l in range(1, P["max_level"]))
+    assert CareXp(top, CONFIG) == 0
