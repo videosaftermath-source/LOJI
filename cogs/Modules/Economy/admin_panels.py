@@ -19,6 +19,7 @@ from core.economy.constants import (
     MAX_POOL,
     MAX_QUESTS,
     MAX_SPECIES,
+    MAX_SPECIES_PER_RARITY,
     OBJECTIVES,
     QUEST_PERIODS,
     RARITIES,
@@ -26,6 +27,7 @@ from core.economy.constants import (
 )
 from core.economy.gacha import ORDER, Problems, Status, Now as GachaNow
 from core.economy.pets import PerkValue
+from core.economy.pet_catalog import StarterDocs
 from core.economy.registry import Eco
 from core.economy.rewards import Aware, FormatAmount
 from core.economy.service import EconomyError
@@ -611,11 +613,44 @@ def SpeciesLine(species: dict, by_id: dict) -> str:
     )
 
 
+def RaritySelects(species: list[dict], verb: str, multiple: bool = False) -> list[discord.ui.Select]:
+    """One select per rarity (Discord shows 25 options per menu, and each rarity holds up to 25)."""
+    Selects = []
+    for Row, (Rarity, Info) in enumerate(RARITIES.items()):
+        Options = [
+            discord.SelectOption(label=S["name"][:100], value=S["species_id"], emoji=S.get("emoji") or "🐾")
+            for S in species if S["rarity"] == Rarity
+        ][:MAX_SPECIES_PER_RARITY]
+        if Options:
+            Selects.append(discord.ui.Select(
+                placeholder=f"{verb}: {Info['stars']} {Info['label']}", options=Options, row=Row,
+                min_values=1, max_values=len(Options) if multiple else 1,
+            ))
+    return Selects
+
+
+def MissingStarters(species: list[dict]) -> int:
+    Have = {S["species_id"] for S in species}
+    return sum(1 for D in StarterDocs(0) if D["species_id"] not in Have)
+
+
 async def SpeciesEmbed(guild: discord.Guild) -> discord.Embed:
     All = await Eco().pets.AllSpecies(guild.id)
     ById = {S["species_id"]: S for S in All}
     embed = discord.Embed(title="🐾 Especies de mascotas", color=discord.Color.teal())
-    embed.description = ("\n".join(SpeciesLine(S, ById) for S in All) or "No hay especies. Carga el catálogo de ejemplo o crea una.")[:4096]
+    if not All:
+        embed.description = "No hay especies. Carga el catálogo de ejemplo o crea una."
+    for Rarity, Info in RARITIES.items():
+        Lines = [SpeciesLine(S, ById) for S in All if S["rarity"] == Rarity]
+        if Lines:
+            Text = ""
+            for i, Line in enumerate(Lines):
+                More = f"\n… y {len(Lines) - i} más"
+                if len(Text) + len(Line) + 1 + len(More) > 1024:
+                    Text += More
+                    break
+                Text += ("\n" if Text else "") + Line
+            embed.add_field(name=f"{Info['stars']} {Info['label']} ({len(Lines)}/{MAX_SPECIES_PER_RARITY})", value=Text, inline=False)
     embed.set_footer(text=f"{len(All)}/{MAX_SPECIES} · ⏸️ = pausada (no sale en el gacha) · Regala con /eco-admin regalar-mascota")
     return embed
 
@@ -623,15 +658,14 @@ async def SpeciesEmbed(guild: discord.Guild) -> discord.Embed:
 class SpeciesPanel(Panel):
     def __init__(self, author: discord.Member, species: list[dict]):
         super().__init__(author)
-        if species:
-            Select = discord.ui.Select(
-                placeholder="Gestionar una especie",
-                options=[discord.SelectOption(label=S["name"][:100], value=S["species_id"], emoji=S.get("emoji") or "🐾") for S in species],
-            )
+        for Select in RaritySelects(species, "Gestionar"):
             Select.callback = self.Manage
             self.add_item(Select)
         self.Create.disabled = len(species) >= MAX_SPECIES
-        if species:
+        Missing = MissingStarters(species)
+        if Missing:
+            self.Seed.label = f"Cargar catálogo de ejemplo ({Missing})" if species else self.Seed.label
+        else:
             self.remove_item(self.Seed)
 
     @classmethod
@@ -645,11 +679,11 @@ class SpeciesPanel(Panel):
             return await SpeciesPanel.Open(interaction, self.author)
         await interaction.response.edit_message(content=None, embed=await SpeciesCard(interaction.guild, Species), view=SpeciesItem(self.author, Species))
 
-    @discord.ui.button(label="Crear especie", emoji="➕", style=discord.ButtonStyle.green, row=1)
+    @discord.ui.button(label="Crear especie", emoji="➕", style=discord.ButtonStyle.green, row=4)
     async def Create(self, interaction: discord.Interaction, _):
         await interaction.response.send_modal(SpeciesInfo(self.author))
 
-    @discord.ui.button(label="Cargar catálogo de ejemplo (16)", emoji="📦", style=discord.ButtonStyle.blurple, row=1)
+    @discord.ui.button(label="Cargar catálogo de ejemplo", emoji="📦", style=discord.ButtonStyle.blurple, row=4)
     async def Seed(self, interaction: discord.Interaction, _):
         try:
             Added = await Eco().pets.SeedStarter(interaction.guild.id)
@@ -787,18 +821,19 @@ class EvolutionPicker(Panel):
     def __init__(self, author: discord.Member, species: dict, others: list[dict]):
         super().__init__(author)
         self.species_doc = species
-        Options = [discord.SelectOption(label="Sin evolución", value="none", emoji="🚫")] + [
-            discord.SelectOption(label=S["name"][:100], value=S["species_id"], emoji=S.get("emoji") or "🐾") for S in others[:24]
-        ]
-        Select = discord.ui.Select(placeholder="¿En qué evoluciona?", options=Options)
-        Select.callback = self.Pick
-        self.add_item(Select)
+        for Select in RaritySelects(others, "Evoluciona en"):
+            Select.callback = self.Pick
+            self.add_item(Select)
+        NoEvolution = discord.ui.Button(label="Sin evolución", emoji="🚫", style=discord.ButtonStyle.grey, row=4)
+        NoEvolution.callback = self.Clear
+        self.add_item(NoEvolution)
+
+    async def Clear(self, interaction: discord.Interaction):
+        Species = await Eco().pets.UpdateSpecies(interaction.guild.id, self.species_doc["species_id"], {"evolves_to": None, "evolve_level": None})
+        await interaction.response.edit_message(embed=await SpeciesCard(interaction.guild, Species), view=SpeciesItem(self.author, Species))
 
     async def Pick(self, interaction: discord.Interaction):
         Target = interaction.data["values"][0]
-        if Target == "none":
-            Species = await Eco().pets.UpdateSpecies(interaction.guild.id, self.species_doc["species_id"], {"evolves_to": None, "evolve_level": None})
-            return await interaction.response.edit_message(embed=await SpeciesCard(interaction.guild, Species), view=SpeciesItem(self.author, Species))
         await interaction.response.send_modal(EvolutionLevel(self.author, self.species_doc, Target))
 
 
@@ -967,19 +1002,14 @@ class BannerPanel(Panel):
         if not Species:
             return await Fail(interaction, "No hay especies activas. Créalas en `/eco-admin mascotas`.")
         View = Panel(self.author)
-        Select = discord.ui.Select(
-            placeholder="Elige mascotas (su rareza es la de la especie)",
-            min_values=1,
-            max_values=min(25, len(Species)),
-            options=[discord.SelectOption(label=S["name"][:100], value=S["species_id"], emoji=S.get("emoji") or "🐾", description=RARITIES[S["rarity"]]["label"]) for S in Species[:25]],
-        )
+        ById = {S["species_id"]: S for S in Species}
+        for Select in RaritySelects(Species, "Añadir", multiple=True):
 
-        async def Pick(i: discord.Interaction):
-            ById = {S["species_id"]: S for S in Species}
-            await self.Add(i, [{"type": "pet", "ref": V, "rarity": ById[V]["rarity"]} for V in Select.values])
+            async def Pick(i: discord.Interaction, Select=Select):
+                await self.Add(i, [{"type": "pet", "ref": V, "rarity": ById[V]["rarity"]} for V in Select.values])
 
-        Select.callback = Pick
-        View.add_item(Select)
+            Select.callback = Pick
+            View.add_item(Select)
         await self.Sub(interaction, View, "¿Qué mascotas entran en el banner?")
 
     @discord.ui.button(label="Item", emoji="📦", style=discord.ButtonStyle.blurple, row=0)

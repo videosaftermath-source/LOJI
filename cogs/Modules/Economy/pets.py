@@ -18,6 +18,7 @@ from core.economy.rewards import FormatAmount
 from core.economy.service import EconomyError, InsufficientFunds
 
 logger = logging.getLogger(__name__)
+ALBUM_MAX = 25  # pets drawn in the album image (5 rows of 5)
 
 VIEW_TIMEOUT = 600
 BAR_LENGTH = 10
@@ -314,7 +315,9 @@ class EconomyPets(commands.Cog):
             View.add_item(Select)
         if not Album:
             return await ctx.send(embed=embed)
-        Png = await asyncio.to_thread(AlbumCard, Album, Owner.display_name)
+        if len(Album) > ALBUM_MAX:
+            embed.set_footer(text=f"La imagen muestra las {ALBUM_MAX} con más XP de {len(Album)}.")
+        Png = await asyncio.to_thread(AlbumCard, Album[:ALBUM_MAX], Owner.display_name)
         embed.set_image(url="attachment://album.png")
         await ctx.send(embed=embed, file=discord.File(io.BytesIO(Png), "album.png"), view=View)
 

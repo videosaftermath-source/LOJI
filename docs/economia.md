@@ -13,7 +13,7 @@ Documento vivo para no perder decisiones entre sesiones.
 | 5b | ✅ | Casino (`/casino`): crash, slots, moneda, blackjack. Ventaja de la casa exacta por juego, suerte del Suertudo baja la ventaja (nunca la invierte), estadísticas por usuario |
 | 5c | ✅ | Ruleta europea, mines (20 casillas), mayor o menor y carrera de caballos. Todos con ventaja exacta y `Winnings()` para redondear sin errores de decimales |
 | 6 | ✅ | Impuesto progresivo por tramos marginales en `/pagar`, inflación (multiplicador de precios según el dinero de los activos, revisado cada 6 h), precio por demanda por item, `/eco-admin stats` con gráfico, banco opcional (`/banco`) |
-| 7 | ✅ | **Imágenes de mascotas y boosters**: tarjeta de mascota (`/mascota ver` y tras cuidar/activar), álbum en `/mascota lista`, animación al evolucionar (`core/economy/petcards.py`). Boosters: x1.3 en trabajar/diario/chat/voz, +20% de probabilidad de legendaria y épica en el gacha (la pity no cambia) y 500 al boostear, una vez por boost (`core/economy/boost.py`, sección **Booster** de `/eco-admin config`) |
+| 7 | ✅ | **Imágenes de mascotas y boosters** (más tarde: hasta 25 especies por rareza, 100 en total, y 100 mascotas por persona): tarjeta de mascota (`/mascota ver` y tras cuidar/activar), álbum en `/mascota lista`, animación al evolucionar (`core/economy/petcards.py`). Boosters: x1.3 en trabajar/diario/chat/voz, +20% de probabilidad de legendaria y épica en el gacha (la pity no cambia) y 500 al boostear, una vez por boost (`core/economy/boost.py`, sección **Booster** de `/eco-admin config`) |
 
 ## Balance
 

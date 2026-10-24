@@ -72,7 +72,9 @@ def test_perk_by_rarity_level_and_care():
 def test_seed_catalog_and_evolution_chain():
     s = services()
     species = run(s.pets.AllSpecies(G))
-    assert len(species) == 16
+    assert len(species) == 17
+    assert run(s.pets.GetSpecies(G, "DOLPHIN"))["evolves_to"] == "EAGLE"  # the gacha-only wolf doesn't steal the chain
+    assert run(s.pets.GetSpecies(G, "WOLF"))["rarity"] == "legendary"
     hamster = run(s.pets.GetSpecies(G, "HAMSTER"))
     assert hamster["evolves_to"] == "BEAVER" and hamster["evolve_level"] == 10
     assert run(s.pets.GetSpecies(G, "DRAGON"))["evolves_to"] is None
@@ -207,3 +209,18 @@ def test_delete_species_in_use_is_blocked():
         run(s.pets.DeleteSpecies(G, "HAMSTER"))
     run(s.pets.DeleteSpecies(G, "BEAVER"))
     assert run(s.pets.GetSpecies(G, "HAMSTER"))["evolves_to"] is None
+
+
+def test_species_limit_is_per_rarity():
+    from core.economy.constants import MAX_SPECIES_PER_RARITY
+    from core.economy.pets import PetError
+
+    s = services()
+    have = sum(1 for x in run(s.pets.AllSpecies(G)) if x["rarity"] == "epic")
+    for i in range(MAX_SPECIES_PER_RARITY - have):
+        run(s.pets.CreateSpecies(G, {"name": f"E{i}", "emoji": "🐾", "rarity": "epic", "archetype": "farmer", "description": ""}))
+    with pytest.raises(PetError):
+        run(s.pets.CreateSpecies(G, {"name": "X", "emoji": "🐾", "rarity": "epic", "archetype": "farmer", "description": ""}))
+    run(s.pets.CreateSpecies(G, {"name": "R", "emoji": "🐾", "rarity": "rare", "archetype": "farmer", "description": ""}))  # other rarities still fit
+    with pytest.raises(PetError):
+        run(s.pets.UpdateSpecies(G, "HAMSTER", {"rarity": "epic"}))

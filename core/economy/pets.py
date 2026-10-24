@@ -13,7 +13,7 @@ from datetime import datetime, timezone
 from pymongo import ReturnDocument
 from pymongo.errors import DuplicateKeyError
 
-from core.economy.constants import ARCHETYPES, MAX_PETS, MAX_SPECIES, PETS, RARITIES, SPECIES, USERS
+from core.economy.constants import ARCHETYPES, MAX_PETS, MAX_SPECIES, MAX_SPECIES_PER_RARITY, PETS, RARITIES, SPECIES, USERS
 from core.economy.pet_catalog import StarterDocs
 from core.economy.rewards import Aware
 from core.economy.service import EconomyError, EconomyService
@@ -142,15 +142,22 @@ class Pets:
     async def GetSpecies(self, guild_id: int, species_id: str) -> dict | None:
         return next((S for S in await self.AllSpecies(guild_id) if S["species_id"] == species_id), None)
 
+    async def CheckRarityRoom(self, guild_id: int, rarity: str, extra: int = 1):
+        Count = sum(1 for S in await self.AllSpecies(guild_id) if S["rarity"] == rarity)
+        if Count + extra > MAX_SPECIES_PER_RARITY:
+            raise PetError(f"Ya hay {MAX_SPECIES_PER_RARITY} especies {RARITIES[rarity]['label'].lower()}s, el máximo por rareza. Borra alguna primero.")
+
     async def CreateSpecies(self, guild_id: int, data: dict) -> dict:
-        if len(await self.AllSpecies(guild_id)) >= MAX_SPECIES:
-            raise PetError(f"Ya hay {MAX_SPECIES} especies. Borra alguna primero.")
+        await self.CheckRarityRoom(guild_id, data["rarity"])
         Doc = {"guild_id": guild_id, "species_id": NewId(), "enabled": True, "evolves_to": None, "evolve_level": None, "image": None, **data}
         await self.species.insert_one(Doc)
         self._cache.pop(guild_id, None)
         return Doc
 
     async def UpdateSpecies(self, guild_id: int, species_id: str, data: dict) -> dict | None:
+        Current = await self.GetSpecies(guild_id, species_id)
+        if Current and data.get("rarity") and data["rarity"] != Current["rarity"]:
+            await self.CheckRarityRoom(guild_id, data["rarity"])
         self._cache.pop(guild_id, None)
         return await self.species.find_one_and_update(
             {"guild_id": guild_id, "species_id": species_id}, {"$set": data}, return_document=ReturnDocument.AFTER
@@ -167,8 +174,8 @@ class Pets:
         """Loads the example catalog. Returns how many species were added."""
         Existing = {S["species_id"] for S in await self.AllSpecies(guild_id)}
         Docs = [D for D in StarterDocs(guild_id) if D["species_id"] not in Existing]
-        if len(Existing) + len(Docs) > MAX_SPECIES:
-            raise PetError(f"No caben: el máximo es {MAX_SPECIES} especies.")
+        for Rarity in RARITIES:
+            await self.CheckRarityRoom(guild_id, Rarity, sum(1 for D in Docs if D["rarity"] == Rarity))
         if Docs:
             await self.species.insert_many(Docs)
         self._cache.pop(guild_id, None)

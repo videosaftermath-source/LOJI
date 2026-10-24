@@ -28,8 +28,11 @@ MAX_ITEMS = 25
 MAX_CODES = 25
 MAX_QUESTS = 25
 MAX_BUY_AT_ONCE = 100
-MAX_SPECIES = 25
-MAX_PETS = 25
+# Species get one select per rarity, so 25 per rarity (100 in total).
+MAX_SPECIES_PER_RARITY = 25
+MAX_SPECIES = 4 * MAX_SPECIES_PER_RARITY
+# Pet menus show the 25 with most XP; /mascota activar searches all of them.
+MAX_PETS = 100
 MAX_BANNERS = 25
 MAX_POOL = 25
 PULL_HISTORY_DAYS = 90

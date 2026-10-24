@@ -23,7 +23,11 @@ STARTER_SPECIES = [
     ("raccoon", "Mapache Regateador", "🦝", "rare", "saver", "Consigue descuentos hasta en la basura."),
     ("owl", "Búho Contable", "🦉", "epic", "saver", "Revisa cada factura con sus ojos enormes."),
     ("turtle", "Tortuga Millonaria", "🐢", "legendary", "saver", "Lenta pero con interés compuesto."),
+    # Exclusivas del gacha (no son parte de ninguna cadena de evolución)
+    ("wolf", "Lobo de Luna Llena", "🐺", "legendary", "talker", "Aúlla a la luna llena... y el chat entero le contesta."),
 ]
+# Species that don't evolve from the archetype's epic (gacha-only).
+STANDALONE = {"wolf"}
 
 ORDER = ["common", "rare", "epic", "legendary"]
 
@@ -32,6 +36,8 @@ def StarterDocs(guild_id: int) -> list[dict]:
     """The example species as eco_pet_species documents, with their evolution chain."""
     ByArchetype = {}
     for Row in STARTER_SPECIES:
+        if Row[0] in STANDALONE:
+            continue
         ByArchetype.setdefault(Row[4], {})[Row[3]] = Row[0]
     Docs = []
     for Key, Name, Emoji, Rarity, Archetype, Description in STARTER_SPECIES:
