@@ -185,6 +185,7 @@ class Client(commands.AutoShardedBot):
             "cogs.Modules.Economy.pets",
             "cogs.Modules.Economy.gacha",
             "cogs.Modules.Economy.casino",
+            "cogs.Modules.Economy.economics",
             # Utilities
             "cogs.Modules.Utilities.extras",
             "cogs.Modules.Utilities.info",

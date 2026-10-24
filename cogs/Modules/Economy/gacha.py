@@ -62,10 +62,11 @@ async def BannerEmbed(banner: dict, member: discord.Member, config: dict) -> dis
     Settings = config["gacha"]
     Names = await PrizeNames(member.guild.id, banner["pool"], config)
     Best = max((P["rarity"] for P in banner["pool"]), key=ORDER.index, default="common")
+    Cost = await Eco().gacha.PullCost(member.guild.id, banner, config)
     embed = discord.Embed(title=f"🎰 {banner['name']}", description=banner.get("description") or None, color=RARITIES[Best]["color"])
     embed.add_field(
         name="💰 Precio",
-        value=f"x1: {FormatAmount(banner['cost'], config)}\nx10: {FormatAmount(banner['cost'] * 10, config)}",
+        value=f"x1: {FormatAmount(Cost, config)}\nx10: {FormatAmount(Cost * 10, config)}",
     )
     embed.add_field(name="⏳ Termina", value=discord.utils.format_dt(Aware(banner["end"]), "R"))
     Featured = [f"{RARITIES[P['rarity']]['stars']} {Names[P['key']]}" for P in banner["pool"] if P.get("featured")]
@@ -146,13 +147,12 @@ async def Subtitles(guild_id: int, results, data: list[dict]):
 
 
 class GachaView(discord.ui.View):
-    def __init__(self, cog: "EconomyGacha", banners: list[dict], current: str, config: dict):
+    def __init__(self, cog: "EconomyGacha", banners: list[dict], current: str, config: dict, cost: int):
         super().__init__(timeout=VIEW_TIMEOUT)
         self.cog = cog
         self.banner_id = current
-        Banner = next(B for B in banners if B["banner_id"] == current)
-        self.One.label = f"Tirar x1 ({Banner['cost']:,})".replace(",", ".")
-        self.Ten.label = f"Tirar x10 ({Banner['cost'] * 10:,})".replace(",", ".")
+        self.One.label = f"Tirar x1 ({cost:,})".replace(",", ".")
+        self.Ten.label = f"Tirar x10 ({cost * 10:,})".replace(",", ".")
         if len(banners) > 1:
             Select = discord.ui.Select(
                 placeholder="Cambiar de banner",
@@ -169,8 +169,9 @@ class GachaView(discord.ui.View):
         Banner = next((B for B in Banners if B["banner_id"] == Chosen), None)
         if not Banner:
             return await interaction.response.send_message("Ese banner ya terminó.", ephemeral=True)
+        Cost = await Eco().gacha.PullCost(interaction.guild.id, Banner, Config)
         await interaction.response.edit_message(
-            embed=await BannerEmbed(Banner, interaction.user, Config), view=GachaView(self.cog, Banners, Chosen, Config)
+            embed=await BannerEmbed(Banner, interaction.user, Config), view=GachaView(self.cog, Banners, Chosen, Config, Cost)
         )
 
     @discord.ui.button(label="Tirar x1", emoji="✨", style=discord.ButtonStyle.blurple, row=0)
@@ -236,7 +237,8 @@ class EconomyGacha(commands.Cog):
         Banners = await Eco().gacha.Active(ctx.guild.id)
         if not Banners:
             return await ctx.send("🎰 No hay ningún banner activo ahora mismo. ¡Vuelve pronto!")
-        await ctx.send(embed=await BannerEmbed(Banners[0], ctx.author, Config), view=GachaView(self, Banners, Banners[0]["banner_id"], Config))
+        Cost = await Eco().gacha.PullCost(ctx.guild.id, Banners[0], Config)
+        await ctx.send(embed=await BannerEmbed(Banners[0], ctx.author, Config), view=GachaView(self, Banners, Banners[0]["banner_id"], Config, Cost))
 
     async def DoPull(self, interaction: discord.Interaction, banner_id: str, count: int):
         # Discord only waits 3 seconds for a reply to a button, and a x10 pull takes longer
@@ -253,7 +255,7 @@ class EconomyGacha(commands.Cog):
         except InsufficientFunds as e:
             self.cooldowns.pop(Key, None)
             Banner = await Eco().gacha.Get(interaction.guild.id, banner_id)
-            Cost = Banner["cost"] * count if Banner else 0
+            Cost = await Eco().gacha.PullCost(interaction.guild.id, Banner, Config) * count if Banner else 0
             return await interaction.followup.send(
                 f"{Emojis.no} Te faltan créditos: cuesta {FormatAmount(Cost, Config)} y tienes {FormatAmount(e.balance, Config)} 😭",
                 ephemeral=True,

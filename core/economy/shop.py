@@ -17,6 +17,7 @@ from core.economy.constants import (
     MAX_ITEMS,
     ROLE,
 )
+from core.economy.rewards import Aware
 from core.economy.service import EconomyError, EconomyService
 
 
@@ -28,9 +29,33 @@ def NewId(length: int = 6) -> str:
     return "".join(random.choices(string.ascii_uppercase + string.digits, k=length))
 
 
-def Price(item: dict, config: dict, discount: float = 0.0) -> int:
-    """Current price of one unit, after a discount (0.1 = 10% off). Inflation and demand come in phase 6."""
-    return max(1, int(round(int(item["price"]) * (1 - discount))))
+def DemandSettings(item: dict, config: dict) -> tuple[float, float, float]:
+    """(step per unit bought, half-life in hours, max bump): the item's own values or the shop defaults."""
+    Shop_ = config["shop"]
+    Own = item.get("demand") or {}
+    return (
+        float(Own.get("step", Shop_["demand_step"])),
+        float(Own.get("half_life", Shop_["demand_half_life"])),
+        float(Shop_["demand_max"]),
+    )
+
+
+def DemandBump(item: dict, config: dict, now: datetime | None = None) -> float:
+    """Extra price from recent purchases (0.1 = +10%), fading by half every half-life."""
+    State = item.get("demand") or {}
+    Bump = float(State.get("bump", 0.0))
+    if Bump <= 0:
+        return 0.0
+    _, HalfLife, _ = DemandSettings(item, config)
+    Since = Aware(State.get("at")) or (now or datetime.now(timezone.utc))
+    Hours = max(0.0, ((now or datetime.now(timezone.utc)) - Since).total_seconds() / 3600)
+    return Bump * 0.5 ** (Hours / HalfLife)
+
+
+def Price(item: dict, config: dict, discount: float = 0.0, multiplier: float = 1.0, now: datetime | None = None) -> int:
+    """Price of one unit: base x inflation x (1 + demand) x (1 - discount)."""
+    Value = int(item["price"]) * multiplier * (1 + DemandBump(item, config, now)) * (1 - discount)
+    return max(1, int(round(Value)))
 
 
 def CanGiveRole(guild: discord.Guild, role: discord.Role | None) -> str | None:
@@ -52,6 +77,7 @@ class Shop:
         self.economy = economy
         self.bonuses = Bonuses(db)
         self.pets = None  # set by the registry (Ahorrador discount)
+        self.economics = None  # set by the registry (inflation)
 
     async def Setup(self):
         await self.items.create_index([("guild_id", 1), ("item_id", 1)], unique=True)
@@ -112,6 +138,18 @@ class Shop:
     async def Discount(self, guild_id: int, user_id: int, config: dict) -> float:
         return await self.pets.Perk(guild_id, user_id, "discount", config) if self.pets else 0.0
 
+    async def Multiplier(self, guild_id: int, config: dict) -> float:
+        return await self.economics.Multiplier(guild_id, config) if self.economics else 1.0
+
+    async def AddDemand(self, item: dict, qty: int, config: dict):
+        """Each unit bought pushes the price up a bit (capped); it fades over time."""
+        Step, _, Max = DemandSettings(item, config)
+        if Step <= 0:
+            return
+        Now = datetime.now(timezone.utc)
+        New = min(Max, DemandBump(item, config, Now) + Step * qty)
+        await self.items.update_one({"_id": item["_id"]}, {"$set": {"demand.bump": New, "demand.at": Now}})
+
     async def Buy(self, member: discord.Member, item_id: str, qty: int, config: dict) -> tuple[dict, int, dict]:
         """Buys `qty` units. Returns (item, total paid, updated account)."""
         Guild = member.guild
@@ -137,7 +175,7 @@ class Shop:
                 Left = max(0, Limit - int(Owned.get("bought", 0)))
                 raise ShopError(f"Solo puedes comprar {Limit} de este item" + (f" (te quedan {Left})." if Left else " y ya llegaste al límite."))
 
-            Total = Price(Item, config, await self.Discount(Guild.id, member.id, config)) * qty
+            Total = Price(Item, config, await self.Discount(Guild.id, member.id, config), await self.Multiplier(Guild.id, config)) * qty
             async with self.economy.Transaction() as Session:
                 await self.ReserveStock(Item, qty, Session)
                 try:
@@ -156,6 +194,7 @@ class Shop:
                 except discord.HTTPException:
                     await self.Refund(member, Item, qty, Total)
                     raise ShopError(f"No pude darte {Role.mention}, te devolví el dinero.")
+            await self.AddDemand(Item, qty, config)
         return Item, Total, Account
 
     async def ReserveStock(self, item: dict, qty: int, session=None):

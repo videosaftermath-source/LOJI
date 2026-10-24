@@ -118,6 +118,7 @@ class Pets:
         self.pets = db[PETS]
         self.users = db[USERS]
         self.economy = economy
+        self.economics = None  # set by the registry (inflation)
         self._cache: dict[int, tuple[float, list]] = {}
 
     async def Setup(self):
@@ -258,7 +259,7 @@ class Pets:
         """Feeds (`food`) or plays with (`play`) the active pet. Returns (view, old level, new level)."""
         Stat = CARE_KINDS[kind]
         Settings = config["pets"]
-        Price = Settings["food_price" if kind == "food" else "play_price"]
+        Price = await self.Cost(guild_id, Settings["food_price" if kind == "food" else "play_price"], config)
         Amount = Settings["food_amount" if kind == "food" else "play_amount"]
         async with self.economy.Lock(guild_id, user_id):
             Pet = await self.Active(guild_id, user_id)
@@ -313,12 +314,16 @@ class Pets:
                 raise PetError(f"Tiene que llegar al nivel {Species['evolve_level']} (va por el {Level}).")
             if await self.pets.find_one({"guild_id": guild_id, "user_id": user_id, "species_id": Target["species_id"]}):
                 raise PetError(f"Ya tienes un {Target['name']}, no puedes tener dos.")
-            Price = config["pets"]["evolve_price"]
+            Price = await self.Cost(guild_id, config["pets"]["evolve_price"], config)
             async with self.economy.Transaction() as Session:
                 if Price:
                     await self.economy.Remove(guild_id, user_id, Price, f"Evolución: {Species['name']}", ref=f"pet:{Pet['pet_id']}", session=Session)
                 await self.pets.update_one({"_id": Pet["_id"]}, {"$set": {"species_id": Target["species_id"]}}, session=Session)
         return Species, Target
+
+    async def Cost(self, guild_id: int, base: int, config: dict) -> int:
+        """A pet price after inflation."""
+        return await self.economics.Price(guild_id, base, config, "pets") if self.economics and base else base
 
     # ---- perks ----
 

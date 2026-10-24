@@ -17,6 +17,8 @@ QUESTS = "eco_quests"
 QUEST_PROGRESS = "eco_quest_progress"
 SPECIES = "eco_pet_species"
 PETS = "eco_pets"
+STATE = "eco_state"
+STATS_DAILY = "eco_stats_daily"
 BANNERS = "eco_banners"
 PITY = "eco_pity"
 PULLS = "eco_pulls"
@@ -80,6 +82,7 @@ DESTROYED = "destroyed"
 TRANSFER = "transfer"
 BET = "bet"  # casino: money in
 PAYOUT = "payout"  # casino: money out
+BANK = "bank"  # moving money between wallet and bank (doesn't change the total)
 
 HOUR = 3600
 DAY = 24 * HOUR
@@ -94,7 +97,7 @@ DEFAULT_CONFIG: dict = {
         "cooldown": 20 * HOUR,
         "grace": 48 * HOUR,
     },
-    "transfer": {"min": 10, "fee_percent": 7.0},
+    "transfer": {"min": 10, "brackets": [[0, 5.0], [1_000, 8.0], [10_000, 12.0], [50_000, 15.0]]},
     "leaderboard": {"page_size": 10},
     "activity": {
         "channels": [],
@@ -164,7 +167,24 @@ DEFAULT_CONFIG: dict = {
         "hilo": {"min": 50, "max": 30_000, "cooldown": 5, "edge": 0.03},
         "race": {"min": 20, "max": 30_000, "cooldown": 10, "edge": 0.05},
     },
+    "inflation": {
+        "enabled": True,
+        "active_days": 14,
+        "interval_hours": 6,
+        "target_per_user": 25_000,
+        "elasticity": 0.5,
+        "max_step": 0.05,
+        "min": 0.5,
+        "max": 3.0,
+        "gacha": True,
+    },
+    "shop": {"demand_step": 0.02, "demand_half_life": 24, "demand_max": 1.0},
+    "bank": {"enabled": False, "interest": 0.002, "interest_cap": 100_000, "withdraw_fee": 0.01},
 }
+
+# How often the economy task runs (inflation checks, daily snapshot, bank interest).
+ECONOMY_TICK_MINUTES = 10
+STATS_DAYS = 14
 
 # Casino games: name shown to players.
 GAMES = {
@@ -214,14 +234,15 @@ SECTIONS = {
     "gacha": "🎰 Gacha",
     "casino": "🎲 Casino",
     "casino2": "🎲 Casino 2",
+    "economy": "📈 Inflación, demanda y banco",
 }
 
 SETTINGS: list[Setting] = [
     Setting("general", "currency.name", "Nombre de la moneda", str, 1, 32),
     Setting("general", "currency.emoji", "Emoji de la moneda", str, 1, 64),
     Setting("general", "transfer.min", "Pagar: mínimo", int, 1, 1_000_000),
-    Setting("general", "transfer.fee_percent", "Pagar: comisión (%)", float, 0, 50,
-            "Lo paga quien envía, encima de la cantidad. Se destruye."),
+    Setting("general", "transfer.brackets", "Pagar: impuesto por tramos", list, 0, 0,
+            "desde:porcentaje, ej. 0:5, 1000:8, 10000:12"),
     Setting("general", "leaderboard.page_size", "Top: usuarios por página", int, 5, 25),
     Setting("general", "bonuses.max", "Tope de bonificaciones (1 = +100%)", float, 0, 10,
             "Lo máximo que suman todos los boosts juntos."),
@@ -308,6 +329,23 @@ SETTINGS: list[Setting] = [
         )
     ],
     Setting("casino", "casino.crash.max_multiplier", "Crash: multiplicador máximo", int, 2, 1000),
+    Setting("economy", "inflation.enabled", "Inflación activada", bool),
+    Setting("economy", "inflation.target_per_user", "Dinero 'normal' por usuario activo", int, 100, 100_000_000,
+            "Si cada activo tiene más que esto de media, los precios suben."),
+    Setting("economy", "inflation.active_days", "Activo = jugó en los últimos X días", int, 1, 90),
+    Setting("economy", "inflation.interval_hours", "Revisar la inflación cada X horas", int, 1, 168),
+    Setting("economy", "inflation.max_step", "Cambio máximo por revisión (0.05 = 5%)", float, 0, 0.5),
+    Setting("economy", "inflation.elasticity", "Sensibilidad (0.5 = moderada)", float, 0, 2),
+    Setting("economy", "inflation.min", "Multiplicador mínimo de precios", float, 0.1, 1),
+    Setting("economy", "inflation.max", "Multiplicador máximo de precios", float, 1, 20),
+    Setting("economy", "inflation.gacha", "La inflación afecta al gacha", bool),
+    Setting("economy", "shop.demand_step", "Demanda: subida por compra (0.02 = 2%)", float, 0, 1),
+    Setting("economy", "shop.demand_half_life", "Demanda: la subida se reduce a la mitad en X h", int, 1, 720),
+    Setting("economy", "shop.demand_max", "Demanda: subida máxima (1 = +100%)", float, 0, 10),
+    Setting("economy", "bank.enabled", "Banco activado", bool),
+    Setting("economy", "bank.interest", "Banco: interés diario (0.002 = 0.2%)", float, 0, 0.05),
+    Setting("economy", "bank.interest_cap", "Banco: máximo que genera interés", int, 0, 1_000_000_000),
+    Setting("economy", "bank.withdraw_fee", "Banco: comisión al retirar (0.01 = 1%)", float, 0, 0.5),
 ]
 
 SETTINGS_BY_PATH = {S.path: S for S in SETTINGS}

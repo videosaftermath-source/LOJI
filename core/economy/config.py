@@ -35,6 +35,13 @@ def GetPath(config: dict, path: str):
 def Parse(setting: Setting, raw: str):
     """Turns admin input into a validated value."""
     raw = raw.strip()
+    if setting.kind is list:
+        from core.economy.tax import ParseBrackets
+
+        try:
+            return ParseBrackets(raw)
+        except ValueError as e:
+            raise ConfigError(f"**{setting.label}**: {e}")
     if setting.kind is bool:
         Lowered = raw.lower()
         if Lowered in YES:
@@ -83,6 +90,8 @@ def Validate(config: dict):
         raise ConfigError("Las probabilidades legendaria + épica + rara tienen que sumar menos de 1 (el resto es común).")
     if Gacha["soft_pity"] > Gacha["hard_pity"]:
         raise ConfigError("El soft pity tiene que empezar antes del hard pity.")
+    if config["inflation"]["min"] > config["inflation"]["max"]:
+        raise ConfigError("El multiplicador mínimo de precios no puede ser mayor que el máximo.")
     for Game, Settings in config["casino"].items():
         if Settings["min"] > Settings["max"]:
             raise ConfigError(f"En {Game}, la apuesta mínima no puede ser mayor que la máxima.")

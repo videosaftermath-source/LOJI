@@ -84,9 +84,10 @@ async def Fail(interaction: discord.Interaction, error: Exception):
 async def ShopEmbed(guild: discord.Guild) -> discord.Embed:
     Config = await EcoConfig().Get(guild.id)
     Items = await Eco().shop.List(guild.id)
+    Multiplier = await Eco().shop.Multiplier(guild.id, Config)
     embed = discord.Embed(title="🛒 Tienda · administración", color=discord.Color.blurple())
     embed.description = (
-        "\n".join(("" if I.get("enabled") else "⏸️ ") + ItemLine(I, Config) for I in Items)
+        "\n".join(("" if I.get("enabled") else "⏸️ ") + ItemLine(I, Config, Multiplier) for I in Items)
         or "No hay items. ¡Crea el primero!"
     )[:4096]
     embed.set_footer(text=f"{len(Items)}/{MAX_ITEMS} items · ⏸️ = pausado (no se vende)")
@@ -268,6 +269,11 @@ class ItemPanel(Panel):
     async def Effect(self, interaction: discord.Interaction, _):
         await interaction.response.send_modal(EffectInfo(self.author, {}, self.item["effect"]["kind"], self.item))
 
+    @discord.ui.button(label="Demanda", emoji="📈", style=discord.ButtonStyle.blurple)
+    async def Demand(self, interaction: discord.Interaction, _):
+        Config = await EcoConfig().Get(interaction.guild.id)
+        await interaction.response.send_modal(DemandInfo(self.author, self.item, Config))
+
     @discord.ui.button(label="Pausar")
     async def Toggle(self, interaction: discord.Interaction, _):
         Item = await Eco().shop.Update(interaction.guild.id, self.item["item_id"], {"enabled": not self.item.get("enabled")})
@@ -286,6 +292,51 @@ class ItemPanel(Panel):
     @discord.ui.button(label="Volver", emoji="⬅️", style=discord.ButtonStyle.grey)
     async def Back(self, interaction: discord.Interaction, _):
         await ShopPanel.Open(interaction, self.author)
+
+
+class DemandInfo(discord.ui.Modal, title="Precio por demanda"):
+    def __init__(self, author: discord.Member, item: dict, config: dict):
+        super().__init__()
+        self.author = author
+        self.item = item
+        Own = item.get("demand") or {}
+        Shop_ = config["shop"]
+        self.step = discord.ui.TextInput(
+            label=f"Subida por compra en % (vacío = {Shop_['demand_step'] * 100:g})",
+            default=f"{Own['step'] * 100:g}" if "step" in Own else None, max_length=6, required=False,
+        )
+        self.half = discord.ui.TextInput(
+            label=f"Horas para bajar a la mitad (vacío = {Shop_['demand_half_life']})",
+            default=str(Own["half_life"]) if "half_life" in Own else None, max_length=4, required=False,
+        )
+        self.add_item(self.step)
+        self.add_item(self.half)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        Set, Unset = {}, {}
+        try:
+            if self.step.value.strip():
+                Step = float(self.step.value.strip().replace(",", ".").rstrip("%"))
+                if not 0 <= Step <= 100:
+                    raise InputError("La subida tiene que estar entre 0 y 100%.")
+                Set["demand.step"] = Step / 100
+            else:
+                Unset["demand.step"] = ""
+            if self.half.value.strip():
+                Set["demand.half_life"] = Number(self.half.value, "Horas", 1)
+            else:
+                Unset["demand.half_life"] = ""
+        except (InputError, ValueError) as e:
+            return await Fail(interaction, e if isinstance(e, InputError) else "Pon números válidos.")
+        Update = {}
+        if Set:
+            Update["$set"] = Set
+        if Unset:
+            Update["$unset"] = Unset
+        await Eco().shop.items.update_one({"guild_id": interaction.guild.id, "item_id": self.item["item_id"]}, Update)
+        Item = await Eco().shop.Get(interaction.guild.id, self.item["item_id"])
+        Config = await EcoConfig().Get(interaction.guild.id)
+        await interaction.response.edit_message(embed=ItemCard(Item, Config), view=ItemPanel(self.author, Item))
 
 
 # ======================= CODES =======================

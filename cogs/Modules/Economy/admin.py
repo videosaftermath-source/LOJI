@@ -1,3 +1,7 @@
+import asyncio
+import io
+from datetime import datetime, timedelta, timezone
+
 import discord
 from discord import app_commands
 from discord.ext import commands
@@ -7,7 +11,9 @@ from core.bot.emojis import Emojis
 from core.bot.permissions import Permissions
 from core.economy.config import ConfigError, EcoConfig, GetPath
 from core.economy.constants import DEFAULT_CONFIG, SECTIONS, SETTINGS, SETTINGS_BY_PATH
-from core.economy.rewards import FormatAmount
+from core.economy.charts import StatsChart
+from core.economy.rewards import Aware, FormatAmount
+from core.economy.tax import FormatBrackets
 from core.economy.registry import Eco
 from core.economy.service import EconomyError, Economy, InsufficientFunds
 
@@ -15,6 +21,8 @@ PANEL_TIMEOUT = 600
 
 
 def Show(value) -> str:
+    if isinstance(value, list):
+        return FormatBrackets(value)
     if isinstance(value, bool):
         return "sí" if value else "no"
     if isinstance(value, float):
@@ -137,6 +145,85 @@ class ConfigPanel(discord.ui.View):
         return True
 
 
+async def StatsMessage(guild: discord.Guild) -> tuple[discord.Embed, discord.File]:
+    """The /eco-admin stats embed and its chart."""
+    Config = await EcoConfig().Get(guild.id)
+    Economics = Eco().economics
+    Settings = Config["inflation"]
+    Supply = await Economics.Supply(guild.id, Settings["active_days"])
+    State = await Economics.InflationState(guild.id)
+    Flows = await Economics.Flows(guild.id, datetime.now(timezone.utc) - timedelta(days=7))
+    Richest = await Economics.Richest(guild.id, 5)
+
+    def M(amount):
+        return FormatAmount(int(amount), Config)
+
+    embed = discord.Embed(title="📊 Estado de la economía", color=discord.Color.dark_teal())
+    Average = Supply["active"] / Supply["active_users"] if Supply["active_users"] else 0
+    embed.add_field(
+        name="💰 En circulación",
+        value=(
+            f"{M(Supply['total'])} en total\n"
+            f"{Supply['active_users']} activos (últimos {Settings['active_days']} días) con {M(Supply['active'])}\n"
+            f"Media por activo: **{int(Average):,}** (objetivo {Settings['target_per_user']:,})"
+        ).replace(",", "."),
+        inline=False,
+    )
+    if Settings["enabled"]:
+        Next = Aware(State.get("updated_at"))
+        Value = f"Precios **x{State.get('multiplier', 1.0):.2f}**"
+        if "previous" in State:
+            Value += f" (antes x{State['previous']:.2f}, tiende a x{State['target']:.2f})"
+        if Next:
+            Value += f"\nPróxima revisión {discord.utils.format_dt(Next + timedelta(hours=Settings['interval_hours']), 'R')}"
+        Value += f"\n-# Afecta a tienda, mascotas{' y gacha' if Settings['gacha'] else ''}"
+    else:
+        Value = "Desactivada (precios x1.00)"
+    embed.add_field(name="📈 Inflación", value=Value, inline=False)
+    embed.add_field(
+        name="🔄 Últimos 7 días",
+        value=(
+            f"➕ Creado: {M(Flows['created'])}\n"
+            f"➖ Destruido (tienda, mascotas, gacha): {M(Flows['destroyed'])}\n"
+            f"💸 Impuestos: {M(Flows['taxes'])}\n"
+            f"🎲 Ganancia del casino: {M(Flows['casino'])}\n"
+            f"**Neto: {'+' if Flows['net'] >= 0 else ''}" + f"{Flows['net']:,}".replace(",", ".") + "**"
+        ),
+        inline=False,
+    )
+    embed.add_field(
+        name="🏆 Mayores fortunas (cartera + banco)",
+        value="\n".join(f"`#{i}` <@{R['user_id']}> · {M(R['money'])}" for i, R in enumerate(Richest, 1)) or "Nadie todavía",
+        inline=False,
+    )
+    History = await Economics.History(guild.id)
+    Png = await asyncio.to_thread(StatsChart, History, Config["currency"]["name"])
+    embed.set_image(url="attachment://economia.png")
+    embed.set_footer(text="El gráfico se actualiza cada pocos minutos.")
+    return embed, discord.File(io.BytesIO(Png), "economia.png")
+
+
+class StatsPanel(discord.ui.View):
+    def __init__(self, author: discord.Member):
+        super().__init__(timeout=PANEL_TIMEOUT)
+        self.author = author
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.author.id:
+            await interaction.response.send_message(embed=NotYourPanel(), ephemeral=True)
+            return False
+        return True
+
+    @discord.ui.button(label="Revisar inflación ahora", emoji="🔄", style=discord.ButtonStyle.blurple)
+    async def Recalculate(self, interaction: discord.Interaction, _):
+        await interaction.response.defer()
+        Config = await EcoConfig().Get(interaction.guild.id)
+        await Eco().economics.UpdateInflation(interaction.guild.id, Config, force=True)
+        await Eco().economics.Snapshot(interaction.guild.id, Config)
+        embed, File = await StatsMessage(interaction.guild)
+        await interaction.edit_original_response(embed=embed, attachments=[File], view=self)
+
+
 class EconomyAdmin(commands.Cog):
     """Comandos de admin de la economía."""
 
@@ -250,6 +337,15 @@ class EconomyAdmin(commands.Cog):
 
         Banners = await Eco().gacha.List(ctx.guild.id)
         await ctx.send(embed=await BannersEmbed(ctx.guild), view=BannersPanel(ctx.author, Banners), ephemeral=True)
+
+    @eco_admin.command(name="stats", description="Estado de la economía: dinero, inflación, flujos y gráfico")
+    @Permissions("Admin")
+    async def stats(self, ctx: commands.Context):
+        await ctx.defer(ephemeral=True)
+        Config = await EcoConfig().Get(ctx.guild.id)
+        await Eco().economics.Snapshot(ctx.guild.id, Config)
+        embed, File = await StatsMessage(ctx.guild)
+        await ctx.send(embed=embed, file=File, view=StatsPanel(ctx.author), ephemeral=True)
 
     @eco_admin.command(name="desbloquear", description="Quitarle el bloqueo anti-spam a alguien")
     @app_commands.describe(usuario="A quién")

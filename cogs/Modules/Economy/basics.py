@@ -16,7 +16,7 @@ from core.economy.rewards import Aware, DailyStatus, FormatAmount, WorkAmount, W
 from core.economy.bonuses import Boosted
 from core.economy.registry import Eco
 from core.economy.service import ConditionFailed, EconomyError, Economy, InsufficientFunds
-from core.economy.tax import TransferFee
+from core.economy.tax import EffectiveRate, TransferFee
 
 CONFIRM_TIMEOUT = 60
 TOP_TIMEOUT = 300
@@ -60,7 +60,7 @@ class ConfirmPay(discord.ui.View):
             )
         except InsufficientFunds as e:
             return await interaction.response.edit_message(
-                content=f"{Emojis.no} No te alcanza, pobre 😔 Necesitas {FormatAmount(self.amount + self.fee, Config)} (con comisión) y tienes {FormatAmount(e.balance, Config)}.",
+                content=f"{Emojis.no} No te alcanza, pobre 😔 Necesitas {FormatAmount(self.amount + self.fee, Config)} (con impuesto) y tienes {FormatAmount(e.balance, Config)}.",
                 view=None,
             )
         except EconomyError as e:
@@ -68,7 +68,7 @@ class ConfirmPay(discord.ui.View):
         interaction.client.dispatch("economy_progress", interaction.guild.id, self.author.id, "pay", self.amount)
         await interaction.response.edit_message(
             content=f"{Emojis.tick} Le pagaste {FormatAmount(self.amount, Config)} a {self.target.mention}"
-            + (f" (+{FormatAmount(self.fee, Config)} de comisión)" if self.fee else "")
+            + (f" (+{FormatAmount(self.fee, Config)} de impuesto)" if self.fee else "")
             + f". Te quedan {FormatAmount(From['balance'], Config)}.",
             view=None,
         )
@@ -262,7 +262,7 @@ class EconomyBasics(commands.Cog):
         Lines = [f"¿Seguro que le quieres pagar {FormatAmount(cantidad, Config)} a {usuario.mention}?"]
         if Fee:
             Lines.append(
-                f"-# Comisión del {Config['transfer']['fee_percent'] * (1 - Discount):.3g}%"
+                f"-# Impuesto ({EffectiveRate(cantidad, Config, Discount):.1%} efectivo)"
                 + (f" (🐾 -{Discount:.0%})" if Discount else "")
                 + f": {FormatAmount(Fee, Config)} · "
                 f"Total que pagas: {FormatAmount(cantidad + Fee, Config)}"

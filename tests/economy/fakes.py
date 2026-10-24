@@ -42,6 +42,11 @@ class Collection:
     def find(self, *args, session=None, **kwargs):
         return Cursor(self.c.find(*args, **kwargs))
 
+    async def aggregate(self, pipeline, session=None, **kwargs):
+        # Like PyMongo async: aggregate() must be awaited and returns a cursor.
+        await asyncio.sleep(0)
+        return Cursor(list(self.c.aggregate(pipeline, **kwargs)))
+
 
 class DB:
     def __init__(self):

@@ -9,7 +9,7 @@ from core.economy.constants import BOOSTS, CONSUMABLE, ITEM_TYPES, MAX_BUY_AT_ON
 from core.economy.registry import Eco
 from core.economy.rewards import Aware, FormatAmount
 from core.economy.service import EconomyError, InsufficientFunds
-from core.economy.shop import Price
+from core.economy.shop import DemandBump, Price
 
 VIEW_TIMEOUT = 600
 
@@ -32,18 +32,28 @@ def Perk(item: dict) -> str:
     return "Coleccionable: para presumir 😎"
 
 
-def ItemLine(item: dict, config: dict) -> str:
+def ItemLine(item: dict, config: dict, multiplier: float = 1.0) -> str:
     Stock = "" if item.get("stock") is None else f" · 📦 {item['stock']} en stock" if item["stock"] > 0 else " · ❌ agotado"
-    return f"{item.get('emoji') or '📦'} **{item['name']}** — {FormatAmount(Price(item, config), config)}{Stock}\n-# {Perk(item)}"
+    return f"{item.get('emoji') or '📦'} **{item['name']}** — {FormatAmount(Price(item, config, multiplier=multiplier), config)}{Stock}{Trend(item, config)}\n-# {Perk(item)}"
 
 
-def ItemCard(item: dict, config: dict) -> discord.Embed:
+def Trend(item: dict, config: dict) -> str:
+    """📈 when recent purchases pushed the price up."""
+    Bump = DemandBump(item, config)
+    return f" · 📈 +{Bump:.0%} por demanda" if Bump >= 0.01 else ""
+
+
+def ItemCard(item: dict, config: dict, multiplier: float | None = None) -> discord.Embed:
+    """Item details. With `multiplier` it shows the live price; without, the base price (admin view)."""
     embed = discord.Embed(
         title=f"{item.get('emoji') or '📦'} {item['name']}",
         description=item.get("description") or "*Sin descripción.*",
         color=discord.Color.blurple(),
     )
-    embed.add_field(name="Precio", value=FormatAmount(Price(item, config), config))
+    if multiplier is None:
+        embed.add_field(name="Precio base", value=FormatAmount(int(item["price"]), config) + Trend(item, config))
+    else:
+        embed.add_field(name="Precio", value=FormatAmount(Price(item, config, multiplier=multiplier), config) + Trend(item, config))
     embed.add_field(name="Tipo", value=ITEM_TYPES[item["type"]])
     embed.add_field(name="Qué hace", value=Perk(item), inline=False)
     Extra = []
@@ -119,7 +129,8 @@ class ShopSelect(discord.ui.Select):
         if not Item or not Item.get("enabled"):
             return await interaction.response.send_message("Ese item ya no está a la venta.", ephemeral=True)
         Config = await EcoConfig().Get(interaction.guild.id)
-        await interaction.response.send_message(embed=ItemCard(Item, Config), view=ItemView(Item), ephemeral=True)
+        Multiplier = await Eco().shop.Multiplier(interaction.guild.id, Config)
+        await interaction.response.send_message(embed=ItemCard(Item, Config, Multiplier), view=ItemView(Item), ephemeral=True)
 
 
 class UseSelect(discord.ui.Select):
@@ -159,12 +170,15 @@ class EconomyShop(commands.Cog):
         if not Items:
             embed.description = "La tienda está vacía... los admins andan de vacaciones 🏖️"
             return await ctx.send(embed=embed)
-        embed.description = "\n".join(ItemLine(I, Config) for I in Items)[:4096]
+        Multiplier = await Eco().shop.Multiplier(ctx.guild.id, Config)
+        embed.description = "\n".join(ItemLine(I, Config, Multiplier) for I in Items)[:4096]
         Balance = await Eco().economy.Balance(ctx.guild.id, ctx.author.id)
         Discount = await Eco().shop.Discount(ctx.guild.id, ctx.author.id, Config)
         Footer = f"Tu saldo: {Balance:,}".replace(",", ".")
         if Discount:
             Footer += f" · 🐾 Tu mascota te da {Discount:.1%} de descuento al pagar"
+        if Multiplier != 1:
+            Footer += f" · 📈 Inflación x{Multiplier:.2f}"
         embed.set_footer(text=Footer)
         View = discord.ui.View(timeout=VIEW_TIMEOUT)
         View.add_item(ShopSelect(Items))

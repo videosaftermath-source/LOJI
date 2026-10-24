@@ -41,7 +41,8 @@ def PetName(view: PetView) -> str:
     return view.pet.get("nickname") or view.species["name"]
 
 
-def PetEmbed(view: PetView, owner: discord.abc.User, config: dict) -> discord.Embed:
+def PetEmbed(view: PetView, owner: discord.abc.User, config: dict, costs: dict | None = None) -> discord.Embed:
+    costs = costs or config["pets"]
     S, Rarity, Archetype = view.species, RARITIES[view.species["rarity"]], ARCHETYPES[view.species["archetype"]]
     embed = discord.Embed(
         title=f"{S.get('emoji') or '🐾'} {PetName(view)}",
@@ -73,7 +74,7 @@ def PetEmbed(view: PetView, owner: discord.abc.User, config: dict) -> discord.Em
     embed.add_field(name="✨ Perk", value=Perk, inline=False)
     if S.get("evolves_to") and S.get("evolve_level"):
         embed.set_footer(
-            text=f"Evoluciona al nivel {S['evolve_level']} por {config['pets']['evolve_price']:,} créditos".replace(",", ".")
+            text=f"Evoluciona al nivel {S['evolve_level']} por {costs['evolve_price']:,} créditos".replace(",", ".")
         )
     return embed
 
@@ -106,12 +107,12 @@ class SwitchSelect(discord.ui.Select):
 
 
 class PetPanel(discord.ui.View):
-    def __init__(self, owner: discord.Member, view: PetView, others: list[discord.SelectOption], config: dict):
+    def __init__(self, owner: discord.Member, view: PetView, others: list[discord.SelectOption], config: dict, costs: dict | None = None):
         super().__init__(timeout=VIEW_TIMEOUT)
         self.owner = owner
-        Settings = config["pets"]
-        self.Feed.label = f"Alimentar ({Settings['food_price']})"
-        self.Play.label = f"Jugar ({Settings['play_price']})"
+        Costs = costs or config["pets"]
+        self.Feed.label = f"Alimentar ({Costs['food_price']:,})".replace(",", ".")
+        self.Play.label = f"Jugar ({Costs['play_price']:,})".replace(",", ".")
         S = view.species
         CanEvolve = S.get("evolves_to") and S.get("evolve_level") and view.level >= S["evolve_level"]
         if not CanEvolve:
@@ -163,7 +164,7 @@ class PetPanel(discord.ui.View):
             Old, New = await Eco().pets.Evolve(interaction.guild.id, interaction.user.id, Config)
         except InsufficientFunds as e:
             return await interaction.response.send_message(
-                f"{Emojis.no} Evolucionar cuesta {FormatAmount(Config['pets']['evolve_price'], Config)} y tienes {FormatAmount(e.balance, Config)}.",
+                f"{Emojis.no} Evolucionar cuesta {FormatAmount(await Eco().pets.Cost(interaction.guild.id, Config['pets']['evolve_price'], Config), Config)} y tienes {FormatAmount(e.balance, Config)}.",
                 ephemeral=True,
             )
         except EconomyError as e:
@@ -183,7 +184,13 @@ async def PetMessage(owner: discord.Member) -> tuple[discord.Embed, discord.ui.V
     if not View:
         return discord.Embed(description="La especie de esta mascota ya no existe.", color=discord.Color.light_grey()), None
     Others = await PetOptions(owner, Pet["pet_id"])
-    return PetEmbed(View, owner, Config), PetPanel(owner, View, Others, Config)
+    Costs = await PetCosts(owner.guild.id, Config)
+    return PetEmbed(View, owner, Config, Costs), PetPanel(owner, View, Others, Config, Costs)
+
+
+async def PetCosts(guild_id: int, config: dict) -> dict:
+    """Care and evolution prices after inflation."""
+    return {K: await Eco().pets.Cost(guild_id, config["pets"][K], config) for K in ("food_price", "play_price", "evolve_price")}
 
 
 async def PetOptions(owner: discord.Member, active_id: str | None) -> list[discord.SelectOption]:
@@ -279,7 +286,7 @@ class EconomyPets(commands.Cog):
         Note = ("🍖 ¡Ñam ñam!" if kind == "food" else "🎾 ¡Qué divertido!") + f" +{Config['pets']['xp_care']} XP"
         if New > Old:
             Note += f"\n🎉 **¡{PetName(View)} subió al nivel {New}!**"
-        await ctx.send(Note, embed=PetEmbed(View, ctx.author, Config))
+        await ctx.send(Note, embed=PetEmbed(View, ctx.author, Config, await PetCosts(ctx.guild.id, Config)))
 
     @mascota.command(name="alimentar", description="Dale de comer a tu mascota (cuesta créditos)")
     @ModuleIsEnabled(MODULE)

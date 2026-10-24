@@ -12,7 +12,7 @@ Documento vivo para no perder decisiones entre sesiones.
 | 5a | ✅ | Gacha: banners, pity (soft/hard), 50/50, x1/x10, GIFs y tarjetas con Pillow |
 | 5b | ✅ | Casino (`/casino`): crash, slots, moneda, blackjack. Ventaja de la casa exacta por juego, suerte del Suertudo baja la ventaja (nunca la invierte), estadísticas por usuario |
 | 5c | ✅ | Ruleta europea, mines (20 casillas), mayor o menor y carrera de caballos. Todos con ventaja exacta y `Winnings()` para redondear sin errores de decimales |
-| 6 | ⏳ | Impuestos progresivos (sustituir `transfer.fee_percent` por tramos en `core/economy/tax.py`), inflación, precios dinámicos por demanda (`shop.Price`), `/economy stats`, banco opcional |
+| 6 | ✅ | Impuesto progresivo por tramos marginales en `/pagar`, inflación (multiplicador de precios según el dinero de los activos, revisado cada 6 h), precio por demanda por item, `/eco-admin stats` con gráfico, banco opcional (`/banco`) |
 | 7 | ⏳ | **Imágenes de mascotas**: tarjeta generada con Pillow para `/mascota ver` (estilo de las tarjetas del gacha en `core/economy/cards.py`), con barras de cuidado, nivel, estado de ánimo y quizá animación al subir de nivel o evolucionar |
 
 ## Balance (pendiente de una pasada)
@@ -36,7 +36,14 @@ Cosas que revisar en la pasada de balance:
 - Coste de evolucionar
 - Que las rarezas legendarias se sientan especiales pero alcanzables
 
+## Cómo se calcula el precio de algo
+`base × inflación × (1 + subida por demanda) × (1 − descuento del Ahorrador)`
+- La inflación afecta a la tienda, al cuidado y la evolución de las mascotas, y al gacha (este último se puede desactivar).
+- No afecta al casino ni a lo que se gana (trabajar, diario, chat).
+
 ## Decisiones técnicas
+- En el libro de movimientos (`eco_ledger`), `amount` es el cambio en la cartera y `bank` el cambio en el banco, así que el dinero que entra o sale con cada movimiento es `amount + bank`. Las estadísticas suman eso y el test `test_flows_add_up_to_the_real_change` comprueba que cuadra.
+- PyMongo async: `aggregate()` se hace con `await` y devuelve un cursor, así que va `await (await col.aggregate(...)).to_list()`. Con `find()` no hace falta ese primer `await`.
 - Todo cambio de saldo pasa por `EconomyService.Change` (atómico, con `$inc` y filtro condicional) y queda en `eco_ledger`.
 - Transacciones solo si Mongo es replica set (Atlas lo es); el bot lo comprueba al arrancar.
 - Locks por usuario en memoria: valen mientras el bot corra en un solo proceso.

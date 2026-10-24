@@ -171,6 +171,7 @@ class Gacha:
         self.economy = economy
         self.shop = shop
         self.pets = pets
+        self.economics = None  # set by the registry (inflation)
         self.rng = random.SystemRandom()
 
     async def Setup(self):
@@ -251,6 +252,11 @@ class Gacha:
 
     # ---- pulling ----
 
+    async def PullCost(self, guild_id: int, banner: dict, config: dict) -> int:
+        """Price of one pull after inflation (if it applies to the gacha)."""
+        Base = int(banner["cost"])
+        return await self.economics.Price(guild_id, Base, config, "gacha") if self.economics else Base
+
     async def UserPity(self, guild_id: int, user_id: int, banner_id: str) -> Pity:
         return Pity.From(await self.pity.find_one({"guild_id": guild_id, "user_id": user_id, "banner_id": banner_id}))
 
@@ -260,7 +266,7 @@ class Gacha:
             Banner = await self.Get(Guild.id, banner_id)
             if not Banner or Status(Banner, Now()) != "active":
                 raise GachaError("Ese banner ya no está disponible.")
-            Cost = int(Banner["cost"]) * count
+            Cost = await self.PullCost(Guild.id, Banner, config) * count
             Pity_ = await self.UserPity(Guild.id, member.id, banner_id)
             Rolled = Pull(Banner["pool"], Pity_, count, config["gacha"], self.rng)
             async with self.economy.Transaction() as Session:
