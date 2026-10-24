@@ -178,7 +178,9 @@ class Payout:
     qualified_now: bool  # this message completed today's streak goal
 
 
-def NextPayout(activity: dict, now: datetime, settings: dict, rng: random.Random = random) -> Payout:
+def NextPayout(
+    activity: dict, now: datetime, settings: dict, rng: random.Random = random, bonus: float = 0.0
+) -> Payout:
     """What one accepted message pays, and how the user's activity changes."""
     Today = LocalDay(now, settings["utc_offset"])
     SameDay = activity.get("day") == Today.isoformat()
@@ -189,7 +191,7 @@ def NextPayout(activity: dict, now: datetime, settings: dict, rng: random.Random
     QualifiedToday = activity.get("qualified_day") == Today.isoformat()
     Mult = Multiplier(Streak, settings)
     Base = rng.randint(settings["min"], settings["max"])
-    Amount = CapAmount(round(Base * Mult), EarnedToday, settings)
+    Amount = CapAmount(round(Base * Mult * (1 + bonus)), EarnedToday, settings)
 
     Fields = {
         "day": Today.isoformat(),

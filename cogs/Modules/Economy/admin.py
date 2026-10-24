@@ -8,6 +8,7 @@ from core.bot.permissions import Permissions
 from core.economy.config import ConfigError, EcoConfig, GetPath
 from core.economy.constants import DEFAULT_CONFIG, SECTIONS, SETTINGS, SETTINGS_BY_PATH
 from core.economy.rewards import FormatAmount
+from core.economy.registry import Eco
 from core.economy.service import Economy, InsufficientFunds
 
 PANEL_TIMEOUT = 600
@@ -184,6 +185,30 @@ class EconomyAdmin(commands.Cog):
             view=ConfigPanel(ctx.author, ctx.guild, Config),
             ephemeral=True,
         )
+
+    @eco_admin.command(name="tienda", description="Crear y editar los items de la tienda")
+    @Permissions("Admin")
+    async def tienda(self, ctx: commands.Context):
+        from cogs.Modules.Economy.admin_panels import ShopEmbed, ShopPanel
+
+        Items = await Eco().shop.List(ctx.guild.id)
+        await ctx.send(embed=await ShopEmbed(ctx.guild), view=ShopPanel(ctx.author, Items), ephemeral=True)
+
+    @eco_admin.command(name="codigos", description="Crear y borrar códigos de canje")
+    @Permissions("Admin")
+    async def codigos(self, ctx: commands.Context):
+        from cogs.Modules.Economy.admin_panels import CodesEmbed, CodesPanel
+
+        Codes = await Eco().codes.List(ctx.guild.id)
+        await ctx.send(embed=await CodesEmbed(ctx.guild), view=CodesPanel(ctx.author, Codes), ephemeral=True)
+
+    @eco_admin.command(name="misiones", description="Crear y editar misiones")
+    @Permissions("Admin")
+    async def misiones(self, ctx: commands.Context):
+        from cogs.Modules.Economy.admin_panels import QuestsEmbed, QuestsPanel
+
+        Quests = await Eco().quests.List(ctx.guild.id)
+        await ctx.send(embed=await QuestsEmbed(ctx.guild), view=QuestsPanel(ctx.author, Quests), ephemeral=True)
 
     @eco_admin.command(name="desbloquear", description="Quitarle el bloqueo anti-spam a alguien")
     @app_commands.describe(usuario="A quién")

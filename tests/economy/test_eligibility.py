@@ -10,6 +10,9 @@ def test_only_users_over_min_balance_earn_and_randoms_get_no_account():
     fake = DB()
     svc.economy = svc.EconomyService(fake)
     cfg._shared = cfg.EconomyConfig(fake)
+    import core.economy.registry as reg
+
+    reg._services = None
     from cogs.Modules.Economy.activity import EconomyActivity
 
     async def go():
@@ -22,6 +25,7 @@ def test_only_users_over_min_balance_earn_and_randoms_get_no_account():
         from core.economy.activity import Guard, TTLCache
 
         cog.guard, cog.eligible, cog.enabled = Guard(), TTLCache(), TTLCache()
+        cog.client = N(dispatch=lambda *a: None)
         import cogs.Modules.Economy.activity as mod
 
         mod.ModuleCheck = yes

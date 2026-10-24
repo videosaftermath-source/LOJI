@@ -9,6 +9,7 @@ from core.bot.Module import ModuleCheck
 from core.economy.activity import OK, Guard, LocalDay, NextPayout, TTLCache
 from core.economy.config import EcoConfig
 from core.economy.constants import ELIGIBILITY_CACHE_SECONDS, MODULE, MODULE_CACHE_SECONDS, VOICE_TICK_MINUTES
+from core.economy.registry import Eco
 from core.economy.service import EconomyError, Economy
 
 logger = logging.getLogger(__name__)
@@ -60,7 +61,8 @@ class EconomyActivity(commands.Cog):
         Service = Economy()
         async with Service.Lock(message.guild.id, message.author.id):
             Account = await Service.Account(message.guild.id, message.author.id)
-            Payout = NextPayout(Account.get("activity", {}), datetime.now(timezone.utc), Settings)
+            Bonus = await Eco().bonuses.Total(message.guild.id, message.author.id, "chat", Config)
+            Payout = NextPayout(Account.get("activity", {}), datetime.now(timezone.utc), Settings, bonus=Bonus)
             if Payout.amount <= 0:
                 return  # hit today's cap
             try:
@@ -77,6 +79,7 @@ class EconomyActivity(commands.Cog):
             except EconomyError as e:
                 logger.warning(f"[Economy] Activity pay failed: {e}")
                 return
+        self.client.dispatch("economy_progress", message.guild.id, message.author.id, "messages", 1)
 
         if Payout.qualified_now and Settings["react_streak"]:
             try:

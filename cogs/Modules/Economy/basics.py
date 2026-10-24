@@ -13,6 +13,8 @@ from core.economy.activity import CurrentStreak, LocalDay, Multiplier
 from core.economy.config import EcoConfig
 from core.economy.constants import MODULE, WORK_LINES
 from core.economy.rewards import Aware, DailyStatus, FormatAmount, WorkAmount, WorkReadyAt
+from core.economy.bonuses import Boosted
+from core.economy.registry import Eco
 from core.economy.service import ConditionFailed, EconomyError, Economy, InsufficientFunds
 from core.economy.tax import TransferFee
 
@@ -63,6 +65,7 @@ class ConfirmPay(discord.ui.View):
             )
         except EconomyError as e:
             return await interaction.response.edit_message(content=f"{Emojis.no} {e}", view=None)
+        interaction.client.dispatch("economy_progress", interaction.guild.id, self.author.id, "pay", self.amount)
         await interaction.response.edit_message(
             content=f"{Emojis.tick} Le pagaste {FormatAmount(self.amount, Config)} a {self.target.mention}"
             + (f" (+{FormatAmount(self.fee, Config)} de comisión)" if self.fee else "")
@@ -110,7 +113,7 @@ class EconomyBasics(commands.Cog):
         self.config = EcoConfig()
 
     async def cog_load(self):
-        await Economy().Setup()
+        await Eco().Setup()
 
     @commands.hybrid_command(name="saldo", description="Mira cuántos créditos tienes (o tiene alguien)")
     @app_commands.describe(usuario="De quién quieres ver el saldo")
@@ -182,7 +185,8 @@ class EconomyBasics(commands.Cog):
             return await ctx.send(f"😮‍💨 Estás reventado. Vuelve a trabajar {Relative(ReadyAt)}.", ephemeral=True)
 
         Now = datetime.now(timezone.utc)
-        Amount = WorkAmount(Config)
+        Bonus = await Eco().bonuses.Total(ctx.guild.id, ctx.author.id, "work", Config)
+        Amount = Boosted(WorkAmount(Config), Bonus)
         Cooldown = timedelta(seconds=Config["work"]["cooldown"])
         try:
             Updated = await Economy().Add(
@@ -196,8 +200,10 @@ class EconomyBasics(commands.Cog):
             )
         except ConditionFailed:
             return await ctx.send("😮‍💨 Tranqui, ya trabajaste hace nada.", ephemeral=True)
+        self.client.dispatch("economy_progress", ctx.guild.id, ctx.author.id, "work", 1)
+        Extra = f" (🧪 +{Bonus:.0%})" if Bonus else ""
         embed = discord.Embed(
-            description=f"💼 {random.choice(WORK_LINES)} y ganaste {FormatAmount(Amount, Config)}.\n-# Ahora tienes {FormatAmount(Updated['balance'], Config)}. Vuelve {Relative(Now + Cooldown)}.",
+            description=f"💼 {random.choice(WORK_LINES)} y ganaste {FormatAmount(Amount, Config)}{Extra}.\n-# Ahora tienes {FormatAmount(Updated['balance'], Config)}. Vuelve {Relative(Now + Cooldown)}.",
             color=discord.Color.green(),
         )
         await ctx.send(embed=embed)
@@ -214,6 +220,8 @@ class EconomyBasics(commands.Cog):
             Status = DailyStatus(Last, Account.get("daily", {}).get("streak", 0), Now, Config)
             if Status.ready_at:
                 return await ctx.send(f"⏳ Ya reclamaste tu diario. El siguiente está listo {Relative(Status.ready_at)}.", ephemeral=True)
+            Bonus = await Eco().bonuses.Total(ctx.guild.id, ctx.author.id, "daily", Config)
+            Status.amount = Boosted(Status.amount, Bonus)
             try:
                 Updated = await Economy().Add(
                     ctx.guild.id,
@@ -226,6 +234,7 @@ class EconomyBasics(commands.Cog):
                 )
             except ConditionFailed:
                 return await ctx.send("⏳ Ya reclamaste tu diario.", ephemeral=True)
+        self.client.dispatch("economy_progress", ctx.guild.id, ctx.author.id, "daily", 1)
 
         MaxDays = Config["daily"]["max_streak_days"]
         Lines = [f"🎁 ¡Toma {FormatAmount(Status.amount, Config)}!"]

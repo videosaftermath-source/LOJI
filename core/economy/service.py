@@ -81,6 +81,16 @@ class EconomyService:
                 await Stack.enter_async_context(L)
             yield
 
+    @contextlib.asynccontextmanager
+    async def Transaction(self):
+        """Yields a session inside a transaction, or None when transactions aren't available."""
+        if not self.transactions:
+            yield None
+            return
+        async with self.client.start_session() as Session:
+            async with await Session.start_transaction():
+                yield Session
+
     def IsLocked(self, guild_id: int, user_id: int) -> bool:
         L = self._locks.get((guild_id, user_id))
         return bool(L and L.locked())

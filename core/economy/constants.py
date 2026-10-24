@@ -8,6 +8,44 @@ MODULE = "Economy"
 USERS = "eco_users"
 CONFIG = "eco_config"
 LEDGER = "eco_ledger"
+ITEMS = "eco_items"
+INVENTORY = "eco_inventory"
+EFFECTS = "eco_effects"
+CODES = "eco_codes"
+CODE_USES = "eco_code_uses"
+QUESTS = "eco_quests"
+QUEST_PROGRESS = "eco_quest_progress"
+
+# Discord select menus hold at most 25 options, so these are capped there.
+MAX_ITEMS = 25
+MAX_CODES = 25
+MAX_QUESTS = 25
+MAX_BUY_AT_ONCE = 100
+
+# Item types
+ROLE = "role"
+CONSUMABLE = "consumable"
+COLLECTIBLE = "collectible"
+ITEM_TYPES = {ROLE: "🎭 Rol", CONSUMABLE: "🧪 Consumible", COLLECTIBLE: "💎 Coleccionable"}
+
+# What a consumable boosts (also used by pets later)
+BOOSTS = {
+    "work": "💼 Ganancias de /trabajar",
+    "daily": "🎁 Ganancias de /diario",
+    "chat": "💬 Ganancias por chatear",
+}
+
+# Quest objectives
+OBJECTIVES = {
+    "messages": "💬 Mensajes pagados en el chat",
+    "work": "💼 Veces usando /trabajar",
+    "daily": "🎁 Veces reclamando /diario",
+    "spend": "🛒 Créditos gastados en la tienda",
+    "buy": "📦 Items comprados",
+    "pay": "💸 Créditos enviados con /pagar",
+    "play": "🎲 Partidas jugadas (casino)",
+}
+QUEST_PERIODS = {"daily": "📅 Diaria", "weekly": "🗓️ Semanal", "once": "⭐ Única"}
 
 # Ledger kinds: money entering the economy, leaving it, or moving between users.
 CREATED = "created"
@@ -53,6 +91,7 @@ DEFAULT_CONFIG: dict = {
         "react_streak": True,
     },
     "voice": {"enabled": False, "per_minute": 2, "daily_cap": 300, "min_members": 2},
+    "bonuses": {"max": 1.0},
 }
 
 # How often voice time is paid (the task interval).
@@ -91,6 +130,8 @@ SETTINGS: list[Setting] = [
     Setting("general", "transfer.fee_percent", "Pagar: comisión (%)", float, 0, 50,
             "Lo paga quien envía, encima de la cantidad. Se destruye."),
     Setting("general", "leaderboard.page_size", "Top: usuarios por página", int, 5, 25),
+    Setting("general", "bonuses.max", "Tope de bonificaciones (1 = +100%)", float, 0, 10,
+            "Lo máximo que suman todos los boosts juntos."),
     Setting("work", "work.min", "Trabajar: mínimo", int, 0, 1_000_000),
     Setting("work", "work.max", "Trabajar: máximo", int, 0, 1_000_000),
     Setting("work", "work.cooldown", "Trabajar: espera (segundos)", int, 0, 7 * DAY),

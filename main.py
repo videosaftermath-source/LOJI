@@ -180,6 +180,8 @@ class Client(commands.AutoShardedBot):
             "cogs.Modules.Economy.basics",
             "cogs.Modules.Economy.admin",
             "cogs.Modules.Economy.activity",
+            "cogs.Modules.Economy.shop",
+            "cogs.Modules.Economy.quests",
             # Utilities
             "cogs.Modules.Utilities.extras",
             "cogs.Modules.Utilities.info",
