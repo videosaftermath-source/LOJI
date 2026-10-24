@@ -13,6 +13,7 @@ from core.economy.activity import CurrentStreak, LocalDay, Multiplier
 from core.economy.config import EcoConfig
 from core.economy.constants import MODULE, WORK_LINES
 from core.economy.rewards import Aware, DailyStatus, FormatAmount, WorkAmount, WorkReadyAt
+from core.economy import boost
 from core.economy.bonuses import Boosted
 from core.economy.registry import Eco
 from core.economy.service import ConditionFailed, EconomyError, Economy, InsufficientFunds
@@ -163,6 +164,9 @@ class EconomyBasics(commands.Cog):
             if Blocked and Member == ctx.author:
                 Value += f"\n> 🚫 **Bloqueado por spam** {Relative(Now + timedelta(seconds=Blocked))}"
             embed.add_field(name="💬 Chat", value=Value, inline=False)
+        Multiplier = boost.EarningsMultiplier(Member, Config)
+        if Multiplier > 1:
+            embed.add_field(name="💎 Booster", value=f"> Gana **x{Multiplier:g}** en trabajar, diario, chat y voz. ¡Gracias por boostear!", inline=False)
         if Member == ctx.author:
             embed.add_field(
                 name="⏰ Disponibles",
@@ -186,7 +190,7 @@ class EconomyBasics(commands.Cog):
 
         Now = datetime.now(timezone.utc)
         Bonus = await Eco().bonuses.Total(ctx.guild.id, ctx.author.id, "work", Config)
-        Amount = Boosted(WorkAmount(Config), Bonus)
+        Amount = boost.Boosted(Boosted(WorkAmount(Config), Bonus), ctx.author, Config)
         Cooldown = timedelta(seconds=Config["work"]["cooldown"])
         try:
             Updated = await Economy().Add(
@@ -202,6 +206,8 @@ class EconomyBasics(commands.Cog):
             return await ctx.send("😮‍💨 Tranqui, ya trabajaste hace nada.", ephemeral=True)
         self.client.dispatch("economy_progress", ctx.guild.id, ctx.author.id, "work", 1)
         Extra = f" (⚡ +{Bonus:.0%} por boosts y mascota)" if Bonus else ""
+        if boost.EarningsMultiplier(ctx.author, Config) > 1:
+            Extra += f" (💎 x{boost.EarningsMultiplier(ctx.author, Config):g} por boostear)"
         embed = discord.Embed(
             description=f"💼 {random.choice(WORK_LINES)} y ganaste {FormatAmount(Amount, Config)}{Extra}.\n-# Ahora tienes {FormatAmount(Updated['balance'], Config)}. Vuelve {Relative(Now + Cooldown)}.",
             color=discord.Color.green(),
@@ -221,7 +227,7 @@ class EconomyBasics(commands.Cog):
             if Status.ready_at:
                 return await ctx.send(f"⏳ Ya reclamaste tu diario. El siguiente está listo {Relative(Status.ready_at)}.", ephemeral=True)
             Bonus = await Eco().bonuses.Total(ctx.guild.id, ctx.author.id, "daily", Config)
-            Status.amount = Boosted(Status.amount, Bonus)
+            Status.amount = boost.Boosted(Boosted(Status.amount, Bonus), ctx.author, Config)
             try:
                 Updated = await Economy().Add(
                     ctx.guild.id,

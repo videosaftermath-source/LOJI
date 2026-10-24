@@ -13,6 +13,7 @@ from core.bot.emojis import Emojis
 from core.economy import cards
 from core.economy.config import EcoConfig
 from core.economy.constants import ARCHETYPES, ITEM_TYPES, MODULE, RARITIES
+from core.economy.boost import GachaSettings, IsBooster
 from core.economy.gacha import ORDER, LegendaryRate
 from core.economy.registry import Eco
 from core.economy.rewards import Aware, FormatAmount
@@ -59,7 +60,7 @@ class EmojiCache:
 
 
 async def BannerEmbed(banner: dict, member: discord.Member, config: dict) -> discord.Embed:
-    Settings = config["gacha"]
+    Settings = GachaSettings(member, config)
     Names = await PrizeNames(member.guild.id, banner["pool"], config)
     Best = max((P["rarity"] for P in banner["pool"]), key=ORDER.index, default="common")
     Cost = await Eco().gacha.PullCost(member.guild.id, banner, config)
@@ -80,6 +81,8 @@ async def BannerEmbed(banner: dict, member: discord.Member, config: dict) -> dis
             f"⭐⭐ {Percent(Settings['rate_rare'])} · ⭐ {Percent(Common)}\n"
             f"-# Legendaria segura a la tirada {Settings['hard_pity']} (sube desde la {Settings['soft_pity']}) · "
             f"épica o mejor cada {Settings['epic_pity']}"
+            + (f"\n💎 **{member.display_name}** es booster: +{config['booster']['gacha_luck']:.0%} de prob. en legendaria y épica"
+               if config["booster"]["enabled"] and IsBooster(member) and config["booster"]["gacha_luck"] > 0 else "")
         ),
         inline=False,
     )

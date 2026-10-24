@@ -9,6 +9,7 @@ from core.bot.emojis import Emojis
 from core.economy.casino import CasinoError, ParseBet
 from core.economy.config import EcoConfig
 from core.economy.constants import ECONOMY_TICK_MINUTES, MODULE
+from core.economy.boost import RewardBoost
 from core.economy.economics import Interest
 from core.economy.registry import Eco
 from core.economy.rewards import FormatAmount
@@ -50,6 +51,28 @@ class EconomyEconomics(commands.Cog):
     @Tick.before_loop
     async def BeforeTick(self):
         await self.client.wait_until_ready()
+
+    @commands.Cog.listener()
+    async def on_member_update(self, before: discord.Member, after: discord.Member):
+        """Thanks new boosters with a one-time reward."""
+        if after.premium_since is None or before.premium_since == after.premium_since:
+            return
+        try:
+            if not await ModuleCheck(after.guild.id, MODULE):
+                return
+            Config = await EcoConfig().Get(after.guild.id)
+            Paid = await RewardBoost(Eco().economy, after, Config)
+        except Exception as e:
+            return logger.error(f"[Economy] Boost reward failed: {e}")
+        if Paid:
+            logger.info(f"[Economy] {after.id} boosted {after.guild.id}: +{Paid}")
+            try:
+                await after.send(
+                    f"💎 ¡Gracias por boostear **{after.guild.name}**! Te regalamos {FormatAmount(Paid, Config)} "
+                    f"y desde ahora ganas **x{Config['booster']['multiplier']:g}** y tienes más suerte en el gacha."
+                )
+            except discord.HTTPException:
+                pass
 
     # ---------------- bank ----------------
 

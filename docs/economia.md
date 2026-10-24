@@ -13,7 +13,7 @@ Documento vivo para no perder decisiones entre sesiones.
 | 5b | ✅ | Casino (`/casino`): crash, slots, moneda, blackjack. Ventaja de la casa exacta por juego, suerte del Suertudo baja la ventaja (nunca la invierte), estadísticas por usuario |
 | 5c | ✅ | Ruleta europea, mines (20 casillas), mayor o menor y carrera de caballos. Todos con ventaja exacta y `Winnings()` para redondear sin errores de decimales |
 | 6 | ✅ | Impuesto progresivo por tramos marginales en `/pagar`, inflación (multiplicador de precios según el dinero de los activos, revisado cada 6 h), precio por demanda por item, `/eco-admin stats` con gráfico, banco opcional (`/banco`) |
-| 7 | ⏳ | **Imágenes de mascotas**: tarjeta generada con Pillow para `/mascota ver` (estilo de las tarjetas del gacha en `core/economy/cards.py`), con barras de cuidado, nivel, estado de ánimo y quizá animación al subir de nivel o evolucionar |
+| 7 | ✅ | **Imágenes de mascotas y boosters**: tarjeta de mascota (`/mascota ver` y tras cuidar/activar), álbum en `/mascota lista`, animación al evolucionar (`core/economy/petcards.py`). Boosters: x1.3 en trabajar/diario/chat/voz, +20% de probabilidad de legendaria y épica en el gacha (la pity no cambia) y 500 al boostear, una vez por boost (`core/economy/boost.py`, sección **Booster** de `/eco-admin config`) |
 
 ## Balance (pendiente de una pasada)
 Objetivo: progreso **"middle game" estilo Mudae**: semanas o meses de grindeo, pero que se sienta gratificante.
@@ -35,6 +35,13 @@ Cosas que revisar en la pasada de balance:
 - Premios de créditos del gacha (`FILLER_CREDITS`)
 - Coste de evolucionar
 - Que las rarezas legendarias se sientan especiales pero alcanzables
+
+## Boosters
+
+- Se detecta con `premium_since` del miembro: en cuanto deja de boostear pierde los beneficios.
+- El premio de 500 se guarda con la fecha del boost (`boost_rewarded`), así que reiniciar el bot o recibir el evento dos veces no paga doble. Si vuelve a boostear más adelante, cobra de nuevo.
+- La suerte multiplica las tasas de legendaria y épica; si un admin la sube mucho, se recortan para que siempre quede sitio para las demás rarezas.
+- El x1.3 se aplica después de los bonus de mascota y objetos, y no cuenta para el tope diario del chat y la voz (el tope mira la cantidad base).
 
 ## Cómo se calcula el precio de algo
 `base × inflación × (1 + subida por demanda) × (1 − descuento del Ahorrador)`

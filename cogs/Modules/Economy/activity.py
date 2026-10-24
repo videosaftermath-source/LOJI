@@ -9,6 +9,7 @@ from core.bot.Module import ModuleCheck
 from core.economy.activity import OK, Guard, LocalDay, NextPayout, TTLCache
 from core.economy.config import EcoConfig
 from core.economy.constants import ELIGIBILITY_CACHE_SECONDS, MODULE, MODULE_CACHE_SECONDS, VOICE_TICK_MINUTES
+from core.economy import boost
 from core.economy.registry import Eco
 from core.economy.service import EconomyError, Economy
 
@@ -69,7 +70,7 @@ class EconomyActivity(commands.Cog):
                 await Service.Add(
                     message.guild.id,
                     message.author.id,
-                    Payout.amount,
+                    boost.Boosted(Payout.amount, message.author, Config),
                     "Actividad en chat",
                     also_set={
                         **{f"activity.{k}": v for k, v in Payout.fields.items()},
@@ -136,10 +137,11 @@ class EconomyActivity(commands.Cog):
                     Amount = min(Settings["per_minute"] * VOICE_TICK_MINUTES, Settings["daily_cap"] - Earned)
                     if Amount <= 0:
                         continue
+                    # The daily cap counts the base amount; boosters get their extra on top.
                     await Service.Add(
                         guild.id,
                         Member.id,
-                        Amount,
+                        boost.Boosted(Amount, Member, Config),
                         "Tiempo en voz",
                         also_set={
                             "voice.day": Today,

@@ -15,6 +15,7 @@ from datetime import datetime, timedelta, timezone
 from pymongo import ReturnDocument
 
 from core.economy.constants import BANNERS, MAX_BANNERS, MAX_POOL, PITY, PULL_HISTORY_DAYS, PULLS, RARITIES
+from core.economy.boost import GachaSettings
 from core.economy.rewards import Aware
 from core.economy.service import EconomyError
 from core.economy.shop import NewId
@@ -268,7 +269,7 @@ class Gacha:
                 raise GachaError("Ese banner ya no está disponible.")
             Cost = await self.PullCost(Guild.id, Banner, config) * count
             Pity_ = await self.UserPity(Guild.id, member.id, banner_id)
-            Rolled = Pull(Banner["pool"], Pity_, count, config["gacha"], self.rng)
+            Rolled = Pull(Banner["pool"], Pity_, count, GachaSettings(member, config), self.rng)
             async with self.economy.Transaction() as Session:
                 Account = await self.economy.Remove(
                     Guild.id, member.id, Cost, f"Gacha x{count}: {Banner['name']}", ref=f"banner:{banner_id}", session=Session

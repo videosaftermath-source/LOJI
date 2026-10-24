@@ -180,6 +180,7 @@ DEFAULT_CONFIG: dict = {
     },
     "shop": {"demand_step": 0.02, "demand_half_life": 24, "demand_max": 1.0},
     "bank": {"enabled": False, "interest": 0.002, "interest_cap": 100_000, "withdraw_fee": 0.01},
+    "booster": {"enabled": True, "multiplier": 1.3, "gacha_luck": 0.2, "reward": 500},
 }
 
 # How often the economy task runs (inflation checks, daily snapshot, bank interest).
@@ -235,6 +236,7 @@ SECTIONS = {
     "casino": "🎲 Casino",
     "casino2": "🎲 Casino 2",
     "economy": "📈 Inflación, demanda y banco",
+    "booster": "💎 Boosters",
 }
 
 SETTINGS: list[Setting] = [
@@ -346,6 +348,12 @@ SETTINGS: list[Setting] = [
     Setting("economy", "bank.interest", "Banco: interés diario (0.002 = 0.2%)", float, 0, 0.05),
     Setting("economy", "bank.interest_cap", "Banco: máximo que genera interés", int, 0, 1_000_000_000),
     Setting("economy", "bank.withdraw_fee", "Banco: comisión al retirar (0.01 = 1%)", float, 0, 0.5),
+    Setting("booster", "booster.enabled", "Beneficios para boosters", bool),
+    Setting("booster", "booster.multiplier", "Multiplicador de ganancias (1.3 = x1.3)", float, 1, 5,
+            "Trabajar, diario, chat y voz. Va aparte del tope de bonificaciones."),
+    Setting("booster", "booster.gacha_luck", "Gacha: prob. extra (0.2 = +20%)", float, 0, 2,
+            "Sube la prob. de legendaria y épica. El pity no cambia."),
+    Setting("booster", "booster.reward", "Créditos al boostear", int, 0, 10_000_000),
 ]
 
 SETTINGS_BY_PATH = {S.path: S for S in SETTINGS}
