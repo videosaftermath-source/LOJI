@@ -183,6 +183,16 @@ async def ModuleOptions(Config, data=None):
             ),
         ),
         discord.SelectOption(
+            label="Economía",
+            value="Economy",
+            emoji="🪙",
+            default=(
+                Config.get("Modules", {}).get("Economy", False) or False
+                if not data
+                else False
+            ),
+        ),
+        discord.SelectOption(
             label="Connection Roles",
             value="connectionroles",
             emoji=f"{Emojis.link}",
