@@ -11,6 +11,7 @@ from core.bot.Module import ModuleIsEnabled
 from core.bot.emojis import Emojis
 from core.economy.activity import CurrentStreak, LocalDay, Multiplier
 from core.economy.config import EcoConfig
+from core.economy.help import HELP_SECTIONS
 from core.economy.constants import MODULE, WORK_LINES
 from core.economy.rewards import Aware, DailyStatus, FormatAmount, WorkAmount, WorkReadyAt
 from core.economy import boost
@@ -305,5 +306,37 @@ class EconomyBasics(commands.Cog):
         await ctx.send(embed=await self.TopEmbed(ctx.guild, 0, ctx.author), view=TopView(self, ctx.guild, 0, Pages))
 
 
+HELP_TIMEOUT = 300
+
+
+def HelpEmbed(key: str) -> discord.embeds.Embed:
+    _, Title, Text = next(S for S in HELP_SECTIONS if S[0] == key)
+    embed = discord.Embed(title=Title, description=Text, color=discord.Color.gold())
+    embed.set_footer(text="Usa el menú para ver otras secciones")
+    return embed
+
+
+class HelpView(discord.ui.View):
+    def __init__(self, author: discord.abc.User):
+        super().__init__(timeout=HELP_TIMEOUT)
+        self.author = author
+        self.Section.options = [discord.SelectOption(label=Title[2:].strip(), emoji=Title[:1], value=Key) for Key, Title, _ in HELP_SECTIONS]
+
+    @discord.ui.select(placeholder="Elige una sección")
+    async def Section(self, interaction: discord.Interaction, select: discord.ui.Select):
+        if interaction.user.id != self.author.id:
+            return await interaction.response.send_message("Usa `/eco-ayuda` para abrir la tuya 😉", ephemeral=True)
+        await interaction.response.edit_message(embed=HelpEmbed(select.values[0]), view=self)
+
+
+class EconomyHelp(commands.Cog):
+    @commands.hybrid_command(name="eco-ayuda", aliases=["eco-help"], description="Cómo funciona la economía y todos sus comandos")
+    @commands.guild_only()
+    @ModuleIsEnabled(MODULE)
+    async def ecoayuda(self, ctx: commands.Context):
+        await ctx.send(embed=HelpEmbed(HELP_SECTIONS[0][0]), view=HelpView(ctx.author))
+
+
 async def setup(client: commands.Bot) -> None:
+    await client.add_cog(EconomyHelp())
     await client.add_cog(EconomyBasics(client))
