@@ -373,3 +373,34 @@ def test_race_frames_end_with_the_winner_first():
         last = frames[-1]
         assert last[winner] == max(last) and last.count(max(last)) == 1
         assert all(max(f) <= last[winner] for f in frames)
+
+
+# ---- balance pass ----
+
+
+def test_every_slots_win_pays_more_than_the_bet():
+    from itertools import product as combos
+
+    from core.economy.casino import SLOT_SYMBOLS
+
+    scale = SlotScale(0.04)
+    pays = [BaseMultiplier(tuple(s for s, _ in c)) * scale for c in combos(SLOT_SYMBOLS, repeat=3)]
+    assert min(p for p in pays if p > 0) > 1
+    assert 0.9 < scale < 1.1  # the table shown is close to what it really pays
+
+
+def test_mines_cap_cashes_out():
+    g = MinesGame(1000, 15, 0.03, random.Random(1), cap=100)
+    safe = [t for t in range(g.tiles) if t not in g.bombs]
+    for t in safe:
+        g.Reveal(t)
+        if g.finished:
+            break
+    assert g.finished and g.payout == 100 * 1000
+
+
+def test_hilo_cap_cashes_out():
+    g = HiLoGame(100, 0.03, random.Random(10), cap=5)  # a seed that gets there
+    while not g.finished:
+        g.Guess(g.card[0] <= 7)
+    assert not g.lost and g.payout == 500

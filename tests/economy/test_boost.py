@@ -36,8 +36,8 @@ def test_multiplier_only_for_boosters():
 def test_gacha_luck_raises_top_rates_and_keeps_room():
     base = CONFIG["gacha"]
     lucky = GachaSettings(member(), CONFIG)
-    assert lucky["rate_legendary"] == pytest.approx(base["rate_legendary"] * 1.2)
-    assert lucky["rate_epic"] == pytest.approx(base["rate_epic"] * 1.2)
+    assert lucky["rate_legendary"] == pytest.approx(base["rate_legendary"] * (1 + CONFIG["booster"]["gacha_luck"]))
+    assert lucky["rate_epic"] == pytest.approx(base["rate_epic"] * (1 + CONFIG["booster"]["gacha_luck"]))
     assert GachaSettings(member(since=None), CONFIG)["rate_legendary"] == base["rate_legendary"]
     assert base["rate_legendary"] == DEFAULT_CONFIG["gacha"]["rate_legendary"]  # not mutated
     huge = Merge(DEFAULT_CONFIG, {"booster": {"gacha_luck": 20}})

@@ -6,7 +6,7 @@ Documento vivo para no perder decisiones entre sesiones.
 | Fase | Estado | Qué incluye |
 |---|---|---|
 | 1 | ✅ | Servicio central (`core/economy/service.py`), `/saldo`, `/trabajar`, `/diario`, `/pagar`, `/top`, `/eco-admin` |
-| 2 | ✅ | Pago por chat (canales elegidos, saldo mínimo 250, anti-spam, rachas, topes), voz opcional, comisión de `/pagar` (7%) |
+| 2 | ✅ | Pago por chat (canales elegidos, saldo mínimo 250, anti-spam, rachas, topes), voz opcional, impuesto de `/pagar` por tramos |
 | 3 | ✅ | Tienda (rol, consumible, coleccionable), inventario, boosts con tope global, códigos de canje, misiones |
 | 4 | ✅ | Mascotas: especies, rarezas, arquetipos, niveles, cuidado con desgaste perezoso, evolución, catálogo de 16 especies |
 | 5a | ✅ | Gacha: banners, pity (soft/hard), 50/50, x1/x10, GIFs y tarjetas con Pillow |
@@ -15,26 +15,82 @@ Documento vivo para no perder decisiones entre sesiones.
 | 6 | ✅ | Impuesto progresivo por tramos marginales en `/pagar`, inflación (multiplicador de precios según el dinero de los activos, revisado cada 6 h), precio por demanda por item, `/eco-admin stats` con gráfico, banco opcional (`/banco`) |
 | 7 | ✅ | **Imágenes de mascotas y boosters**: tarjeta de mascota (`/mascota ver` y tras cuidar/activar), álbum en `/mascota lista`, animación al evolucionar (`core/economy/petcards.py`). Boosters: x1.3 en trabajar/diario/chat/voz, +20% de probabilidad de legendaria y épica en el gacha (la pity no cambia) y 500 al boostear, una vez por boost (`core/economy/boost.py`, sección **Booster** de `/eco-admin config`) |
 
-## Balance (pendiente de una pasada)
+## Balance
+
 Objetivo: progreso **"middle game" estilo Mudae**: semanas o meses de grindeo, pero que se sienta gratificante.
 
-Ingresos aproximados de un usuario activo al día con los valores por defecto:
-- `/diario`: 200 a 350
-- `/trabajar`: unas 100 por hora (si lo usa a menudo, entre 500 y 1.500)
-- Chat: hasta 1.000 (el tope)
-- Total: entre 1.500 y 2.500 al día
+### Ingresos por día (valores por defecto)
 
-Gastos:
-- Gacha: 150 por tirada. La legendaria asegurada (90 tiradas) cuesta unos 13.500, más o menos 1 o 2 semanas. La destacada asegurada (hasta 180 tiradas) cuesta unos 27.000.
-- Mascota: comida 60, jugar 40 y evolucionar 2.500.
+| Perfil | Trabajar | Diario | Chat | Total | Con boost (x1.3) |
+|---|---|---|---|---|---|
+| Casual (3 trabajos, racha 4, ~25 mensajes) | 300 | 300 | 250 | **~850** | ~1.100 |
+| Activo (8 trabajos, racha 7, ~60 mensajes) | 800 | 375 | 600 | **~1.775** | ~2.300 |
+| Muy activo (14 trabajos, ~100 mensajes) | 1.400 | 375 | 800 | **~2.575** | ~3.350 |
 
-Cosas que revisar en la pasada de balance:
-- Curva de XP de las mascotas (`xp_base`/`xp_per_level`)
-- Precios de la tienda
-- Topes del chat
-- Premios de créditos del gacha (`FILLER_CREDITS`)
-- Coste de evolucionar
-- Que las rarezas legendarias se sientan especiales pero alcanzables
+### Ritmo resultante
+
+- **Gacha** (200 por tirada): una legendaria sale de media a las **62 tiradas (~12.500)** y está asegurada a las 90 (18.000). Una épica está asegurada cada 10 tiradas (2.000). Si alguien activo gasta la mitad de lo que gana, consigue una legendaria cada ~2 semanas; alguien casual, cada ~4 semanas. Los boosters necesitan un 10% menos de tiradas.
+- **Mascotas**: mantener una al 100% cuesta ~130 al día (comida 82, juego 48). Sube al nivel 10 (evolución) en ~8 días, al 20 en ~1 mes y al 30 en ~2 meses.
+- **Ventaja de una mascota al nivel 30**: común +11,7%, rara +19,5%, épica +28,3%, legendaria +41%. La suerte se queda en un máximo del 15% y el descuento en un máximo del 25%. Todos los bonus juntos suman como mucho +100%.
+- **Inflación**: empieza a subir precios cuando la media de los activos pasa de 25.000 (~2 semanas de un jugador activo).
+
+### Casino
+
+La casa siempre gana un poco a la larga (eso quita dinero de la economía), pero cada premio es real.
+
+| Juego | Ventaja casa | Apuesta máx. | Premio máximo |
+|---|---|---|---|
+| 🪙 Moneda | 2% | 20.000 | x1,96 |
+| 🃏 Blackjack | 2% de lo ganado (~1,9% jugando bien, ~6% jugando mal) | 20.000 | x2,5 (blackjack natural, doblando x4) |
+| 🎡 Ruleta | 2,7% (como la europea) | 20.000 | x36 (un número) |
+| 🚀 Crash | 3% | 10.000 | x100 |
+| 💣 Mines | 3% | 10.000 | x100 (cobra solo al llegar) |
+| 🔼 Mayor o menor | 3% | 10.000 | x100 (cobra solo al llegar) |
+| 🎰 Slots | 4% | 5.000 | x777 (7️⃣7️⃣7️⃣, 1 de cada 125.000) |
+| 🏇 Carrera | 4% | 10.000 | x12 (Turbo Burro) |
+
+- **Slots**: se gana en 1 de cada 3 tiradas y **todo premio paga más de lo apostado** (el menor es x1,5). Antes un 53% de las tiradas "ganaba", pero casi todas devolvían menos de lo apostado.
+- Las apuestas máximas son más o menos una semana de ingresos de alguien activo, para que una sola apuesta no decida el top.
+- La mascota Suertuda reduce la ventaja de la casa como mucho un 15% (por ejemplo, del 3% al 2,55%). Nunca la vuelve a favor del jugador.
+
+### Precios recomendados para la tienda
+
+Son **precios base**: la inflación y la demanda los suben solos. Los calculé con el ingreso de un jugador activo (~1.775 al día).
+
+**Consumibles** (boosts). Cuestan ~70% de lo que le hacen ganar de más a alguien activo, para que valga la pena usarlos sin regalar dinero:
+
+| Objeto | Efecto | Duración | Precio | Ganancia extra (activo) |
+|---|---|---|---|---|
+| ☕ Café | +25% trabajar | 24 h | **150** | ~200 |
+| 💼 Turno extra | +50% trabajar | 24 h | **300** | ~400 |
+| ⚡ Bebida energética | +100% trabajar | 12 h | **350** | ~500 |
+| 🗣️ Megáfono | +50% chat | 24 h | **220** | ~300 |
+| 🎁 Caja sorpresa del diario | +100% diario | 24 h | **250** | ~375 |
+| 📅 Contrato semanal | +25% trabajar | 7 días | **1.000** | ~1.400 |
+
+**Roles** (permanentes; son el sumidero principal de dinero). Pon límite de 1 por persona:
+
+| Rol | Precio | Días de un jugador activo |
+|---|---|---|
+| 🎨 Color básico | **2.500** | ~1,5 |
+| 🌈 Color premium | **7.500** | ~4 |
+| ⭐ VIP (título, canal o emojis exclusivos) | **20.000** | ~11 |
+| 👑 Prestigio | **50.000** | ~1 mes |
+| 💎 Leyenda (stock 1 o 3, único en el servidor) | **150.000** | ~3 meses |
+
+**Coleccionables** (para presumir en el inventario):
+
+| Rareza | Precio | Stock recomendado |
+|---|---|---|
+| Común | **500** | sin límite |
+| Raro | **2.500** | sin límite |
+| Épico | **10.000** | 10 a 25 |
+| Legendario | **50.000 a 100.000** | 1 a 5 |
+
+Consejos:
+- No pongas consumibles que den más de +100%: el tope de bonus los recorta igual.
+- Evita premios de dinero real (Nitro y similares) en la tienda: hacen que la gente quiera abusar del sistema y el casino deja de ser un juego.
+- Si tras unas semanas el top tiene mucho más que 25.000 de media, sube los roles caros antes de bajar los ingresos: quitarle ingresos a la gente se siente peor que ver precios más altos.
 
 ## Boosters
 

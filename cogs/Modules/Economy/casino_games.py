@@ -172,7 +172,7 @@ class HiLoView(GameView):
             Button.disabled = Game.finished or not Next
             Chance = HiLoChance(Game.card[0], Higher)
             Button.label = f"{'Mayor' if Higher else 'Menor'} (x{Next:.2f} · {Chance:.0%})" if Next else ("Mayor" if Higher else "Menor")
-        Value = Winnings(Game.bet, (1 - Game.edge) * Game.fair) if Game.streak else Game.bet
+        Value = Winnings(Game.bet, Game.Multiplier()) if Game.streak else Game.bet
         self.Cash.label = f"Retirarse ({Value:,})".replace(",", ".")
         self.Cash.disabled = Game.finished
 
@@ -187,7 +187,7 @@ class HiLoView(GameView):
             Body = f"Cobraste {FormatAmount(Game.payout, self.config)}"
         else:
             Title, Color = "🔼 Mayor o menor", discord.Color.blurple()
-            Body = f"Racha: **{Game.streak}** · Multiplicador: **x{(1 - Game.edge) * Game.fair if Game.streak else 1:.2f}**\n-# ¿La siguiente carta será mayor o menor? (si es igual, pierdes)"
+            Body = f"Racha: **{Game.streak}** · Multiplicador: **x{Game.Multiplier():.2f}**\n-# ¿La siguiente carta será mayor o menor? (si es igual, pierdes)"
         embed = discord.Embed(title=Title, description=f"# {Shown}`{HiLoName(Game.card)}`\n{Body}", color=Color)
         embed.set_author(name=f"{self.member.display_name} apostó {Game.bet:,}".replace(",", "."), icon_url=self.member.display_avatar)
         embed.set_footer(text=EdgeNote(Game.edge, self.luck) + " · A es la más baja, K la más alta")

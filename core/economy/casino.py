@@ -65,16 +65,19 @@ def CoinflipPayout(bet: int, won: bool, edge: float) -> int:
 # ---------------- slots ----------------
 
 SLOT_SYMBOLS = [("🍒", 30), ("🍋", 25), ("🍇", 20), ("🔔", 12), ("⭐", 7), ("💎", 4), ("7️⃣", 2)]
-# Base pays (before tuning to the house edge): three of a kind, or any two of a kind.
-THREE_PAYS = {"🍒": 10, "🍋": 15, "🍇": 25, "🔔": 60, "⭐": 150, "💎": 400, "7️⃣": 1000}
-TWO_PAYS = 1.0
+# Base pays (before tuning to the house edge): three of a kind, or a pair of the better symbols.
+# The table returns ~96% as is, so the scale stays near 1 and every win pays more than the bet
+# (no "wins" that hand back less than you bet). A pair of cherries pays nothing.
+THREE_PAYS = {"🍒": 5, "🍋": 8, "🍇": 12, "🔔": 30, "⭐": 75, "💎": 200, "7️⃣": 777}
+TWO_PAYS = {"🍋": 1.5, "🍇": 1.5, "🔔": 2, "⭐": 3, "💎": 5, "7️⃣": 10}
 
 
 def BaseMultiplier(reels: tuple[str, str, str]) -> float:
     if reels[0] == reels[1] == reels[2]:
         return THREE_PAYS[reels[0]]
     if len(set(reels)) == 2:
-        return TWO_PAYS
+        Pair = max(set(reels), key=reels.count)
+        return TWO_PAYS.get(Pair, 0.0)
     return 0.0
 
 
@@ -347,6 +350,7 @@ class MinesGame:
     edge: float
     rng: random.Random
     tiles: int = MINES_TILES
+    cap: float = 0  # highest multiplier (0 = no limit); reaching it cashes out
     bombs: set = field(default_factory=set)
     revealed: set = field(default_factory=set)
     finished: bool = False
@@ -360,7 +364,8 @@ class MinesGame:
 
     def Multiplier(self, revealed: int | None = None) -> float:
         Count = len(self.revealed) if revealed is None else revealed
-        return (1 - self.edge) * MinesFair(self.tiles, self.mines, Count)
+        Value = (1 - self.edge) * MinesFair(self.tiles, self.mines, Count)
+        return min(Value, self.cap) if self.cap else Value
 
     def Reveal(self, tile: int) -> bool:
         """Opens a tile. Returns True if it was safe."""
@@ -371,8 +376,8 @@ class MinesGame:
             self.finished, self.payout = True, 0
             return False
         self.revealed.add(tile)
-        if len(self.revealed) == self.tiles - self.mines:
-            self.CashOut()  # nothing left to open
+        if len(self.revealed) == self.tiles - self.mines or (self.cap and self.Multiplier() >= self.cap):
+            self.CashOut()  # nothing left to open, or nothing more to win
         return True
 
     def CashOut(self):
@@ -400,6 +405,7 @@ class HiLoGame:
     rng: random.Random
     card: tuple = None
     fair: float = 1.0
+    cap: float = 0  # highest multiplier (0 = no limit); reaching it cashes out
     streak: int = 0
     finished: bool = False
     lost: bool = False
@@ -412,10 +418,17 @@ class HiLoGame:
     def Draw(self) -> tuple[int, str]:
         return self.rng.randint(1, HILO_RANKS), self.rng.choice(SUITS)
 
+    def Capped(self, value: float) -> float:
+        return min(value, self.cap) if self.cap else value
+
+    def Multiplier(self) -> float:
+        """What cashing out now pays (1 before the first guess: you get the bet back)."""
+        return self.Capped((1 - self.edge) * self.fair) if self.streak else 1.0
+
     def Next(self, higher: bool) -> float:
         """Multiplier you'd have after a correct guess."""
         Chance = HiLoChance(self.card[0], higher)
-        return (1 - self.edge) * self.fair / Chance if Chance else 0.0
+        return self.Capped((1 - self.edge) * self.fair / Chance) if Chance else 0.0
 
     def Guess(self, higher: bool) -> bool:
         Chance = HiLoChance(self.card[0], higher)
@@ -427,6 +440,8 @@ class HiLoGame:
         if Right:
             self.fair /= Chance
             self.streak += 1
+            if self.cap and self.Multiplier() >= self.cap:
+                self.CashOut()
         else:
             self.finished, self.lost, self.payout = True, True, 0
         return Right
@@ -435,7 +450,7 @@ class HiLoGame:
         if self.finished:
             return
         self.finished = True
-        self.payout = Winnings(self.bet, (1 - self.edge) * self.fair) if self.streak else self.bet
+        self.payout = Winnings(self.bet, self.Multiplier()) if self.streak else self.bet
 
 
 def HiLoName(card: tuple[int, str]) -> str:

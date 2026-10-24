@@ -255,7 +255,8 @@ def BlackjackEmbed(member: discord.Member, game: Blackjack, config: dict, luck: 
 def SlotsTable(edge: float, config: dict) -> str:
     Scale = SlotScale(edge)
     Rows = [f"{S}{S}{S} → x{THREE_PAYS[S] * Scale:.2f}" for S, _ in reversed(SLOT_SYMBOLS)]
-    Rows.append(f"Dos iguales → x{TWO_PAYS * Scale:.2f}")
+    Pairs = " · ".join(f"{S}{S} x{TWO_PAYS[S] * Scale:.2f}" for S, _ in reversed(SLOT_SYMBOLS) if S in TWO_PAYS)
+    Rows.append(f"Dos iguales: {Pairs}")
     return "\n".join(Rows)
 
 
@@ -485,7 +486,7 @@ class EconomyCasino(commands.Cog):
         if not Started:
             return
         Config, Bet, Edge, Luck = Started
-        View = MinesView(self.client, ctx.author, MinesGame(Bet, minas, Edge, Eco().casino.rng), Config, Luck)
+        View = MinesView(self.client, ctx.author, MinesGame(Bet, minas, Edge, Eco().casino.rng, cap=Config["casino"]["mines"]["max_multiplier"]), Config, Luck)
         View.message = await ctx.send(embed=View.Embed(), view=View)
 
     @casino.command(name="mayormenor", description="¿La siguiente carta será mayor o menor? Cada acierto multiplica")
@@ -496,7 +497,7 @@ class EconomyCasino(commands.Cog):
         if not Started:
             return
         Config, Bet, Edge, Luck = Started
-        View = HiLoView(self.client, ctx.author, HiLoGame(Bet, Edge, Eco().casino.rng), Config, Luck)
+        View = HiLoView(self.client, ctx.author, HiLoGame(Bet, Edge, Eco().casino.rng, cap=Config["casino"]["hilo"]["max_multiplier"]), Config, Luck)
         View.message = await ctx.send(embed=View.Embed(), view=View)
 
     @casino.command(name="carrera", description="Apuesta a un caballo: el favorito paga poco, el tapado paga mucho")

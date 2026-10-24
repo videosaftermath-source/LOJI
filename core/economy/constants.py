@@ -146,7 +146,7 @@ DEFAULT_CONFIG: dict = {
         "max_discount": 0.25,
     },
     "gacha": {
-        "cost": 150,
+        "cost": 200,
         "cooldown": 8,
         "rate_legendary": 0.006,
         "rate_epic": 0.051,
@@ -158,14 +158,16 @@ DEFAULT_CONFIG: dict = {
         "featured_chance": 0.5,
     },
     "casino": {
-        "crash": {"min": 50, "max": 50_000, "cooldown": 10, "edge": 0.03, "max_multiplier": 100},
-        "slots": {"min": 20, "max": 20_000, "cooldown": 5, "edge": 0.04},
-        "coinflip": {"min": 20, "max": 50_000, "cooldown": 3, "edge": 0.02},
-        "blackjack": {"min": 50, "max": 50_000, "cooldown": 5, "edge": 0.02},
-        "roulette": {"min": 20, "max": 50_000, "cooldown": 5, "edge": 0.027},
-        "mines": {"min": 50, "max": 30_000, "cooldown": 5, "edge": 0.03},
-        "hilo": {"min": 50, "max": 30_000, "cooldown": 5, "edge": 0.03},
-        "race": {"min": 20, "max": 30_000, "cooldown": 10, "edge": 0.05},
+        # Max bets are about a week of an active player's income; the biggest prizes are capped
+        # so one lucky round can't break the economy (see docs/economia.md).
+        "crash": {"min": 50, "max": 10_000, "cooldown": 10, "edge": 0.03, "max_multiplier": 100},
+        "slots": {"min": 20, "max": 5_000, "cooldown": 5, "edge": 0.04},
+        "coinflip": {"min": 20, "max": 20_000, "cooldown": 3, "edge": 0.02},
+        "blackjack": {"min": 50, "max": 20_000, "cooldown": 5, "edge": 0.02},
+        "roulette": {"min": 20, "max": 20_000, "cooldown": 5, "edge": 0.027},
+        "mines": {"min": 50, "max": 10_000, "cooldown": 5, "edge": 0.03, "max_multiplier": 100},
+        "hilo": {"min": 50, "max": 10_000, "cooldown": 5, "edge": 0.03, "max_multiplier": 100},
+        "race": {"min": 20, "max": 10_000, "cooldown": 10, "edge": 0.04},
     },
     "inflation": {
         "enabled": True,
@@ -180,7 +182,7 @@ DEFAULT_CONFIG: dict = {
     },
     "shop": {"demand_step": 0.02, "demand_half_life": 24, "demand_max": 1.0},
     "bank": {"enabled": False, "interest": 0.002, "interest_cap": 100_000, "withdraw_fee": 0.01},
-    "booster": {"enabled": True, "multiplier": 1.3, "gacha_luck": 0.2, "reward": 500},
+    "booster": {"enabled": True, "multiplier": 1.3, "gacha_luck": 0.5, "reward": 500},
 }
 
 # How often the economy task runs (inflation checks, daily snapshot, bank interest).
@@ -331,6 +333,10 @@ SETTINGS: list[Setting] = [
         )
     ],
     Setting("casino", "casino.crash.max_multiplier", "Crash: multiplicador máximo", int, 2, 1000),
+    Setting("casino2", "casino.mines.max_multiplier", "Mines: multiplicador máximo", int, 2, 1000,
+            "Al llegar, cobra solo. Sin tope, una racha imposible pagaría miles de millones."),
+    Setting("casino2", "casino.hilo.max_multiplier", "Mayor o menor: multiplicador máximo", int, 2, 1000,
+            "Al llegar, cobra solo."),
     Setting("economy", "inflation.enabled", "Inflación activada", bool),
     Setting("economy", "inflation.target_per_user", "Dinero 'normal' por usuario activo", int, 100, 100_000_000,
             "Si cada activo tiene más que esto de media, los precios suben."),
