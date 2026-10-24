@@ -239,11 +239,14 @@ class EconomyGacha(commands.Cog):
         await ctx.send(embed=await BannerEmbed(Banners[0], ctx.author, Config), view=GachaView(self, Banners, Banners[0]["banner_id"], Config))
 
     async def DoPull(self, interaction: discord.Interaction, banner_id: str, count: int):
+        # Discord only waits 3 seconds for a reply to a button, and a x10 pull takes longer
+        # (many database writes). So acknowledge right away and do everything after.
+        await interaction.response.defer()
         Config = await EcoConfig().Get(interaction.guild.id)
         Key = (interaction.guild.id, interaction.user.id)
         Wait = self.cooldowns.get(Key, 0) - time.monotonic()
         if Wait > 0:
-            return await interaction.response.send_message(f"⏳ Espera {Wait:.0f}s antes de volver a tirar.", ephemeral=True)
+            return await interaction.followup.send(f"⏳ Espera {Wait:.0f}s antes de volver a tirar.", ephemeral=True)
         self.cooldowns[Key] = time.monotonic() + Config["gacha"]["cooldown"]
         try:
             Outcome = await Eco().gacha.DoPull(interaction.user, banner_id, count, Config)
@@ -251,41 +254,45 @@ class EconomyGacha(commands.Cog):
             self.cooldowns.pop(Key, None)
             Banner = await Eco().gacha.Get(interaction.guild.id, banner_id)
             Cost = Banner["cost"] * count if Banner else 0
-            return await interaction.response.send_message(
+            return await interaction.followup.send(
                 f"{Emojis.no} Te faltan créditos: cuesta {FormatAmount(Cost, Config)} y tienes {FormatAmount(e.balance, Config)} 😭",
                 ephemeral=True,
             )
         except EconomyError as e:
             self.cooldowns.pop(Key, None)
-            return await interaction.response.send_message(f"{Emojis.no} {e}", ephemeral=True)
+            return await interaction.followup.send(f"{Emojis.no} {e}", ephemeral=True)
 
         self.client.dispatch("economy_progress", interaction.guild.id, interaction.user.id, "gacha", count)
-        Results = Outcome.results
-        Tier = cards.BestTier([R.rarity for R in Results])
-        Gif = await asyncio.to_thread(cards.Animation, Tier)
-        Card = asyncio.get_running_loop().create_task(self.RenderCard(interaction, Outcome, Config))
-        Intro = discord.Embed(
-            description=f"✨ **{interaction.user.display_name}** tira **x{count}** en **{Outcome.banner['name']}**...",
-            color=discord.Color.dark_embed(),
-        )
-        Intro.set_image(url="attachment://tirada.gif")
-        await interaction.response.send_message(embed=Intro, file=discord.File(io.BytesIO(Gif), "tirada.gif"))
-        await asyncio.sleep(cards.AnimationSeconds(Gif))
-        try:
-            Png = await Card
-        except Exception as e:
-            logger.error(f"[Gacha] Card failed: {e}")
-            Png = None
+        # The pull is done and paid: from here on, whatever fails, the player must see their prizes.
         embed = self.ResultEmbed(interaction.user, Outcome, Config)
-        Files = []
-        if Png:
-            embed.set_image(url="attachment://resultado.png")
-            Files = [discord.File(io.BytesIO(Png), "resultado.png")]
         try:
-            await interaction.edit_original_response(embed=embed, attachments=Files)
-        except discord.HTTPException as e:
-            logger.error(f"[Gacha] Couldn't show the result: {e}")
-            await interaction.followup.send(embed=embed, files=Files)
+            Tier = cards.BestTier([R.rarity for R in Outcome.results])
+            Gif = await asyncio.to_thread(cards.Animation, Tier)
+            Card = asyncio.get_running_loop().create_task(self.RenderCard(interaction, Outcome, Config))
+            Intro = discord.Embed(
+                description=f"✨ **{interaction.user.display_name}** tira **x{count}** en **{Outcome.banner['name']}**...",
+                color=discord.Color.dark_embed(),
+            )
+            Intro.set_image(url="attachment://tirada.gif")
+            Message = await interaction.followup.send(embed=Intro, file=discord.File(io.BytesIO(Gif), "tirada.gif"), wait=True)
+            await asyncio.sleep(cards.AnimationSeconds(Gif))
+            try:
+                Png = await Card
+            except Exception as e:
+                logger.error(f"[Gacha] Card failed: {e}")
+                Png = None
+            Files = []
+            if Png:
+                embed.set_image(url="attachment://resultado.png")
+                Files = [discord.File(io.BytesIO(Png), "resultado.png")]
+            await Message.edit(embed=embed, attachments=Files)
+        except Exception as e:
+            logger.error(f"[Gacha] Couldn't show the pull animation/card: {e}")
+            embed.set_image(url=None)
+            try:
+                await interaction.followup.send(embed=embed)
+            except discord.HTTPException:
+                await interaction.channel.send(content=interaction.user.mention, embed=embed)
 
     async def RenderCard(self, interaction: discord.Interaction, outcome, config: dict) -> bytes:
         Data = [CardData(R, config) for R in outcome.results]
