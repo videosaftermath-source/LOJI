@@ -46,10 +46,10 @@ La casa siempre gana un poco a la larga (eso quita dinero de la economía), pero
 | 🚀 Crash | 3% | 10.000 | x100 |
 | 💣 Mines | 3% | 10.000 | x100 (cobra solo al llegar) |
 | 🔼 Mayor o menor | 3% | 10.000 | x100 (cobra solo al llegar) |
-| 🎰 Slots | 4% | 5.000 | x777 (7️⃣7️⃣7️⃣, 1 de cada 125.000) |
+| 🎰 Slots | 10% (como una tragamonedas real) | 5.000 | x832 (7️⃣7️⃣7️⃣, 1 de cada 125.000) |
 | 🏇 Carrera | 4% | 10.000 | x12 (Turbo Burro) |
 
-- **Slots**: se gana en 1 de cada 3 tiradas y **todo premio paga más de lo apostado** (el menor es x1,5). Antes un 53% de las tiradas "ganaba", pero casi todas devolvían menos de lo apostado.
+- **Slots**: se gana en 1 de cada 3 tiradas y **todo premio paga más de lo apostado**, pero las parejas pagan poco (x1,28 a x5,35). La casa se queda con el 10%. Antes un 53% de las tiradas "ganaba", pero casi todas devolvían menos de lo apostado.
 - Las apuestas máximas son más o menos una semana de ingresos de alguien activo, para que una sola apuesta no decida el top.
 - La mascota Suertuda reduce la ventaja de la casa como mucho un 15% (por ejemplo, del 3% al 2,55%). Nunca la vuelve a favor del jugador.
 

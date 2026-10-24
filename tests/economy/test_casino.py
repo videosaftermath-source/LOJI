@@ -383,7 +383,7 @@ def test_every_slots_win_pays_more_than_the_bet():
 
     from core.economy.casino import SLOT_SYMBOLS
 
-    scale = SlotScale(0.04)
+    scale = SlotScale(0.10)
     pays = [BaseMultiplier(tuple(s for s, _ in c)) * scale for c in combos(SLOT_SYMBOLS, repeat=3)]
     assert min(p for p in pays if p > 0) > 1
     assert 0.9 < scale < 1.1  # the table shown is close to what it really pays

@@ -46,7 +46,7 @@ Las tiradas se cuentan por banner, y en el banner se ve cuánto te falta.
 Todas las apuestas aceptan `500`, `1.5k`, `todo` o `mitad`. La casa gana un poco a la larga: juega por diversión.
 
 **`/casino moneda`**: cara o cruz, casi doblas.
-**`/casino slots`**: tragamonedas. Cada premio paga más de lo apostado y el 7️⃣7️⃣7️⃣ paga x777.
+**`/casino slots`**: tragamonedas. Las parejas pagan poco; los tríos, mucho más (7️⃣7️⃣7️⃣ paga x832).
 **`/casino crash`**: el multiplicador sube; retírate antes de que explote (hasta x100).
 **`/casino blackjack`**: llega a 21 sin pasarte. Puedes pedir, plantarte o doblar.
 **`/casino ruleta`**: color, par/impar, mitades, docenas o un número (x36).

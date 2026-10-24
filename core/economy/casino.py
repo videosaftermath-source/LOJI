@@ -66,10 +66,10 @@ def CoinflipPayout(bet: int, won: bool, edge: float) -> int:
 
 SLOT_SYMBOLS = [("🍒", 30), ("🍋", 25), ("🍇", 20), ("🔔", 12), ("⭐", 7), ("💎", 4), ("7️⃣", 2)]
 # Base pays (before tuning to the house edge): three of a kind, or a pair of the better symbols.
-# The table returns ~96% as is, so the scale stays near 1 and every win pays more than the bet
+# The table returns ~84% as is (the default 10% edge scales it up a little), so the scale stays near 1 and every win pays more than the bet
 # (no "wins" that hand back less than you bet). A pair of cherries pays nothing.
 THREE_PAYS = {"🍒": 5, "🍋": 8, "🍇": 12, "🔔": 30, "⭐": 75, "💎": 200, "7️⃣": 777}
-TWO_PAYS = {"🍋": 1.5, "🍇": 1.5, "🔔": 2, "⭐": 3, "💎": 5, "7️⃣": 10}
+TWO_PAYS = {"🍋": 1.2, "🍇": 1.2, "🔔": 1.5, "⭐": 2, "💎": 3, "7️⃣": 5}
 
 
 def BaseMultiplier(reels: tuple[str, str, str]) -> float:

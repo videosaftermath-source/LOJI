@@ -161,7 +161,7 @@ DEFAULT_CONFIG: dict = {
         # Max bets are about a week of an active player's income; the biggest prizes are capped
         # so one lucky round can't break the economy (see docs/economia.md).
         "crash": {"min": 50, "max": 10_000, "cooldown": 10, "edge": 0.03, "max_multiplier": 100},
-        "slots": {"min": 20, "max": 5_000, "cooldown": 5, "edge": 0.04},
+        "slots": {"min": 20, "max": 5_000, "cooldown": 5, "edge": 0.10},
         "coinflip": {"min": 20, "max": 20_000, "cooldown": 3, "edge": 0.02},
         "blackjack": {"min": 50, "max": 20_000, "cooldown": 5, "edge": 0.02},
         "roulette": {"min": 20, "max": 20_000, "cooldown": 5, "edge": 0.027},
