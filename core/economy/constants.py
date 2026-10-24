@@ -31,6 +31,7 @@ DEFAULT_CONFIG: dict = {
     "leaderboard": {"page_size": 10},
     "activity": {
         "channels": [],
+        "min_balance": 250,
         "min": 5,
         "max": 15,
         "cooldown": 60,
@@ -56,6 +57,10 @@ DEFAULT_CONFIG: dict = {
 
 # How often voice time is paid (the task interval).
 VOICE_TICK_MINUTES = 5
+
+# How long the chat listener remembers whether someone can earn (saves DB reads on every message).
+ELIGIBILITY_CACHE_SECONDS = 300
+MODULE_CACHE_SECONDS = 60
 
 
 @dataclass(frozen=True)
@@ -95,6 +100,8 @@ SETTINGS: list[Setting] = [
     Setting("work", "daily.cooldown", "Diario: espera (segundos)", int, HOUR, 7 * DAY),
     Setting("work", "daily.grace", "Diario: tiempo antes de perder racha (s)", int, HOUR, 14 * DAY,
             "Debe ser mayor que la espera del diario."),
+    Setting("activity", "activity.min_balance", "Saldo mínimo para ganar por chat", int, 0, 10_000_000,
+            "Quien tenga menos no gana por chat (ni gasta recursos del bot)."),
     Setting("activity", "activity.min", "Por mensaje: mínimo", int, 0, 100_000),
     Setting("activity", "activity.max", "Por mensaje: máximo", int, 0, 100_000),
     Setting("activity", "activity.cooldown", "Espera entre pagos (segundos)", int, 5, DAY),

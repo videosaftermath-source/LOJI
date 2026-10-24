@@ -174,3 +174,13 @@ def test_daily_hard_cap_respected():
     S = settings(min=100, max=100, soft_cap=300, hard_cap=500, diminish=0.5)
     _, paid = chat({}, 1, 50, S)
     assert paid == 500
+
+
+def test_ttl_cache():
+    from core.economy.activity import TTLCache
+
+    c = TTLCache()
+    assert c.Get("a", 0) is None
+    c.Set("a", False, 0, 10)
+    assert c.Get("a", 5) is False
+    assert c.Get("a", 11) is None

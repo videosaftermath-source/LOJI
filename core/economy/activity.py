@@ -114,6 +114,27 @@ class Guard:
             S.strikes.clear()
 
 
+class TTLCache:
+    """Tiny time-based cache. `now` is a monotonic time in seconds."""
+
+    def __init__(self):
+        self.items: dict = {}
+
+    def Get(self, key, now: float):
+        Item = self.items.get(key)
+        if Item and Item[0] > now:
+            return Item[1]
+        return None
+
+    def Set(self, key, value, now: float, ttl: float):
+        self.items[key] = (now + ttl, value)
+        if len(self.items) > 50_000:  # don't grow forever on huge servers
+            self.items = {k: v for k, v in self.items.items() if v[0] > now}
+
+    def Forget(self, key):
+        self.items.pop(key, None)
+
+
 def LocalDay(now: datetime, utc_offset: int) -> date:
     """The server's calendar day (streaks and caps reset at local midnight)."""
     return (now.astimezone(timezone.utc) + timedelta(hours=utc_offset)).date()

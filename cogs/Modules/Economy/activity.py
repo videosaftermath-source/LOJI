@@ -6,9 +6,9 @@ import discord
 from discord.ext import commands, tasks
 
 from core.bot.Module import ModuleCheck
-from core.economy.activity import OK, Guard, LocalDay, NextPayout
+from core.economy.activity import OK, Guard, LocalDay, NextPayout, TTLCache
 from core.economy.config import EcoConfig
-from core.economy.constants import MODULE, VOICE_TICK_MINUTES
+from core.economy.constants import ELIGIBILITY_CACHE_SECONDS, MODULE, MODULE_CACHE_SECONDS, VOICE_TICK_MINUTES
 from core.economy.service import EconomyError, Economy
 
 logger = logging.getLogger(__name__)
@@ -22,6 +22,8 @@ class EconomyActivity(commands.Cog):
     def __init__(self, client: commands.Bot):
         self.client = client
         self.guard = Guard()
+        self.eligible = TTLCache()
+        self.enabled = TTLCache()
         self.Voice.start()
 
     def cog_unload(self):
@@ -38,11 +40,18 @@ class EconomyActivity(commands.Cog):
             return
         if message.content.startswith(("!!", "/")):
             return  # commands aren't chatting
-        if not await ModuleCheck(message.guild.id, MODULE):
-            return
 
         Key = (message.guild.id, message.author.id)
         Now = time.monotonic()
+        # Cheap checks first: people under the minimum balance cost one DB read every few minutes.
+        if not await self.IsEligible(Key, Settings, Now):
+            return
+        Enabled = self.enabled.Get(message.guild.id, Now)
+        if Enabled is None:
+            Enabled = await ModuleCheck(message.guild.id, MODULE)
+            self.enabled.Set(message.guild.id, Enabled, Now, MODULE_CACHE_SECONDS)
+        if not Enabled:
+            return
         if self.guard.Check(Key, message.content, Now, Settings) != OK:
             return
         # Mark before any await so a second message right after can't also get paid.
@@ -74,6 +83,16 @@ class EconomyActivity(commands.Cog):
                 await message.add_reaction(STREAK_EMOJI)
             except discord.HTTPException:
                 pass
+
+    async def IsEligible(self, key, settings: dict, now: float) -> bool:
+        """Whether this user has enough balance to earn by chatting (cached)."""
+        if settings["min_balance"] <= 0:
+            return True
+        Cached = self.eligible.Get(key, now)
+        if Cached is None:
+            Cached = await Economy().PeekBalance(*key) >= settings["min_balance"]
+            self.eligible.Set(key, Cached, now, ELIGIBILITY_CACHE_SECONDS)
+        return Cached
 
     @tasks.loop(minutes=VOICE_TICK_MINUTES)
     async def Voice(self):

@@ -147,7 +147,10 @@ class EconomyBasics(commands.Cog):
             Paid = int(Activity.get("paid_today", 0)) if SameDay else 0
             Earned = int(Activity.get("earned_today", 0)) if SameDay else 0
             Goal = Chat["streak_messages"]
-            Value = (
+            Value = ""
+            if int(Account.get("balance", 0)) < Chat["min_balance"]:
+                Value += f"> 🔒 Necesitas {FormatAmount(Chat['min_balance'], Config)} para ganar por chatear.\n"
+            Value += (
                 f"> **Racha de chat:** 🔥 {ChatStreak} día(s) · x{Multiplier(ChatStreak, Chat):.2f}\n"
                 f"> **Hoy:** {FormatAmount(Earned, Config)} de {FormatAmount(Chat['hard_cap'], Config)} · "
                 f"{min(Paid, Goal)}/{Goal} mensajes para la racha"

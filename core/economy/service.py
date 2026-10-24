@@ -102,6 +102,13 @@ class EconomyService:
             session=session,
         )
 
+    async def PeekBalance(self, guild_id: int, user_id: int) -> int:
+        """Balance without creating an account (0 if there isn't one)."""
+        Account = await self.users.find_one(
+            {"guild_id": guild_id, "user_id": user_id}, {"balance": 1}
+        )
+        return int((Account or {}).get("balance", 0))
+
     async def Balance(self, guild_id: int, user_id: int) -> int:
         return int((await self.Account(guild_id, user_id)).get("balance", 0))
 
