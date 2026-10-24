@@ -149,6 +149,7 @@ class EconomyService:
         ref=None,
         when: dict | None = None,
         also_set: dict | None = None,
+        also_inc: dict | None = None,
         session=None,
         extra: dict | None = None,
     ) -> dict:
@@ -163,7 +164,7 @@ class EconomyService:
         Filter = {"guild_id": guild_id, "user_id": user_id, **(when or {})}
         if amount < 0:
             Filter["balance"] = {"$gte": -amount}
-        Update = {"$inc": {"balance": amount}}
+        Update = {"$inc": {"balance": amount, **(also_inc or {})}}
         if also_set:
             Update["$set"] = also_set
         Updated = await self.users.find_one_and_update(

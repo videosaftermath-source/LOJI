@@ -78,6 +78,8 @@ ARCHETYPES = {
 CREATED = "created"
 DESTROYED = "destroyed"
 TRANSFER = "transfer"
+BET = "bet"  # casino: money in
+PAYOUT = "payout"  # casino: money out
 
 HOUR = 3600
 DAY = 24 * HOUR
@@ -152,7 +154,16 @@ DEFAULT_CONFIG: dict = {
         "epic_pity": 10,
         "featured_chance": 0.5,
     },
+    "casino": {
+        "crash": {"min": 50, "max": 50_000, "cooldown": 10, "edge": 0.03, "max_multiplier": 100},
+        "slots": {"min": 20, "max": 20_000, "cooldown": 5, "edge": 0.04},
+        "coinflip": {"min": 20, "max": 50_000, "cooldown": 3, "edge": 0.02},
+        "blackjack": {"min": 50, "max": 50_000, "cooldown": 5, "edge": 0.02},
+    },
 }
+
+# Casino games: name shown to players.
+GAMES = {"crash": "🚀 Crash", "slots": "🎰 Slots", "coinflip": "🪙 Moneda", "blackjack": "🃏 Blackjack"}
 
 # How often voice time is paid (the task interval).
 VOICE_TICK_MINUTES = 5
@@ -183,6 +194,7 @@ SECTIONS = {
     "voice": "🔊 Pago por voz",
     "pets": "🐾 Mascotas",
     "gacha": "🎰 Gacha",
+    "casino": "🎲 Casino",
 }
 
 SETTINGS: list[Setting] = [
@@ -257,6 +269,17 @@ SETTINGS: list[Setting] = [
     Setting("gacha", "gacha.hard_pity", "Hard pity: legendaria segura en la nº", int, 1, 1000),
     Setting("gacha", "gacha.epic_pity", "Épica (o mejor) segura cada X", int, 1, 100),
     Setting("gacha", "gacha.featured_chance", "50/50: prob. de que salga la destacada", float, 0, 1),
+    *[
+        S
+        for Game, Label in (("crash", "Crash"), ("slots", "Slots"), ("coinflip", "Moneda"), ("blackjack", "Blackjack"))
+        for S in (
+            Setting("casino", f"casino.{Game}.min", f"{Label}: apuesta mínima", int, 1, 10_000_000),
+            Setting("casino", f"casino.{Game}.max", f"{Label}: apuesta máxima", int, 1, 100_000_000),
+            Setting("casino", f"casino.{Game}.cooldown", f"{Label}: espera (segundos)", int, 0, 3600),
+            Setting("casino", f"casino.{Game}.edge", f"{Label}: ventaja casa (0.03 = 3%)", float, 0, 0.5),
+        )
+    ],
+    Setting("casino", "casino.crash.max_multiplier", "Crash: multiplicador máximo", int, 2, 1000),
 ]
 
 SETTINGS_BY_PATH = {S.path: S for S in SETTINGS}

@@ -83,6 +83,9 @@ def Validate(config: dict):
         raise ConfigError("Las probabilidades legendaria + épica + rara tienen que sumar menos de 1 (el resto es común).")
     if Gacha["soft_pity"] > Gacha["hard_pity"]:
         raise ConfigError("El soft pity tiene que empezar antes del hard pity.")
+    for Game, Settings in config["casino"].items():
+        if Settings["min"] > Settings["max"]:
+            raise ConfigError(f"En {Game}, la apuesta mínima no puede ser mayor que la máxima.")
 
 
 class EconomyConfig:
@@ -109,9 +112,12 @@ class EconomyConfig:
             raise ConfigError("Esa opción no existe.")
         Current = await self.Get(guild_id)
         Candidate = copy.deepcopy(Current)
-        Section, Key = path.split(".")
+        *Parents, Key = path.split(".")
         Value = GetPath(DEFAULT_CONFIG, path) if raw is None or not raw.strip() else Parse(Option, raw)
-        Candidate[Section][Key] = Value
+        Target = Candidate
+        for Part in Parents:
+            Target = Target[Part]
+        Target[Key] = Value
         Validate(Candidate)
         if raw is None or not raw.strip():
             Update = {"$unset": {path: ""}}
