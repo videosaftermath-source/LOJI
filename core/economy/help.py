@@ -42,7 +42,7 @@ Todas las apuestas aceptan `500`, `1.5k`, `todo` o `mitad`. La casa gana un poco
 **`/casino moneda`**: cara o cruz, casi doblas.
 **`/casino slots`**: tragamonedas. Las parejas pagan poco; los tríos, mucho más (7️⃣7️⃣7️⃣ paga x832).
 **`/casino tragamonedas`**: ✨ versión de lujo animada, con los mismos premios y un poco mejor para ti.
-**`/casino crash`**: el multiplicador sube; retírate antes de que explote (hasta x100).
+**`/casino crash`**: el multiplicador sube; retírate antes de que explote (hasta x20).
 **`/casino blackjack`**: llega a 21 sin pasarte. Puedes pedir, plantarte o doblar.
 **`/casino ruleta`**: color, par/impar, mitades, docenas o un número (x36).
 **`/casino mines`**: abre casillas sin tocar minas. Más minas, más paga cada diamante. Al terminar: 🔁 Jugar de nuevo.

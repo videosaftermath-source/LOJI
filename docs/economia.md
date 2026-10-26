@@ -44,7 +44,7 @@ La casa siempre gana un poco a la larga (eso quita dinero de la economía), pero
 | 🪙 Moneda | 2% | 20.000 | x1,96 |
 | 🃏 Blackjack | Paga como un casino real (x2, blackjack x2,5); por sus reglas la casa gana ~1,4% jugando bien y ~5% jugando mal | 20.000 | x2,5 (blackjack natural, doblando x4) |
 | 🎡 Ruleta | 2,7% (como la europea) | 20.000 | x36 (un número) |
-| 🚀 Crash | 3% | 10.000 | x100 |
+| 🚀 Crash | 12% (explota al instante 1 de cada 8 veces) | 3.000 | x20 |
 | 💣 Mines | 3% | 10.000 | x100 (cobra solo al llegar) |
 | 🔼 Mayor o menor | 3% | 10.000 | x100 (cobra solo al llegar) |
 | 🎰 Slots | 10% (como una tragamonedas real) | 5.000 | x832 (7️⃣7️⃣7️⃣, 1 de cada 125.000) |

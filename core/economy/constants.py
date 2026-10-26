@@ -167,7 +167,8 @@ DEFAULT_CONFIG: dict = {
     "casino": {
         # Max bets are about a week of an active player's income; the biggest prizes are capped
         # so one lucky round can't break the economy (see docs/economia.md).
-        "crash": {"min": 50, "max": 10_000, "cooldown": 10, "edge": 0.03, "max_multiplier": 100},
+        # Nerfed hard: it was the easiest game to farm with low auto cash-outs.
+        "crash": {"min": 50, "max": 3_000, "cooldown": 20, "edge": 0.12, "max_multiplier": 20},
         "slots": {"min": 20, "max": 5_000, "cooldown": 5, "edge": 0.10},
         # Same reels and paytable as slots, animated; a bit better odds since each spin takes longer.
         "deluxe": {"min": 50, "max": 5_000, "cooldown": 8, "edge": 0.08},

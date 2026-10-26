@@ -61,7 +61,7 @@ Las apuestas aceptan **`500`**, **`1.5k`**, **`todo`** o **`mitad`**. Usa **`/ca
 > 🪙 **`/casino moneda`**: cara o cruz. Casi doblas lo apostado.
 > 🎰 **`/casino slots`**: tragamonedas rápida. 1 de cada 3 tiradas gana, y el 7️⃣7️⃣7️⃣ paga **x832**.
 > 🎰✨ **`/casino tragamonedas`**: la versión de lujo **animada**. Mismos premios y un poco mejor para ti.
-> 🚀 **`/casino crash`**: el multiplicador sube... ¡retírate antes de que explote! (hasta x100). Puedes poner un retiro automático.
+> 🚀 **`/casino crash`**: el multiplicador sube... ¡retírate antes de que explote! (hasta x20, y a veces explota al instante). Puedes poner un retiro automático.
 > 🃏 **`/casino blackjack`**: llega a 21 sin pasarte. Puedes pedir, plantarte o doblar.
 > 🎡 **`/casino ruleta`**: rojo/negro, par/impar, mitades, docenas o un número (x36).
 > 💣 **`/casino mines`**: abre casillas sin tocar minas. Cada diamante multiplica, y con más minas, más paga. Botón 🔁 para repetir.
@@ -70,7 +70,7 @@ Las apuestas aceptan **`500`**, **`1.5k`**, **`todo`** o **`mitad`**. Usa **`/ca
 
 ## 🧠 Consejos
 > 🏠 **La casa siempre gana un poco a la larga** (entre 2% y 10% según el juego). El casino es para **divertirse**, no para hacerse rico.
-> 💡 Los que pierden menos: **blackjack** (paga x2 y x2.5 como en un casino real; jugando bien la casa gana solo ~1,4%) y **moneda** (2%). Los más arriesgados: **crash, mines y mayor o menor**, que pueden dar premios enormes.
+> 💡 Los que pierden menos: **blackjack** (paga x2 y x2.5 como en un casino real; jugando bien la casa gana solo ~1,4%) y **moneda** (2%). Los más arriesgados: **crash** (la casa gana 12%), **mines y mayor o menor**, que pueden dar premios enormes.
 > 🛑 Ponte un límite y **retírate a tiempo** en crash, mines y mayor o menor.
 > 🍀 Con una mascota **Suertuda** activa, la casa gana un poco menos.
 =====
