@@ -10,6 +10,8 @@ from discord.ext import commands
 from core.bot.HelpEmbeds import NotYourPanel
 from core.bot.emojis import Emojis
 from core.bot.permissions import Permissions
+from core.economy.audit import CATEGORIES, PERIODS, Audit
+from core.economy.audit import TOP as AUDIT_TOP
 from core.economy.config import ConfigError, EcoConfig, GetPath
 from core.economy.constants import DEFAULT_CONFIG, PETS, SECTIONS, SETTINGS, SETTINGS_BY_PATH, USERS
 from core.economy.charts import StatsChart
@@ -328,6 +330,49 @@ class EconomyAdmin(commands.Cog):
         )
         embed.set_footer(text=f"Motivo: {motivo}"[:2048])
         await ctx.send(embed=embed, view=ResetConfirm(ctx.author, usuario, motivo), ephemeral=True)
+
+    @eco_admin.command(name="hacienda", description="Top 10 de quién más ganó en un periodo, separado por origen (para detectar abusos)")
+    @app_commands.describe(periodo="Cuánto mirar hacia atrás", ordenar="Por qué ordenar el top")
+    @app_commands.choices(
+        periodo=[app_commands.Choice(name=f"Últimas {P}" if P == "24h" else f"Últimos {P[:-1]} días", value=P) for P in PERIODS],
+        ordenar=[app_commands.Choice(name="Total", value="total")]
+        + [app_commands.Choice(name=f"{E} {L}", value=K) for K, (E, L) in CATEGORIES.items()],
+    )
+    @Permissions("Admin")
+    async def hacienda(self, ctx: commands.Context, periodo: str = "24h", ordenar: str = "total"):
+        await ctx.defer(ephemeral=True)
+        if periodo not in PERIODS or (ordenar != "total" and ordenar not in CATEGORIES):
+            return await ctx.send(f"{Emojis.no} Periodo u orden no válido.", ephemeral=True)
+        Config = await EcoConfig().Get(ctx.guild.id)
+        Users = await Audit(Economy(), ctx.guild.id, periodo, Config)
+        Users.sort(key=lambda U: U[ordenar], reverse=True)
+        Name = "las últimas 24 h" if periodo == "24h" else f"los últimos {periodo[:-1]} días"
+
+        def Signed(value: int) -> str:
+            return f"{value:+,}".replace(",", ".")
+
+        Lines = []
+        for Rank, U in enumerate([U for U in Users if U[ordenar] > 0][:AUDIT_TOP], 1):
+            Parts = " · ".join(f"{CATEGORIES[C][0]} {Signed(U[C])}" for C in CATEGORIES if U[C])
+            Games = f" ({U['games']} {'partida' if U['games'] == 1 else 'partidas'})" if U["games"] else ""
+            Lines.append(f"**{Rank}.** <@{U['user_id']}> · **{Signed(U['total'])}**\n> {Parts}{Games}")
+            Lines += [f"> {Flag}" for Flag in U["flags"]]
+        Totals = {C: sum(U[C] for U in Users) for C in CATEGORIES}
+        embed = discord.Embed(
+            title=f"🧾 Hacienda · {Name}",
+            description="\n".join(Lines)[:4000] or "Nadie ganó dinero en este periodo.",
+            color=discord.Color.dark_red(),
+        )
+        embed.add_field(
+            name="En todo el servidor",
+            value="\n".join(f"{E} {L}: **{Signed(Totals[C])}**" for C, (E, L) in CATEGORIES.items()),
+            inline=False,
+        )
+        embed.set_footer(
+            text=f"Ordenado por: {'total' if ordenar == 'total' else CATEGORIES[ordenar][1]} · "
+            "No cuenta gastos (tienda, gacha, mascotas) ni movimientos del banco"
+        )
+        await ctx.send(embed=embed, ephemeral=True, allowed_mentions=discord.AllowedMentions.none())
 
     @eco_admin.command(name="config", description="Ver y editar la configuración de la economía")
     @Permissions("Admin")

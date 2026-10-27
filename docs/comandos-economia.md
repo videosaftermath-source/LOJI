@@ -87,5 +87,6 @@ Requieren permiso de **Administrar servidor**.
 **`/eco-admin regalar-mascota`**: dar una mascota (premios o pruebas).
 **`/eco-admin stats`**: dinero en circulación, inflación, flujos y gráfico.
 **`/eco-admin desbloquear`**: quitar un bloqueo anti-spam.
+**`/eco-admin hacienda`**: top 10 de quién más ganó en 24 h, 3, 7 o 14 días, separado por casino, trabajo/chat, premios, admins y transferencias, con alertas.
 **`/eco-admin reiniciar`**: borrar toda la economía de alguien (dinero, banco, mascotas, items y progreso). Pide confirmación.
 Precios recomendados y balance: docs/economia.md
