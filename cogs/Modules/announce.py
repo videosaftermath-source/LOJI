@@ -12,6 +12,7 @@ from cogs.Modules.Utilities.info import LOJI_RED
 ASSETS = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "assets", "announce")
 DEFAULT_BANNER = os.path.join(ASSETS, "banner.png")
 DEFAULT_ICON = os.path.join(ASSETS, "icono.png")
+DEFAULT_AUTHOR_IMAGE = os.path.join(ASSETS, "autor.png")
 DEFAULT_AUTHOR = "Departamento Administrativo ESS"
 FOOTER = "Transmitido por LOJI"
 PREVIEW_TIMEOUT = 600
@@ -52,19 +53,28 @@ async def ReadImage(attachment: discord.Attachment | None, default: str, name: s
 class Draft:
     """Everything needed to build (and rebuild) the announcement."""
 
-    def __init__(self, author: str, banner: discord.Attachment | None, icon: discord.Attachment | None, mention: discord.Role | None):
+    def __init__(
+        self,
+        author: str,
+        banner: discord.Attachment | None,
+        icon: discord.Attachment | None,
+        author_image: discord.Attachment | None,
+        mention: discord.Role | None,
+    ):
         self.title = ""
         self.text = ""
         self.author = author
-        self.uploads = (banner, icon)
+        self.uploads = (banner, icon, author_image)
         self.banner: tuple[bytes, str] | None = None
         self.icon: tuple[bytes, str] | None = None
+        self.author_image: tuple[bytes, str] | None = None
         self.mention = mention
 
     async def Load(self):
         if self.banner is None:
             self.banner = await ReadImage(self.uploads[0], DEFAULT_BANNER, "banner")
             self.icon = await ReadImage(self.uploads[1], DEFAULT_ICON, "icono")
+            self.author_image = await ReadImage(self.uploads[2], DEFAULT_AUTHOR_IMAGE, "autor")
 
     def Content(self) -> str | None:
         if not self.mention:
@@ -73,12 +83,11 @@ class Draft:
 
     def Build(self, sender: discord.ClientUser) -> tuple[discord.Embed, list[discord.File]]:
         embed = discord.Embed(title=self.title, description=self.text, color=LOJI_RED, timestamp=discord.utils.utcnow())
-        Icon = f"attachment://{self.icon[1]}"
-        embed.set_author(name=Fancy(self.author)[:256], icon_url=Icon)
-        embed.set_thumbnail(url=Icon)
+        embed.set_author(name=Fancy(self.author)[:256], icon_url=f"attachment://{self.author_image[1]}")
+        embed.set_thumbnail(url=f"attachment://{self.icon[1]}")
         embed.set_image(url=f"attachment://{self.banner[1]}")
         embed.set_footer(text=FOOTER, icon_url=sender.display_avatar.url)
-        Files = [discord.File(io.BytesIO(self.banner[0]), self.banner[1]), discord.File(io.BytesIO(self.icon[0]), self.icon[1])]
+        Files = [discord.File(io.BytesIO(Data), Name) for Data, Name in (self.banner, self.icon, self.author_image)]
         return embed, Files
 
 
@@ -155,6 +164,7 @@ class Announce(commands.Cog):
         autor=f"Texto de arriba (por defecto: {DEFAULT_AUTHOR})",
         imagen="Banner grande (por defecto, el de LOJI)",
         icono="Icono de la esquina (por defecto, el dragón)",
+        imagen_autor="Imagen pequeña junto al autor (por defecto, la de los trompetistas)",
     )
     @app_commands.default_permissions(administrator=True)
     @app_commands.guild_only()
@@ -166,15 +176,17 @@ class Announce(commands.Cog):
         autor: app_commands.Range[str, 1, 200] | None = None,
         imagen: discord.Attachment | None = None,
         icono: discord.Attachment | None = None,
+        imagen_autor: discord.Attachment | None = None,
     ):
         if not interaction.user.guild_permissions.administrator:
             return await interaction.response.send_message("❌ Solo los administradores pueden publicar anuncios.", ephemeral=True)
         try:
             CheckImage(imagen)
             CheckImage(icono)
+            CheckImage(imagen_autor)
         except ValueError as e:
             return await interaction.response.send_message(f"❌ {e}", ephemeral=True)
-        Draft_ = Draft(autor or DEFAULT_AUTHOR, imagen, icono, mencion)
+        Draft_ = Draft(autor or DEFAULT_AUTHOR, imagen, icono, imagen_autor, mencion)
         await interaction.response.send_modal(TextModal(Draft_, canal or interaction.channel))
 
 
