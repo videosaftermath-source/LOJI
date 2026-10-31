@@ -166,7 +166,8 @@ def Table(game: dict, selected: list[str] | None = None, state: str | None = Non
         D.rounded_rectangle((Bar[0], Bar[1], Fill, Bar[3]), 8, fill=RED)
     D.text((32, 238), f"MANOS {game['hands']}/{M.HANDS}", font=Font(18), fill=TEXT)
     D.text((200, 238), f"DESCARTES {game['discards']}/{M.DISCARDS}", font=Font(18), fill=TEXT)
-    D.text((W - 32, 240), f"Premio al vencer al jefe: x{M.LADDER[game['ante']]:g}", font=Font(16, bold=False), fill=MUTED, anchor="ra")
+    Prize = "Partida de práctica" if not game["bet"] else f"Premio al vencer al jefe: x{M.LADDER[game['ante']]:g}"
+    D.text((W - 32, 240), Prize, font=Font(16, bold=False), fill=MUTED, anchor="ra")
     if Rule:
         GlowText(Img, (W / 2, 278), "⚠ " + M.BOSSES[M.BossOf(game)][1].upper(), Font(15), RED_GLOW, anchor="mm")
     if Shown:

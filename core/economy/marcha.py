@@ -324,10 +324,11 @@ def Seal(game: dict, rng: random.Random):
         game["sealed"] = None
 
 
-def NewGame(bet: int, rng: random.Random) -> dict:
+def NewGame(bet: int, rng: random.Random, antes: int = ANTES) -> dict:
+    """`antes` < ANTES makes a short run (the tutorial's practice game)."""
     Game = {
         "bet": bet, "ante": 0, "blind": 0, "cleared": 0, "money": START_MONEY, "jokers": [], "levels": {},
-        "bosses": BossOrder(rng),
+        "bosses": BossOrder(rng), "antes": antes,
     }
     NewBlind(Game, rng)
     return Game
@@ -383,7 +384,7 @@ def Play(game: dict, cards: list[str], rng: random.Random | None = None) -> dict
         game["earned"] = Earned
         if game["blind"] == len(BLINDS) - 1:
             game["cleared"] = game["ante"] + 1
-            game["state"] = "won" if game["cleared"] == ANTES else "ante_cleared"
+            game["state"] = "won" if game["cleared"] == game.get("antes", ANTES) else "ante_cleared"
         else:
             game["state"] = "shop"
         if game["state"] in ("shop", "ante_cleared"):

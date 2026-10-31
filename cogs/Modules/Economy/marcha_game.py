@@ -64,6 +64,28 @@ def BossFile(boss: str) -> discord.File | None:
     return None
 
 
+def PracticeTip(game: dict) -> str:
+    """What to do next, for the tutorial's practice game."""
+    State = game["state"]
+    if State == "shop":
+        return ("🎓 **La tienda.** Con tus ◈ compra **comodines** (cambian cómo puntúas) o **actualizaciones** "
+                "(suben de nivel una jugada para siempre). Puedes **renovar** las ofertas o **vender** comodines. "
+                "Cuando termines, pulsa **Siguiente**.")
+    if State != "playing":
+        return ""
+    if game["blind"] == len(M.BLINDS) - 1:
+        return ("🎓 **¡Un jefe!** Cada jefe tiene una **regla especial** (está en rojo en la mesa). "
+                "En una partida de verdad, al vencerlo eliges **cobrar** tus créditos o **seguir marchando**.")
+    if game["blind"] == 1:
+        return ("🎓 **La Muralla** pide más señal. Los **comodines que brillan en dorado** son los que se activan "
+                "con las cartas que elegiste: busca jugadas que los aprovechen.")
+    if game["hands"] == M.HANDS and game["discards"] == M.DISCARDS:
+        return ("🎓 **Paso 1:** abre el menú y elige de 1 a 5 cartas. La mesa te muestra qué **jugada** formas y "
+                "cuántos puntos da (**fichas × multi**). Pulsa **Jugar mano**. Si tus cartas son malas, "
+                "**descártalas**: cambias cartas sin gastar una mano.")
+    return "🎓 Sigue jugando manos hasta llenar la barra de **señal**. Pareja < Doble pareja < Trío < Escalera < Color < Full < Póker."
+
+
 class CardSelect(discord.ui.Select):
     def __init__(self, view: "MarchaView"):
         Picked = set(view.selected)
@@ -108,8 +130,9 @@ class Button(discord.ui.Button):
 
 
 class MarchaView(discord.ui.View):
-    def __init__(self, member: discord.Member, game: dict, config: dict, note: str = ""):
+    def __init__(self, member: discord.Member, game: dict, config: dict, note: str = "", practice: bool = False):
         super().__init__(timeout=GAME_TIMEOUT)
+        self.practice = practice  # tutorial: nothing is charged, paid or saved
         self.member = member
         self.game = game
         self.config = config
@@ -197,6 +220,13 @@ class MarchaView(discord.ui.View):
                 f"-# Si sigues y caes, lo pierdes todo. El próximo jefe paga x{M.LADDER[G['cleared']]:g}."
             )
             Color = discord.Color.green()
+        elif self.practice and State == "won":
+            Text = ("🎓 **¡Práctica completada!** Ya sabes jugar. La partida de verdad tiene **8 antes**, "
+                    "cada jefe paga más y el último es **LOJI**.\n▶️ `/casino marcha cantidad:500`")
+            Color = discord.Color.gold()
+        elif self.practice and State == "failed":
+            Text = "🎓 No llegaste esta vez, ¡pero así se aprende! Repite la práctica con `/tutorial marcha`."
+            Color = discord.Color.dark_red()
         elif State in ("won", "cashed"):
             Text = f"💰 Cobraste {Money(self.paid)}."
             if State == "won":
@@ -208,10 +238,14 @@ class MarchaView(discord.ui.View):
                 "-# *\"If I take a thousand steps backwards, when will I arrive?\"*"
             )
             Color = discord.Color.dark_red()
-        embed = discord.Embed(title="🃏 La Larga Marcha", description=(self.note + "\n" if self.note else "") + Text, color=Color)
+        if self.practice and (Tip := PracticeTip(G)):
+            Text += "\n\n" + Tip
+        Title = "🎓 La Larga Marcha · Práctica" if self.practice else "🃏 La Larga Marcha"
+        embed = discord.Embed(title=Title, description=(self.note + "\n" if self.note else "") + Text, color=Color)
         for Name, Value in Fields:
             embed.add_field(name=Name, value=Value[:1024], inline=False)
-        embed.set_author(name=f"{self.member.display_name} apostó {G['bet']:,}".replace(",", "."), icon_url=self.member.display_avatar)
+        Who = f"{self.member.display_name} · partida de práctica" if self.practice else f"{self.member.display_name} apostó {G['bet']:,}".replace(",", ".")
+        embed.set_author(name=Who, icon_url=self.member.display_avatar)
         embed.set_image(url="attachment://marcha.png")
         embed.set_footer(text=HAND_TABLE)
         return embed
@@ -252,9 +286,10 @@ class MarchaView(discord.ui.View):
             SortHand(self.game)
             State = self.game["state"]
             if State in ("won", "failed"):
-                self.paid = await Eco().marcha.Finish(self.member, self.game, cash_out=State == "won")
+                if not self.practice:
+                    self.paid = await Eco().marcha.Finish(self.member, self.game, cash_out=State == "won")
                 self.stop()
-            else:
+            elif not self.practice:
                 await Eco().marcha.Save(self.member.guild.id, self.member.id, self.game)
             await self.Update(interaction)
         finally:

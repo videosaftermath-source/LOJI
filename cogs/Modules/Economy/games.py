@@ -1,7 +1,11 @@
 """/juegos: a friendly guide to every casino game, with live limits from the server's config."""
 
+import random
+
 import discord
 from discord.ext import commands
+
+from cogs.Modules.Economy.marcha_game import MarchaView
 
 from core.bot.Module import ModuleIsEnabled
 from core.economy import marcha as M
@@ -158,6 +162,60 @@ class GameMenu(discord.ui.View):
         await interaction.response.edit_message(embed=embed, view=self)
 
 
+PRACTICE_JOKERS = ["camarada", "doble"]  # so the practice shows what jokers do
+PRACTICE_MONEY = 8
+
+
+def TutorialEmbed() -> discord.Embed:
+    embed = discord.Embed(
+        title="🎓 Tutorial · La Larga Marcha",
+        description=(
+            "Un póker por etapas donde **armas combinaciones**, compras **comodines** y desafías a **jefes** "
+            "hasta llegar a **LOJI**. Lee esto en un minuto y luego juega una **práctica gratis**."
+        ),
+        color=LOJI_RED,
+    )
+    embed.add_field(name="1️⃣ El objetivo", value=(
+        "Cada ronda (*ciega*) pide una cantidad de **señal**. Tienes **4 manos** para conseguirla y **3 descartes** "
+        "para cambiar cartas malas."
+    ), inline=False)
+    embed.add_field(name="2️⃣ Cómo se puntúa", value=(
+        "Eliges hasta 5 de tus 8 cartas y juegas la mejor combinación.\n"
+        "**Señal = fichas × multi**. La combinación da una base y las cartas que puntúan suman sus fichas "
+        "(A = 11, figuras = 10).\n-# Pareja 10×2 · Doble 20×2 · Trío 30×3 · Escalera 30×4 · Color 35×4 · Full 40×4 · Póker 60×7"
+    ), inline=False)
+    embed.add_field(name="3️⃣ Comodines y tienda", value=(
+        "Al ganar una ciega recibes **◈ Datos**: la recompensa, +1 por cada mano que te sobre y **+1 de interés por cada 5 que guardes**. "
+        "En la tienda compras **comodines** (+multi, ×multi, fichas extra...) y **actualizaciones** que suben de nivel una jugada. "
+        "Máximo 5 comodines."
+    ), inline=False)
+    embed.add_field(name="4️⃣ Antes y jefes", value=(
+        "Cada **ante** tiene 3 ciegas: 🛡️ Patrulla, 🧱 Muralla y 👹 **Jefe**. Cada jefe tiene una **regla especial** "
+        "(por ejemplo, que los ♥ no puntúen). Sabes cuál viene antes de llegar. El jefe del ante 8 es **LOJI**."
+    ), inline=False)
+    embed.add_field(name="5️⃣ Cobrar o seguir", value=(
+        "En la partida de verdad pagas una entrada. Tras vencer a cada jefe eliges **cobrar** o **seguir**: "
+        "×0,6 → ×1,1 → ×2 → ×5 → ×12 → ×30 → **×75 si vences a LOJI**. Si caes, lo pierdes todo."
+    ), inline=False)
+    embed.set_footer(text="La práctica es gratis, dura un ante y no cuenta para el límite diario.")
+    return embed
+
+
+class TutorialStart(discord.ui.View):
+    def __init__(self, author: discord.abc.User, config: dict):
+        super().__init__(timeout=GUIDE_TIMEOUT)
+        self.author = author
+        self.config = config
+
+    @discord.ui.button(label="Empezar práctica", emoji="🎓", style=discord.ButtonStyle.red)
+    async def Start(self, interaction: discord.Interaction, _):
+        Game = M.NewGame(0, random.SystemRandom(), antes=1)
+        Game["jokers"], Game["money"] = list(PRACTICE_JOKERS), PRACTICE_MONEY
+        View = MarchaView(interaction.user, Game, self.config, practice=True)
+        embed, Files = await View.Render()
+        await interaction.response.send_message(embed=embed, files=Files, view=View, ephemeral=True)
+
+
 class EconomyGames(commands.Cog):
     def __init__(self, client: commands.Bot):
         self.client = client
@@ -168,6 +226,18 @@ class EconomyGames(commands.Cog):
     async def juegos(self, ctx: commands.Context):
         Config = await EcoConfig().Get(ctx.guild.id)
         await ctx.send(embed=Overview(Config), view=GameMenu(ctx.author, Config))
+
+
+    @commands.hybrid_group(name="tutorial", description="Aprende a jugar")
+    @commands.guild_only()
+    async def tutorial(self, ctx: commands.Context):
+        pass
+
+    @tutorial.command(name="marcha", description="Aprende La Larga Marcha con una partida de práctica gratis")
+    @ModuleIsEnabled(MODULE)
+    async def tutorial_marcha(self, ctx: commands.Context):
+        Config = await EcoConfig().Get(ctx.guild.id)
+        await ctx.send(embed=TutorialEmbed(), view=TutorialStart(ctx.author, Config), ephemeral=True)
 
 
 async def setup(client: commands.Bot) -> None:
