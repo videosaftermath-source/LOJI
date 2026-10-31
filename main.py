@@ -178,6 +178,7 @@ class Client(commands.AutoShardedBot):
             "cogs.Modules.staffmanagement",
             "cogs.Modules.embeds",
             "cogs.Modules.announce",
+            "cogs.Modules.Mail.config",
             "cogs.Modules.Economy.basics",
             "cogs.Modules.Economy.admin",
             "cogs.Modules.Economy.activity",
