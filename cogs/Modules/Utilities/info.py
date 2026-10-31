@@ -100,7 +100,7 @@ class Buttons(discord.ui.View):
                 "* [Solar Icon Sets](https://icon-sets.iconify.design/solar/)\n"
                 "* [Tabler](https://tabler.io)\n"
                 "* [Google Material Icons](https://fonts.google.com/icons?selected=Material+Icons)\n"
-                "* Iconos de comodines de La Larga Marcha: [game-icons.net](https://game-icons.net) "
+                "* Iconos de mascotas y de comodines de La Larga Marcha: [game-icons.net](https://game-icons.net) "
                 "(Lorc, Delapouite, Caro Asercion), [CC BY 3.0](https://creativecommons.org/licenses/by/3.0/)"
             ),
             color=discord.Color.dark_embed(),
