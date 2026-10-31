@@ -1,6 +1,7 @@
 """Pictures for La Larga Marcha: the table (hand, jokers, score) and the shop. LOJI red, CRT lines."""
 
 import io
+import os
 import textwrap
 
 from PIL import Image, ImageDraw, ImageFilter
@@ -19,6 +20,9 @@ CARDS_Y = 400
 RAISE = 24
 SCANLINE_EVERY = 3
 JOKER_W, JOKER_H = 150, 92
+ICONS = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "assets", "marcha", "jokers")
+ICON_COLORS = {"common": (236, 226, 214), "uncommon": (120, 220, 150), "rare": (255, 90, 96), "planet": (120, 170, 255)}
+_icons: dict[str, Image.Image | None] = {}
 RARITY_COLORS = {"common": (120, 140, 160), "uncommon": (90, 200, 120), "rare": (220, 70, 80), "planet": (90, 140, 230)}
 
 BANNERS = {
@@ -78,6 +82,20 @@ def Card(card: str, selected: bool, debuffed: bool = False) -> Image.Image:
     return Img
 
 
+def GameIcon(key: str, emoji: str, size: int, kind: str) -> Image.Image:
+    """The joker's drawn icon (game-icons.net, tinted by rarity), or its emoji if there's none."""
+    if key not in _icons:
+        Path = os.path.join(ICONS, f"{key}.png")
+        _icons[key] = Image.open(Path).convert("RGBA") if os.path.exists(Path) else None
+    Mask = _icons[key]
+    if Mask is None:
+        return Icon(emoji, key, "common", size)
+    Alpha = Mask.getchannel("A").resize((size, size), Image.LANCZOS)
+    Tinted = Image.new("RGBA", (size, size), ICON_COLORS[kind] + (0,))
+    Tinted.putalpha(Alpha)
+    return Tinted
+
+
 def JokerChip(joker_id: str, lit: bool = False, sealed: bool = False) -> Image.Image:
     """Small joker card for the table row."""
     Info = M.JokerInfo(joker_id)
@@ -85,7 +103,7 @@ def JokerChip(joker_id: str, lit: bool = False, sealed: bool = False) -> Image.I
     D = ImageDraw.Draw(Img)
     Border = GOLD if lit else RARITY_COLORS[Info["rarity"]]
     D.rounded_rectangle((0, 0, JOKER_W - 1, JOKER_H - 1), 10, fill=(28, 10, 14), outline=Border, width=3 if lit else 2)
-    Img.alpha_composite(Icon(Info["emoji"], Info["name"], "common", 40), ((JOKER_W - 40) // 2, 8))
+    Img.alpha_composite(GameIcon(joker_id, Info["emoji"], 40, Info["rarity"]), ((JOKER_W - 40) // 2, 8))
     D.text((JOKER_W / 2, 62), Info["name"], font=Font(13), fill=TEXT, anchor="mm")
     D.text((JOKER_W / 2, 80), ShortText(Info["text"], 24), font=Font(10, bold=False), fill=MUTED, anchor="mm")
     if sealed:
@@ -184,12 +202,14 @@ def OfferCard(offer: dict | None) -> Image.Image:
     if offer["type"] == "joker":
         Info = M.JokerInfo(offer["id"])
         Emoji, Name, Kind, Color, Text = Info["emoji"], Info["name"], M.JOKER_RARITY_LABELS[Info["rarity"]], RARITY_COLORS[Info["rarity"]], Info["text"]
+        Key, Tint = offer["id"], Info["rarity"]
     else:
         Label, *_ , PlusChips, PlusMult = M.HANDS_TABLE[offer["hand"]]
         Emoji, Name, Kind, Color = "🛰️", f"Actualización: {Label}", "Mejora de jugada", RARITY_COLORS["planet"]
+        Key, Tint = "_planet", "planet"
         Text = f"{Label} sube un nivel: +{PlusChips} fichas y +{PlusMult} multi"
     D.rounded_rectangle((0, 0, W - 1, H - 1), 14, fill=(28, 10, 14), outline=Color, width=3)
-    Img.alpha_composite(Icon(Emoji, Name, "common", 64), ((W - 64) // 2, 14))
+    Img.alpha_composite(GameIcon(Key, Emoji, 64, Tint), ((W - 64) // 2, 14))
     D.text((W / 2, 98), Name, font=Font(18), fill=TEXT, anchor="mm")
     D.text((W / 2, 120), Kind, font=Font(13, bold=False), fill=Color, anchor="mm")
     for i, Line in enumerate(textwrap.wrap(Text, 30)[:3]):

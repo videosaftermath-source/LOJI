@@ -61,6 +61,9 @@ BOSSES = {
     "iracundo": ("El Iracundo", "Solo tienes 1 descarte", {"discards": 1}),
     "recaudador": ("El Recaudador", "Cada mano que juegas te cobra ◈1", {"hand_cost": 1}),
     "koala": ("El Koala", "Siesta: tu primera mano no cuenta", {"first_hand_zero": True}),
+    "heisenberg": ("Heisenberg", "Say my name: si juegas tu jugada más usada, pierdes todos tus ◈", {"steal_on_favorite": True}),
+    "griton": ("El Gritón", "Debes jugar exactamente 5 cartas", {"exact_cards": 5}),
+    "corvus": ("Corvus", "Cada jugada que hagas baja 1 nivel", {"level_down": True}),
     "loji": ("LOJI", "En cada mano anula uno de tus comodines al azar", {"seal_joker": True}),
 }
 FINAL_BOSS = "loji"
@@ -86,6 +89,16 @@ def Rule(game: dict) -> dict:
     if game.get("blind") != len(BLINDS) - 1 or "bosses" not in game:
         return {}
     return BOSSES[BossOf(game)][2]
+
+
+def Favorite(game: dict) -> str | None:
+    """The hand type played most this run (ties: none)."""
+    Counts = game.get("played", {})
+    if not Counts:
+        return None
+    Top = max(Counts.values())
+    Best = [H for H, N in Counts.items() if N == Top]
+    return Best[0] if len(Best) == 1 else None
 
 
 def Debuffed(card: str, rule: dict) -> bool:
@@ -279,7 +292,8 @@ def Score(cards: list[str], game: dict | None = None) -> dict:
 def BestPlay(hand: list[str], game: dict | None = None) -> list[str]:
     """The highest-scoring set of up to 5 cards (used by the simulator)."""
     Best, BestScore = [], -1
-    for Size in range(1, MAX_PLAY + 1):
+    Exact = Rule(game or {}).get("exact_cards")
+    for Size in [Exact] if Exact else range(1, MAX_PLAY + 1):
         for Combo in combinations(hand, Size):
             S = Score(list(Combo), game)["total"]
             if S > BestScore:
@@ -345,14 +359,24 @@ def Play(game: dict, cards: list[str], rng: random.Random | None = None) -> dict
     if game["state"] != "playing" or game["hands"] <= 0:
         raise ValueError("No puedes jugar ahora.")
     Rng = rng or random.Random()
+    Rule_ = Rule(game)
+    if Rule_.get("exact_cards") and len(cards) != Rule_["exact_cards"]:
+        raise ValueError(f"El jefe exige jugar exactamente {Rule_['exact_cards']} cartas.")
     Result = Score(cards, game)
     Take(game, cards)
     game["score"] += Result["total"]
     game["hands"] -= 1
     game["last"] = {**Result, "cards": cards}
-    Cost = Rule(game).get("hand_cost", 0)
+    Cost = Rule_.get("hand_cost", 0)
     if Cost:
         game["money"] = max(0, game["money"] - Cost)
+    if Rule_.get("steal_on_favorite") and Result["hand"] == Favorite(game):
+        game["money"] = 0
+        game["last"]["robbed"] = True
+    if Rule_.get("level_down") and game["levels"].get(Result["hand"], 1) > 1:
+        game["levels"][Result["hand"]] -= 1
+    game.setdefault("played", {})
+    game["played"][Result["hand"]] = game["played"].get(Result["hand"], 0) + 1
     if game["score"] >= Target(game["ante"], game["blind"]):
         Earned = Earnings(game)
         game["money"] += Earned["total"]
@@ -462,7 +486,7 @@ def NextBlind(game: dict, rng: random.Random):
 
 GAME = "marcha"  # key in config["casino"] and in the casino ledger refs
 # What cashing out after beating each ante's boss pays (x bet). With the boss rules, a simple
-# simulated player beats antes 1-7 about 95%, 92%, 79%, 39%, 13%, 4% and 1% of the time.
+# simulated player beats antes 1-6 about 95%, 94%, 80%, 36%, 9% and 2% of the time.
 # Deep antes pay a lot because they need a good joker build; the daily limit and bet cap keep it safe.
 LADDER = (0.6, 0.8, 1.1, 2, 5, 12, 30, 75)
 

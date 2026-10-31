@@ -103,12 +103,14 @@ Juego de póker por antes, lo más parecido posible a Balatro, con estética LOJ
 - **Tienda** tras cada ciega: 2 ofertas (comodín o actualización de jugada), renovar por 5 (+1 cada vez) y vender comodines por la mitad. Máximo 5 comodines. Hay 24 comodines propios (comunes, poco comunes y raros).
 - **Jefes** (tercera ciega de cada ante), con retrato en `assets/marcha/bosses/`. Los antes 1-7 sacan uno al azar; el 8 siempre es **LOJI**, con retrato animado:
   - Nailoong: las ♥ no puntúan · El Coronado de Calaveras: las figuras no puntúan · El Iracundo: 1 descarte
-  - El Recaudador: cada mano cuesta ◈1 · El Koala: la primera mano no cuenta · **LOJI**: anula un comodín al azar en cada mano
+  - El Recaudador: cada mano cuesta ◈1 · El Koala: la primera mano no cuenta · Heisenberg: si juegas tu jugada más usada, te quita todos los ◈
+  - El Gritón: hay que jugar exactamente 5 cartas · Corvus: cada jugada baja 1 nivel · **LOJI**: anula un comodín al azar en cada mano
   - Para añadir un jefe: su retrato en `assets/marcha/bosses/<id>.png` y una línea en `BOSSES` (`core/economy/marcha.py`).
-- **Cobrar** tras cada jefe: ×0,6 · ×0,8 · ×1,1 · ×2 · ×5 · ×12 · ×30 · ×75. Con jefes, un bot simple vence los antes 1-7 el 95/92/79/39/13/4/1% de las veces.
+- **Cobrar** tras cada jefe: ×0,6 · ×0,8 · ×1,1 · ×2 · ×5 · ×12 · ×30 · ×75. Con los 8 jefes, un bot simple vence los antes 1-6 el 95/94/80/36/9/2% de las veces.
+- **Iconos de comodines:** [game-icons.net](https://game-icons.net) (Lorc, Delapouite, Caro Asercion), CC BY 3.0, en `assets/marcha/jokers/`. Son siluetas blancas que el bot tiñe según la rareza. El crédito está en el botón Attributions de `/info`.
 - Límite diario (5) y apuesta máxima de 3.000 (también por el límite global del casino).
 - Se guarda en `eco_marcha` y sobrevive a reinicios.
-- **Pendiente:** 3 jefes más, retratos para los comodines y torneo semanal.
+- **Pendiente:** torneo semanal.
 
 ## Boosters
 

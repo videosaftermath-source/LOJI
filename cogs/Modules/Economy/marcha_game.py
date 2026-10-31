@@ -175,6 +175,8 @@ class MarchaView(discord.ui.View):
             Text = f"**Ante {G['ante'] + 1}/{M.ANTES} · {Blind}**: llega a **{M.Target(G['ante'], G['blind']):,}** de señal.\n".replace(",", ".")
             if Boss:
                 Text += f"⚠️ {BossLine(G)}\n"
+                if (G.get("last") or {}).get("robbed"):
+                    Text += "💸 **Heisenberg se llevó todos tus ◈.**\n"
             elif "bosses" in G:
                 Text += f"-# Jefe de este ante: {BossLine(G)}\n"
             Text += "-# Elige cartas en el menú: la imagen te muestra la jugada y se iluminan los comodines que se activan."

@@ -191,3 +191,26 @@ def test_loji_seals_a_joker():
     assert g["sealed"] in (0, 1)
     s = M.Score(["AH"], g)
     assert len(s["triggered"]) == 1 and g["jokers"][g["sealed"]] not in s["triggered"]
+
+
+def test_new_boss_rules():
+    rng = random.Random(6)
+    g = M.NewGame(100, rng)
+    g["blind"] = len(M.BLINDS) - 1
+    g["bosses"][0] = "griton"
+    M.NewBlind(g, rng)
+    with pytest.raises(ValueError):
+        M.Play(g, g["hand"][:2], rng)
+    M.Play(g, g["hand"][:5], rng)
+    g["bosses"][0] = "heisenberg"
+    M.NewBlind(g, rng)
+    g["money"], g["played"] = 9, {"high": 3, "pair": 1}
+    hand = g["hand"]
+    high = next(([C] for C in hand), None)
+    M.Play(g, high, rng)  # one card = high card, the favourite
+    assert g["money"] == 0 and g["last"]["robbed"]
+    g["bosses"][0] = "corvus"
+    M.NewBlind(g, rng)
+    g["levels"] = {"high": 3}
+    M.Play(g, g["hand"][:1], rng)
+    assert g["levels"]["high"] == 2
