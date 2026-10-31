@@ -175,7 +175,7 @@ DEFAULT_CONFIG: dict = {
         "deluxe": {"min": 50, "max": 5_000, "cooldown": 8, "edge": 0.08},
         # La Larga Marcha: a skill game, so its prizes are fixed (core/economy/marcha.py) and
         # a daily limit stops good players from farming it. "edge" isn't used.
-        "marcha": {"min": 100, "max": 2_000, "cooldown": 5, "edge": 0.0, "daily_limit": 5},
+        "marcha": {"min": 100, "max": 3_000, "cooldown": 5, "edge": 0.0, "daily_limit": 5},
         "coinflip": {"min": 20, "max": 20_000, "cooldown": 3, "edge": 0.02},
         # Classic payouts (x2, blackjack x2.5): the rules alone give the house ~1.4% (~5% playing badly).
         # Any edge set here is taken from the winnings on top of that.
@@ -185,6 +185,8 @@ DEFAULT_CONFIG: dict = {
         "hilo": {"min": 50, "max": 10_000, "cooldown": 5, "edge": 0.03, "max_multiplier": 100},
         "race": {"min": 20, "max": 10_000, "cooldown": 10, "edge": 0.04},
     },
+    # One switch to cap every casino bet (stops people burning their savings in one go).
+    "casino_limit": {"enabled": True, "max": 3_000},
     "inflation": {
         "enabled": True,
         "active_days": 14,
@@ -361,6 +363,9 @@ SETTINGS: list[Setting] = [
     Setting("marcha", "casino.marcha.daily_limit", "Marcha: partidas por día", int, 1, 100,
             "Es un juego de habilidad: el límite evita que alguien muy bueno lo farmee."),
     Setting("marcha", "casino.marcha.cooldown", "Marcha: espera entre partidas (s)", int, 0, 3600),
+    Setting("casino", "casino_limit.enabled", "Límite global de apuesta (sí/no)", bool,
+            help="Si está activo, ningún juego deja apostar más que el límite global."),
+    Setting("casino", "casino_limit.max", "Límite global: apuesta máxima", int, 1, 100_000_000),
     Setting("casino", "casino.crash.max_multiplier", "Crash: multiplicador máximo", int, 2, 1000),
     Setting("casino2", "casino.mines.max_multiplier", "Mines: multiplicador máximo", int, 2, 1000,
             "Al llegar, cobra solo. Sin tope, una racha imposible pagaría miles de millones."),

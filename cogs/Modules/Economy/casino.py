@@ -12,6 +12,7 @@ from discord.ext import commands
 from core.bot.Module import ModuleIsEnabled
 from core.bot.emojis import Emojis
 from core.economy.casino import (
+    GameSettings,
     SLOT_SYMBOLS,
     THREE_PAYS,
     TWO_PAYS,
@@ -297,7 +298,7 @@ class EconomyCasino(commands.Cog):
         Luck = await Eco().casino.Luck(ctx.guild.id, ctx.author.id, Config)
         embed = discord.Embed(title="🎲 Casino", color=discord.Color.dark_gold())
         for Game, Label in GAMES.items():
-            S = Config["casino"][Game]
+            S = GameSettings(Config, Game)
             Edge = EffectiveEdge(S["edge"], Luck)
             embed.add_field(
                 name=f"{Label} · `/casino {GAME_COMMANDS[Game]}`",
@@ -314,7 +315,11 @@ class EconomyCasino(commands.Cog):
             ).replace(",", "."),
             inline=False,
         )
-        embed.set_footer(text="Puedes apostar números, 1.5k, todo o mitad. Juega con cabeza 😉")
+        Cap = Config["casino_limit"]
+        embed.set_footer(
+            text=("Límite global de apuesta: " + f"{Cap['max']:,}".replace(",", ".") + " · " if Cap["enabled"] else "")
+            + "Puedes apostar números, 1.5k, todo o mitad. Juega con cabeza 😉"
+        )
         await ctx.send(embed=embed)
 
     @casino.command(name="moneda", description="Cara o cruz: doblas lo apostado (menos la casa)")

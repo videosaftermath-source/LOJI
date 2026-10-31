@@ -416,3 +416,13 @@ def test_blackjack_pays_classic_odds_by_default():
     g.player, g.dealer = [card("A"), card("K")], [card("10"), card("7")]
     g.Settle()
     assert g.payout == 2500  # 3:2
+
+
+def test_global_bet_limit_switch():
+    from core.economy.casino import GameSettings
+
+    on = Merge(DEFAULT_CONFIG, {"casino_limit": {"enabled": True, "max": 3_000}})
+    off = Merge(DEFAULT_CONFIG, {"casino_limit": {"enabled": False}})
+    assert GameSettings(on, "coinflip")["max"] == 3_000
+    assert GameSettings(off, "coinflip")["max"] == DEFAULT_CONFIG["casino"]["coinflip"]["max"]
+    assert GameSettings(on, "slots")["max"] == min(3_000, DEFAULT_CONFIG["casino"]["slots"]["max"])

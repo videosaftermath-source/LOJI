@@ -40,6 +40,15 @@ def EffectiveEdge(edge: float, luck: float) -> float:
 AMOUNT = re.compile(r"^(\d+(?:[.,]\d+)?)\s*([km]?)$")
 
 
+def GameSettings(config: dict, game: str) -> dict:
+    """A game's settings with the global bet limit applied (if it's switched on)."""
+    Settings = dict(config["casino"][game])
+    Cap = config["casino_limit"]
+    if Cap["enabled"]:
+        Settings["max"] = min(Settings["max"], Cap["max"])
+    return Settings
+
+
 def ParseBet(raw: str, balance: int, settings: dict) -> int:
     """'500', '1.5k', '2m', 'todo', 'mitad' -> credits."""
     Text = str(raw).strip().lower().replace(" ", "")
@@ -243,7 +252,7 @@ class Casino:
         Validates and takes a bet. Returns (bet, effective edge, luck).
         `exclusive`: only one game of this kind at a time per user (crash, blackjack).
         """
-        Settings = config["casino"][game]
+        Settings = GameSettings(config, game)
         Guild = member.guild
         Key = (Guild.id, member.id, game)
         Wait = self.cooldowns.get(Key, 0) - time.monotonic()
