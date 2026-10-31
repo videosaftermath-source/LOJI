@@ -362,7 +362,7 @@ def Play(game: dict, cards: list[str], rng: random.Random | None = None) -> dict
     Rng = rng or random.Random()
     Rule_ = Rule(game)
     if Rule_.get("exact_cards") and len(cards) != Rule_["exact_cards"]:
-        raise ValueError(f"El jefe exige jugar exactamente {Rule_['exact_cards']} cartas.")
+        raise ValueError(f"El jefe exige jugar exactamente {Rule_['exact_cards']} cartas (elegiste {len(cards)}).")
     Result = Score(cards, game)
     Take(game, cards)
     game["score"] += Result["total"]

@@ -3,6 +3,7 @@
 import asyncio
 import io
 import os
+import uuid
 
 import discord
 
@@ -141,6 +142,9 @@ class MarchaView(discord.ui.View):
         self.paid = 0
         self.busy = False
         self.message: discord.Message | None = None
+        # Only the newest table of a saved game plays: resuming gives the game a new token.
+        self.token = uuid.uuid4().hex
+        game["table"] = self.token
         SortHand(game)
         self.Build()
 
@@ -162,7 +166,10 @@ class MarchaView(discord.ui.View):
         State = state or G["state"]
         if State == "playing":
             self.add_item(CardSelect(self))
-            self.add_item(Button("Jugar mano", "▶️", discord.ButtonStyle.red, self.Play, disabled=not self.selected))
+            Exact = M.Rule(G).get("exact_cards")
+            Ready = len(self.selected) == Exact if Exact else bool(self.selected)
+            Label = f"Jugar mano ({len(self.selected)}/{Exact})" if Exact else "Jugar mano"
+            self.add_item(Button(Label, "▶️", discord.ButtonStyle.red, self.Play, disabled=not Ready))
             self.add_item(Button(
                 f"Descartar ({G['discards']})", "🗑️", discord.ButtonStyle.grey, self.Discard,
                 disabled=not self.selected or not G["discards"],
@@ -274,9 +281,21 @@ class MarchaView(discord.ui.View):
 
     # ---- actions ----
 
+    async def Stale(self) -> bool:
+        """True if this game was resumed in a newer message (this table must not play)."""
+        if self.practice:
+            return False
+        Saved = await Eco().marcha.Active(self.member.guild.id, self.member.id)
+        return bool(Saved) and Saved.get("table") not in (None, self.token)
+
     async def Act(self, interaction: discord.Interaction, action):
         self.busy = True
         try:
+            if await self.Stale():
+                self.stop()
+                return await interaction.response.send_message(
+                    "⚠️ Esta mesa quedó vieja: seguiste la marcha en otro mensaje. Usa la más reciente (o `/casino marcha`).", ephemeral=True
+                )
             try:
                 action()
             except ValueError as e:

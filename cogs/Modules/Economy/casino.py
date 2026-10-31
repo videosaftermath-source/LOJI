@@ -402,6 +402,7 @@ class EconomyCasino(commands.Cog):
             Note = f"-# Te quedan {Left} marchas hoy."
             self.Played(ctx)
         View = MarchaView(ctx.author, Game, Config, Note)
+        await Eco().marcha.Save(ctx.guild.id, ctx.author.id, Game)  # saves the new table token
         embed, Files = await View.Render()
         View.message = await ctx.send(embed=embed, files=Files, view=View)
 
