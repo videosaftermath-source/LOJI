@@ -1,6 +1,6 @@
 # Buzón (sugerencias y tareas del staff)
 
-Reemplaza al modmail. Fases: 1) departamentos, cargos y credenciales ✅ · 2) `/mail` y decisiones · 3) `/tareas` · 4) quitar el modmail.
+Reemplaza al modmail. Fases: 1) departamentos, cargos y credenciales ✅ · 2) `/mail` y decisiones ✅ · 3) `/tareas` · 4) quitar el modmail.
 
 ## Permisos
 - **Por rol.** Cada departamento y cada cargo está ligado a un rol de Discord.
@@ -13,6 +13,15 @@ Reemplaza al modmail. Fases: 1) departamentos, cargos y credenciales ✅ · 2) `
 | Tenno, Consejo Supremo, Director de Moderación | abrir, cerrar y reabrir cualquier tarea |
 | Rol del departamento | reclamar y cerrar las tareas de su departamento |
 | Tenno (o un administrador del servidor) | configurar el buzón |
+
+## `/mail`
+1. El staff escribe título y sugerencia, y se publica en el canal de sugerencias con **✅ Se realizará / 💬 Se debatirá / ❌ Rechazada**.
+2. Al pulsar un botón se pide el **porqué**. Si no tienes el rol de Tenno o de Consejo Supremo, también la **credencial**.
+3. **Se realizará:** además se elige **departamento** y **prioridad** (alta, media o baja). Eso crea la tarea en la fase 3.
+4. **Se debatirá:** se publica una copia en «Cosas por debatir», donde solo se puede aceptar o rechazar. Al decidir, se actualizan las dos.
+5. El autor recibe cada decisión por **MD**. Los botones siguen funcionando aunque el bot se reinicie.
+
+Datos: `mail_suggestions` (numeradas por servidor) y `mail_counters`.
 
 ## Comandos
 - `/buzon config`: panel para el rol de staff, el canal de sugerencias, el canal «Cosas por debatir», los roles de los cargos, los departamentos (rol y canal de tareas; crear, renombrar, borrar) y las credenciales.
