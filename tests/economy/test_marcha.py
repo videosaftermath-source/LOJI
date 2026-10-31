@@ -48,23 +48,72 @@ def test_score_adds_scoring_cards_only():
 def test_game_flow():
     rng = random.Random(1)
     g = M.NewGame(100, rng)
-    assert len(g["hand"]) == M.HAND_SIZE and g["hands"] == M.HANDS
+    assert len(g["hand"]) == M.HAND_SIZE and g["hands"] == M.HANDS and g["money"] == M.START_MONEY
     with pytest.raises(ValueError):
         M.Play(g, ["XX"])
     with pytest.raises(ValueError):
         M.Play(g, g["hand"][:6])
     M.Discard(g, g["hand"][:3])
     assert g["discards"] == M.DISCARDS - 1 and len(g["hand"]) == M.HAND_SIZE
-    g["score"] = M.TARGETS[0] - 1
-    M.Play(g, g["hand"][:1])
-    assert g["state"] == "cleared" and g["cleared"] == 1 and M.Prize(g) == int(100 * M.LADDER[0])
-    M.NextStage(g, rng)
-    assert g["stage"] == 1 and g["score"] == 0 and g["state"] == "playing"
+    # Beat the first blind with 2 hands left after this one: reward 3 + 2 left + interest 0
+    g["score"] = M.Target(0, 0) - 1
+    M.Play(g, g["hand"][:1], rng)
+    assert g["state"] == "shop" and g["earned"]["total"] == 3 + 3 and g["money"] == M.START_MONEY + 6
+    assert len(g["shop"]) == M.SHOP_SLOTS
+    M.NextBlind(g, rng)
+    assert (g["ante"], g["blind"], g["state"]) == (0, 1, "playing")
     for _ in range(M.HANDS):
         if g["state"] == "playing":
             g["score"] = 0
-            M.Play(g, g["hand"][:1])
+            M.Play(g, g["hand"][:1], rng)
     assert g["state"] == "failed"
+
+
+def test_boss_gives_the_ante_choice_and_prize():
+    rng = random.Random(2)
+    g = M.NewGame(1000, rng)
+    g["blind"] = len(M.BLINDS) - 1
+    M.NewBlind(g, rng)
+    g["score"] = M.Target(0, g["blind"])
+    M.Play(g, g["hand"][:1], rng)
+    assert g["state"] == "ante_cleared" and g["cleared"] == 1 and M.Prize(g) == int(1000 * M.LADDER[0])
+    M.EnterShop(g)
+    M.NextBlind(g, rng)
+    assert (g["ante"], g["blind"]) == (1, 0)
+
+
+def test_jokers_levels_and_contains():
+    base = M.Score(["KH", "KS", "2D"])
+    assert (base["chips"], base["mult"]) == (30, 2)
+    g = {"jokers": ["camarada", "doble", "colmena", "corazon"], "levels": {"pair": 2}}
+    s = M.Score(["KH", "KS", "2D"], g)
+    # pair lv2: 25 chips / 3 mult; +10+10 card chips; corazon +3 (KH); camarada +4; doble +8; colmena x2
+    assert s["chips"] == 45 and s["mult"] == (3 + 3 + 4 + 8) * 2 and s["total"] == 45 * 36
+    assert set(s["triggered"]) == {"camarada", "doble", "colmena", "corazon"}
+    assert {"pair", "three", "two_pair"} <= M.Contains(["9H", "9S", "9D", "2C", "2H"], "full_house")
+    assert M.Score(["2H", "4S"], {"jokers": ["media"]})["mult"] == 1 + 20
+
+
+def test_shop_buy_sell_reroll():
+    rng = random.Random(3)
+    g = M.NewGame(100, rng)
+    g["state"], g["money"], g["reroll"] = "shop", 20, M.REROLL_BASE
+    g["shop"] = [{"type": "joker", "id": "ojo", "price": 9}, {"type": "planet", "hand": "flush", "price": 3}]
+    M.Buy(g, 0)
+    M.Buy(g, 1)
+    assert g["jokers"] == ["ojo"] and g["levels"]["flush"] == 2 and g["money"] == 8
+    with pytest.raises(ValueError):
+        M.Buy(g, 0)  # sold out
+    M.Reroll(g, rng)
+    assert g["money"] == 3 and g["reroll"] == M.REROLL_BASE + 1 and all(g["shop"])
+    with pytest.raises(ValueError):
+        M.Reroll(g, rng)  # can't afford
+    assert M.Sell(g, 0) == M.SellValue("ojo") and g["jokers"] == []
+
+
+def test_interest_is_capped():
+    g = {"blind": 0, "hands": 0, "money": 100}
+    assert M.Earnings(g)["interest"] == M.INTEREST_MAX
 
 
 def services():

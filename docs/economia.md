@@ -96,12 +96,15 @@ Consejos:
 
 ## La Larga Marcha (`/casino marcha`)
 
-Juego de póker por etapas inspirado en los roguelikes de cartas, con estética LOJI.
-- Mano de 8 cartas. Por etapa tienes 4 manos y 3 descartes, y juegas de 1 a 5 cartas. Puntos = (fichas de la jugada + valor de las cartas que puntúan) × multi.
-- Etapas: 450, 650 y 900 de señal. Tras cada una puedes cobrar ×1, ×1,3 o ×3,3 la entrada, o seguir (si fallas, pierdes todo).
-- Los premios se calibraron simulando miles de partidas con un jugador simple, que recupera ~90-93%. Como es un juego de habilidad, hay **límite diario** (5) para que nadie lo farmee.
-- La partida se guarda en `eco_marcha`, así que sobrevive a reinicios.
-- Próximas fases: B = comodines y tienda entre etapas (con arte de TFR); C = run completa, jefes y torneo semanal.
+Juego de póker por antes, lo más parecido posible a Balatro, con estética LOJI.
+- **8 antes** de 3 ciegas cada uno: Patrulla (×1), Muralla (×1,5) y Jefe (×2). Objetivo base por ante: 300, 800, 2.000, 5.000, 11.000, 20.000, 35.000 y 50.000 (como en Balatro).
+- Por ciega: mano de 8 cartas, 4 manos y 3 descartes. Puntos = (fichas de la jugada + cartas que puntúan) × multi, y luego los comodines de izquierda a derecha.
+- **◈ Datos** (dinero dentro de la partida): empiezas con 4; al superar una ciega ganas 3/4/5, más 1 por mano sobrante, más intereses (1 por cada 5, máximo 5).
+- **Tienda** tras cada ciega: 2 ofertas (comodín o actualización de jugada), renovar por 5 (+1 cada vez) y vender comodines por la mitad. Máximo 5 comodines. Hay 24 comodines propios (comunes, poco comunes y raros).
+- **Cobrar** tras cada jefe: ×0,6 · ×0,8 · ×1 · ×1,6 · ×4 · ×10 · ×25 · ×60. Un bot simple vence los antes 1-6 el 96/95/91/48/14/5% de las veces: los primeros son el calentamiento.
+- Límite diario (5) y apuesta máxima de 3.000 (también por el límite global del casino).
+- Se guarda en `eco_marcha` y sobrevive a reinicios.
+- **Fase C (pendiente):** jefes con reglas especiales (LOJI como jefe final), arte de TFR y torneo semanal.
 
 ## Boosters
 

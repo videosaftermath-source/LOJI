@@ -18,25 +18,43 @@ RANKS = "23456789TJQKA"
 RANK_LABELS = {"T": "10"}
 SUITS = "SHDC"  # spades, hearts, diamonds, clubs
 SUIT_SYMBOLS = {"S": "♠", "H": "♥", "D": "♦", "C": "♣"}
+FACES = "JQK"
+EVEN = "2468T"
+ODD = "A3579"
 HAND_SIZE = 8
 MAX_PLAY = 5
 HANDS = 4
 DISCARDS = 3
-# Score needed to clear each stage.
-TARGETS = (450, 650, 900)
 
-# Hand -> (label, chips, mult). Scoring cards add their own chips on top.
+# ---- run structure (like Balatro: antes of three blinds) ----
+ANTES = 8
+ANTE_BASE = (300, 800, 2000, 5000, 11000, 20000, 35000, 50000)  # first blind of each ante (as in Balatro)
+BLINDS = (("Patrulla", 1.0, 3), ("Muralla", 1.5, 4), ("Jefe", 2.0, 5))  # (name, x base score, ◈ reward)
+START_MONEY = 4
+INTEREST_EVERY, INTEREST_MAX = 5, 5  # +1 ◈ per 5 held, at most +5
+MONEY_PER_HAND_LEFT = 1
+JOKER_SLOTS = 5
+SHOP_SLOTS = 2
+REROLL_BASE = 5
+PLANET_PRICE = 3
+PLANET_CHANCE = 0.3  # share of shop slots that offer an upgrade instead of a joker
+
+# Hand -> (label, chips, mult, +chips per level, +mult per level)
 HANDS_TABLE = {
-    "straight_flush": ("Escalera de color", 100, 8),
-    "four": ("Póker", 60, 7),
-    "full_house": ("Full", 40, 4),
-    "flush": ("Color", 35, 4),
-    "straight": ("Escalera", 30, 4),
-    "three": ("Trío", 30, 3),
-    "two_pair": ("Doble pareja", 20, 2),
-    "pair": ("Pareja", 10, 2),
-    "high": ("Carta alta", 5, 1),
+    "straight_flush": ("Escalera de color", 100, 8, 40, 4),
+    "four": ("Póker", 60, 7, 30, 3),
+    "full_house": ("Full", 40, 4, 25, 2),
+    "flush": ("Color", 35, 4, 15, 2),
+    "straight": ("Escalera", 30, 4, 30, 3),
+    "three": ("Trío", 30, 3, 20, 2),
+    "two_pair": ("Doble pareja", 20, 2, 20, 1),
+    "pair": ("Pareja", 10, 2, 15, 1),
+    "high": ("Carta alta", 5, 1, 10, 1),
 }
+
+
+def Target(ante: int, blind: int) -> int:
+    return int(ANTE_BASE[ante] * BLINDS[blind][1])
 
 
 def Rank(card: str) -> int:
@@ -96,20 +114,128 @@ def Evaluate(cards: list[str]) -> tuple[str, list[str]]:
     return "high", [max(cards, key=Rank)]
 
 
-def Score(cards: list[str]) -> dict:
-    """Chips, mult and total for a played hand."""
+def Contains(cards: list[str], hand: str) -> set[str]:
+    """Every hand type inside the played cards (a full house contains a pair and a trio...)."""
+    Counts = sorted(Counter(Rank(C) for C in cards).values(), reverse=True)
+    Inside = {hand, "high"}
+    if Counts[0] >= 2:
+        Inside.add("pair")
+    if Counts[0] >= 3:
+        Inside.add("three")
+    if Counts[0] >= 4:
+        Inside.add("four")
+    if len(Counts) > 1 and Counts[0] >= 2 and Counts[1] >= 2:
+        Inside.add("two_pair")
+    if hand == "straight_flush":
+        Inside |= {"straight", "flush"}
+    return Inside
+
+
+# ---------------- jokers ----------------
+# Each joker: name, emoji, rarity, price, text, and its effect. "card" effects run for every
+# scoring card (left to right); "hand" effects run once afterwards, joker by joker.
+
+def _Suit(suit):
+    return lambda c, ctx: {"mult": 3} if c[1] == suit else None
+
+
+def _IfContains(hand, **bonus):
+    return lambda ctx: bonus if hand in ctx["contains"] else None
+
+
+JOKERS = {
+    "camarada": ("Camarada", "🤝", "common", 4, "+4 multi", "hand", lambda ctx: {"mult": 4}),
+    "corazon": ("Corazón de Acero", "❤️", "common", 5, "Cada ♥ que puntúa: +3 multi", "card", _Suit("H")),
+    "diamante": ("Diamante Frío", "💎", "common", 5, "Cada ♦ que puntúa: +3 multi", "card", _Suit("D")),
+    "pala": ("Pala del Obrero", "♠️", "common", 5, "Cada ♠ que puntúa: +3 multi", "card", _Suit("S")),
+    "trebol": ("Trébol de Hierro", "☘️", "common", 5, "Cada ♣ que puntúa: +3 multi", "card", _Suit("C")),
+    "doble": ("Doble Señal", "📡", "common", 4, "+8 multi si la mano contiene una pareja", "hand", _IfContains("pair", mult=8)),
+    "trinidad": ("Trinidad", "🔺", "common", 4, "+12 multi si contiene un trío", "hand", _IfContains("three", mult=12)),
+    "consenso": ("Consenso", "🗳️", "common", 4, "+10 multi si contiene doble pareja", "hand", _IfContains("two_pair", mult=10)),
+    "recta": ("Marcha Recta", "🚶", "common", 4, "+12 multi si contiene escalera", "hand", _IfContains("straight", mult=12)),
+    "bandera": ("Bandera Única", "🚩", "common", 4, "+10 multi si contiene color", "hand", _IfContains("flush", mult=10)),
+    "archivista": ("Archivista", "🗂️", "common", 4, "+50 fichas si contiene una pareja", "hand", _IfContains("pair", chips=50)),
+    "antena": ("Antena", "🗼", "common", 4, "+100 fichas si contiene escalera", "hand", _IfContains("straight", chips=100)),
+    "media": ("Media Ración", "🍙", "common", 5, "+20 multi si juegas 3 cartas o menos", "hand",
+              lambda ctx: {"mult": 20} if len(ctx["played"]) <= 3 else None),
+    "escaner": ("Escáner Facial", "👁️", "common", 5, "Cada J, Q o K que puntúa: +30 fichas", "card",
+                lambda c, ctx: {"chips": 30} if c[0] in FACES else None),
+    "par": ("Orden Par", "⚖️", "common", 4, "Cada 2, 4, 6, 8 o 10 que puntúa: +4 multi", "card",
+            lambda c, ctx: {"mult": 4} if c[0] in EVEN else None),
+    "impar": ("Caos Impar", "🌀", "common", 4, "Cada A, 3, 5, 7 o 9 que puntúa: +31 fichas", "card",
+              lambda c, ctx: {"chips": 31} if c[0] in ODD else None),
+    "abstracto": ("Arte Abstracto", "🎨", "uncommon", 6, "+3 multi por cada comodín que tengas", "hand",
+                  lambda ctx: {"mult": 3 * ctx["jokers"]}),
+    "banquero": ("Banquero", "🏦", "uncommon", 6, "+2 fichas por cada ◈ que tengas", "hand",
+                 lambda ctx: {"chips": 2 * ctx["money"]}),
+    "cumbre": ("Cumbre", "🏔️", "uncommon", 6, "+15 multi si no te quedan descartes", "hand",
+               lambda ctx: {"mult": 15} if ctx["discards"] == 0 else None),
+    "colmena": ("Mente Colmena", "🐝", "uncommon", 7, "×2 multi si contiene una pareja", "hand", _IfContains("pair", xmult=2)),
+    "tribu": ("La Tribu", "🏮", "rare", 8, "×2 multi si contiene color", "hand", _IfContains("flush", xmult=2)),
+    "trio": ("El Trío", "🎎", "rare", 8, "×3 multi si contiene un trío", "hand", _IfContains("three", xmult=3)),
+    "orden": ("El Orden", "📜", "rare", 8, "×3 multi si contiene escalera", "hand", _IfContains("straight", xmult=3)),
+    "ojo": ("Ojo de LOJI", "🔴", "rare", 9, "×2 multi siempre", "hand", lambda ctx: {"xmult": 2}),
+}
+JOKER_RARITY_WEIGHTS = {"common": 70, "uncommon": 25, "rare": 5}
+JOKER_RARITY_LABELS = {"common": "Común", "uncommon": "Poco común", "rare": "Raro"}
+
+
+def JokerInfo(joker_id: str) -> dict:
+    Name, Emoji, Rarity, Price, Text, Kind, _ = JOKERS[joker_id]
+    return {"id": joker_id, "name": Name, "emoji": Emoji, "rarity": Rarity, "price": Price, "text": Text}
+
+
+def SellValue(joker_id: str) -> int:
+    return max(1, JOKERS[joker_id][3] // 2)
+
+
+def HandBase(hand: str, level: int) -> tuple[int, int]:
+    _, Chips, Mult, PlusChips, PlusMult = HANDS_TABLE[hand]
+    return Chips + PlusChips * (level - 1), Mult + PlusMult * (level - 1)
+
+
+def Score(cards: list[str], game: dict | None = None) -> dict:
+    """Chips, mult and total for a played hand, with the game's hand levels and jokers."""
+    Game = game or {}
     Hand, Scoring = Evaluate(cards)
-    LabelText, Chips, Mult = HANDS_TABLE[Hand]
-    Chips += sum(CardChips(C) for C in Scoring)
-    return {"hand": Hand, "label": LabelText, "scoring": Scoring, "chips": Chips, "mult": Mult, "total": Chips * Mult}
+    Level = Game.get("levels", {}).get(Hand, 1)
+    Chips, Mult = HandBase(Hand, Level)
+    Jokers = Game.get("jokers", [])
+    Ctx = {
+        "played": cards, "scoring": Scoring, "contains": Contains(cards, Hand),
+        "jokers": len(Jokers), "money": Game.get("money", 0), "discards": Game.get("discards", DISCARDS),
+    }
+    Triggers = []
+    for Card in Scoring:
+        Chips += CardChips(Card)
+        for J in Jokers:
+            if JOKERS[J][5] == "card":
+                Effect = JOKERS[J][6](Card, Ctx)
+                if Effect:
+                    Chips += Effect.get("chips", 0)
+                    Mult += Effect.get("mult", 0)
+                    Triggers.append(J)
+    for J in Jokers:
+        if JOKERS[J][5] == "hand":
+            Effect = JOKERS[J][6](Ctx)
+            if Effect:
+                Chips += Effect.get("chips", 0)
+                Mult += Effect.get("mult", 0)
+                Mult *= Effect.get("xmult", 1)
+                Triggers.append(J)
+    Mult = round(Mult, 2)
+    return {
+        "hand": Hand, "label": HANDS_TABLE[Hand][0], "level": Level, "scoring": Scoring,
+        "chips": Chips, "mult": Mult, "total": int(Chips * Mult), "triggered": list(dict.fromkeys(Triggers)),
+    }
 
 
-def BestPlay(hand: list[str]) -> list[str]:
-    """The highest-scoring set of up to 5 cards (used by the simulator and the hint)."""
+def BestPlay(hand: list[str], game: dict | None = None) -> list[str]:
+    """The highest-scoring set of up to 5 cards (used by the simulator)."""
     Best, BestScore = [], -1
     for Size in range(1, MAX_PLAY + 1):
         for Combo in combinations(hand, Size):
-            S = Score(list(Combo))["total"]
+            S = Score(list(Combo), game)["total"]
             if S > BestScore:
                 Best, BestScore = list(Combo), S
     return Best
@@ -118,22 +244,17 @@ def BestPlay(hand: list[str]) -> list[str]:
 # ---------------- game state ----------------
 
 
-def NewStage(game: dict, rng: random.Random):
+def NewBlind(game: dict, rng: random.Random):
     Deck = NewDeck(rng)
     game.update(
-        deck=Deck[HAND_SIZE:],
-        hand=Deck[:HAND_SIZE],
-        score=0,
-        hands=HANDS,
-        discards=DISCARDS,
-        last=None,
-        state="playing",
+        deck=Deck[HAND_SIZE:], hand=Deck[:HAND_SIZE], score=0, hands=HANDS, discards=DISCARDS,
+        last=None, state="playing", shop=[], earned=None,
     )
 
 
 def NewGame(bet: int, rng: random.Random) -> dict:
-    Game = {"bet": bet, "stage": 0, "cleared": 0}
-    NewStage(Game, rng)
+    Game = {"bet": bet, "ante": 0, "blind": 0, "cleared": 0, "money": START_MONEY, "jokers": [], "levels": {}}
+    NewBlind(Game, rng)
     return Game
 
 
@@ -150,17 +271,35 @@ def Take(game: dict, cards: list[str]) -> list[str]:
     return cards
 
 
-def Play(game: dict, cards: list[str]) -> dict:
-    """Plays a hand. Moves the game to 'cleared', 'failed' or keeps 'playing'."""
+def Earnings(game: dict) -> dict:
+    """◈ for beating the current blind: reward + unused hands + interest."""
+    Reward = BLINDS[game["blind"]][2]
+    Hands = game["hands"] * MONEY_PER_HAND_LEFT
+    Interest = min(INTEREST_MAX, game["money"] // INTEREST_EVERY)
+    return {"reward": Reward, "hands": Hands, "interest": Interest, "total": Reward + Hands + Interest}
+
+
+def Play(game: dict, cards: list[str], rng: random.Random | None = None) -> dict:
+    """Plays a hand. When the blind is beaten: pays ◈ and moves to the shop (or the ante choice)."""
     if game["state"] != "playing" or game["hands"] <= 0:
         raise ValueError("No puedes jugar ahora.")
-    Result = Score(Take(game, cards))
+    Result = Score(cards, game)
+    Take(game, cards)
     game["score"] += Result["total"]
     game["hands"] -= 1
     game["last"] = {**Result, "cards": cards}
-    if game["score"] >= TARGETS[game["stage"]]:
-        game["cleared"] = game["stage"] + 1
-        game["state"] = "won" if game["cleared"] == len(TARGETS) else "cleared"
+    if game["score"] >= Target(game["ante"], game["blind"]):
+        Earned = Earnings(game)
+        game["money"] += Earned["total"]
+        game["earned"] = Earned
+        if game["blind"] == len(BLINDS) - 1:
+            game["cleared"] = game["ante"] + 1
+            game["state"] = "won" if game["cleared"] == ANTES else "ante_cleared"
+        else:
+            game["state"] = "shop"
+        if game["state"] in ("shop", "ante_cleared"):
+            game["shop"] = NewShop(game, rng or random.Random())
+            game["reroll"] = REROLL_BASE
     elif game["hands"] == 0:
         game["state"] = "failed"
     else:
@@ -177,23 +316,93 @@ def Discard(game: dict, cards: list[str]):
     Draw(game)
 
 
-def NextStage(game: dict, rng: random.Random):
-    if game["state"] != "cleared":
-        raise ValueError("Todavía no superaste esta etapa.")
-    game["stage"] += 1
-    NewStage(game, rng)
+# ---------------- shop ----------------
+
+
+def Offer(game: dict, rng: random.Random) -> dict:
+    if rng.random() < PLANET_CHANCE:
+        Hand = rng.choice(list(HANDS_TABLE))
+        return {"type": "planet", "hand": Hand, "price": PLANET_PRICE}
+    Owned = set(game["jokers"])
+    Rarity = rng.choices(list(JOKER_RARITY_WEIGHTS), list(JOKER_RARITY_WEIGHTS.values()))[0]
+    Pool = [J for J, D in JOKERS.items() if D[2] == Rarity and J not in Owned] or [J for J in JOKERS if J not in Owned]
+    J = rng.choice(Pool)
+    return {"type": "joker", "id": J, "price": JOKERS[J][3]}
+
+
+def NewShop(game: dict, rng: random.Random) -> list[dict]:
+    return [Offer(game, rng) for _ in range(SHOP_SLOTS)]
+
+
+def InShop(game: dict):
+    if game["state"] != "shop":
+        raise ValueError("La tienda está cerrada.")
+
+
+def Buy(game: dict, slot: int) -> dict:
+    InShop(game)
+    if not 0 <= slot < len(game["shop"]) or game["shop"][slot] is None:
+        raise ValueError("Eso ya no está a la venta.")
+    Item = game["shop"][slot]
+    if game["money"] < Item["price"]:
+        raise ValueError(f"No te alcanza: cuesta ◈{Item['price']} y tienes ◈{game['money']}.")
+    if Item["type"] == "joker":
+        if len(game["jokers"]) >= JOKER_SLOTS:
+            raise ValueError(f"Ya tienes {JOKER_SLOTS} comodines. Vende uno primero.")
+        game["jokers"].append(Item["id"])
+    else:
+        game["levels"][Item["hand"]] = game["levels"].get(Item["hand"], 1) + 1
+    game["money"] -= Item["price"]
+    game["shop"][slot] = None
+    return Item
+
+
+def Sell(game: dict, index: int) -> int:
+    InShop(game)
+    if not 0 <= index < len(game["jokers"]):
+        raise ValueError("Ese comodín no existe.")
+    Value = SellValue(game["jokers"].pop(index))
+    game["money"] += Value
+    return Value
+
+
+def Reroll(game: dict, rng: random.Random):
+    InShop(game)
+    if game["money"] < game["reroll"]:
+        raise ValueError(f"Renovar cuesta ◈{game['reroll']} y tienes ◈{game['money']}.")
+    game["money"] -= game["reroll"]
+    game["reroll"] += 1
+    game["shop"] = NewShop(game, rng)
+
+
+def EnterShop(game: dict):
+    """After beating a boss and choosing to keep marching."""
+    if game["state"] != "ante_cleared":
+        raise ValueError("No puedes seguir ahora.")
+    game["state"] = "shop"
+
+
+def NextBlind(game: dict, rng: random.Random):
+    InShop(game)
+    if game["blind"] == len(BLINDS) - 1:
+        game["ante"] += 1
+        game["blind"] = 0
+    else:
+        game["blind"] += 1
+    NewBlind(game, rng)
 
 
 # ---------------- prizes ----------------
 
 GAME = "marcha"  # key in config["casino"] and in the casino ledger refs
-# What cashing out after each stage pays (x bet). Calibrated by simulating thousands of games with
-# a simple player: it gets back ~90-93% whatever it does, so the house keeps a little.
-LADDER = (1.0, 1.3, 3.3)
+# What cashing out after beating each ante's boss pays (x bet). A simple simulated player beats
+# antes 1-6 about 96%, 95%, 91%, 48%, 14% and 5% of the time; the first antes are the warm-up.
+# Deep antes pay a lot because they need a good joker build; the daily limit and bet cap keep it safe.
+LADDER = (0.6, 0.8, 1.0, 1.6, 4, 10, 25, 60)
 
 
 def Prize(game: dict) -> int:
-    """What cashing out right now pays (0 before clearing a stage)."""
+    """What cashing out right now pays (0 before beating the first boss)."""
     return int(game["bet"] * LADDER[game["cleared"] - 1]) if game["cleared"] else 0
 
 

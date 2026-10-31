@@ -6,12 +6,14 @@ import io
 import discord
 
 from core.economy import marcha as M
-from core.economy.marchacards import Table
+from core.economy.marchacards import ShopPicture, Table
 from core.economy.registry import Eco
 from core.economy.rewards import FormatAmount
 
 GAME_TIMEOUT = 15 * 60  # the game stays saved after this: /casino marcha picks it up again
 SORTS = {"rank": "🔢 Ordenar por palo", "suit": "🔢 Ordenar por número"}
+LOJI_RED = discord.Color.from_rgb(150, 12, 18)
+HAND_TABLE = "Pareja 10×2 · Doble 20×2 · Trío 30×3 · Escalera 30×4 · Color 35×4 · Full 40×4 · Póker 60×7"
 
 
 def SortHand(game: dict):
@@ -19,6 +21,20 @@ def SortHand(game: dict):
         game["hand"].sort(key=lambda C: (M.SUITS.index(C[1]), -M.Rank(C)))
     else:
         game["hand"].sort(key=M.Rank, reverse=True)
+
+
+def JokerList(game: dict) -> str:
+    return "\n".join(f"{M.JokerInfo(J)['emoji']} **{M.JokerInfo(J)['name']}**: {M.JokerInfo(J)['text']}" for J in game["jokers"]) or "Ninguno todavía."
+
+
+def OfferText(offer: dict | None) -> str:
+    if offer is None:
+        return "~~Vendido~~"
+    if offer["type"] == "joker":
+        Info = M.JokerInfo(offer["id"])
+        return f"{Info['emoji']} **{Info['name']}** ({M.JOKER_RARITY_LABELS[Info['rarity']]}): {Info['text']} · **◈{offer['price']}**"
+    Label = M.HANDS_TABLE[offer["hand"]][0]
+    return f"🛰️ **Actualización: {Label}**: sube un nivel esa jugada · **◈{offer['price']}**"
 
 
 class CardSelect(discord.ui.Select):
@@ -36,6 +52,32 @@ class CardSelect(discord.ui.Select):
         View: MarchaView = self.view
         View.selected = list(self.values)
         await View.Update(interaction)
+
+
+class SellSelect(discord.ui.Select):
+    def __init__(self, view: "MarchaView"):
+        super().__init__(
+            placeholder="Vender un comodín",
+            options=[
+                discord.SelectOption(label=f"Vender {M.JokerInfo(J)['name']} (+◈{M.SellValue(J)})", value=str(i), emoji=M.JokerInfo(J)["emoji"])
+                for i, J in enumerate(view.game["jokers"])
+            ],
+            row=1,
+        )
+
+    async def callback(self, interaction: discord.Interaction):
+        View: MarchaView = self.view
+        Index = int(self.values[0])
+        await View.Act(interaction, lambda: M.Sell(View.game, Index))
+
+
+class Button(discord.ui.Button):
+    def __init__(self, label: str, emoji, style, handler, disabled: bool = False, row: int = 1):
+        super().__init__(label=label, emoji=emoji, style=style, disabled=disabled, row=row)
+        self.handler = handler
+
+    async def callback(self, interaction: discord.Interaction):
+        await self.handler(interaction)
 
 
 class MarchaView(discord.ui.View):
@@ -61,39 +103,63 @@ class MarchaView(discord.ui.View):
             return False
         return True
 
+    # ---- components ----
+
     def Build(self, state: str | None = None):
-        """Menu and buttons for the current state (none once the game is over)."""
+        """Menus and buttons for the current state (none once the game is over)."""
         self.clear_items()
-        State = state or self.game["state"]
+        G = self.game
+        State = state or G["state"]
         if State == "playing":
             self.add_item(CardSelect(self))
             self.add_item(Button("Jugar mano", "▶️", discord.ButtonStyle.red, self.Play, disabled=not self.selected))
             self.add_item(Button(
-                f"Descartar ({self.game['discards']})", "🗑️", discord.ButtonStyle.grey, self.Discard,
-                disabled=not self.selected or not self.game["discards"],
+                f"Descartar ({G['discards']})", "🗑️", discord.ButtonStyle.grey, self.Discard,
+                disabled=not self.selected or not G["discards"],
             ))
-            self.add_item(Button(SORTS[self.game.get("sort", "rank")], None, discord.ButtonStyle.grey, self.Sort))
-        elif State == "cleared":
-            Next = self.game["cleared"]
-            self.add_item(Button(f"Cobrar {M.Prize(self.game):,}".replace(",", "."), "💰", discord.ButtonStyle.green, self.CashOut))
-            self.add_item(Button(
-                f"Seguir a la etapa {Next + 1} (x{M.LADDER[Next]:g})", "⚔️", discord.ButtonStyle.red, self.Continue
-            ))
+            self.add_item(Button(SORTS[G.get("sort", "rank")], None, discord.ButtonStyle.grey, self.Sort))
+        elif State == "shop":
+            for i, Offer in enumerate(G["shop"]):
+                Can = Offer is not None and G["money"] >= Offer["price"]
+                Label = f"Comprar {i + 1}" + (f" · ◈{Offer['price']}" if Offer else "")
+                self.add_item(Button(Label, "🛒", discord.ButtonStyle.green, self.Buyer(i), disabled=not Can, row=0))
+            self.add_item(Button(f"Renovar · ◈{G['reroll']}", "🔄", discord.ButtonStyle.grey, self.Reroll,
+                                 disabled=G["money"] < G["reroll"], row=0))
+            Ante, Blind = (G["ante"] + 1, 0) if G["blind"] == len(M.BLINDS) - 1 else (G["ante"], G["blind"] + 1)
+            Next = f"{M.BLINDS[Blind][0]} ({M.Target(Ante, Blind):,})".replace(",", ".")
+            self.add_item(Button(f"Siguiente: {Next}", "⚔️", discord.ButtonStyle.red, self.Next, row=0))
+            if G["jokers"]:
+                self.add_item(SellSelect(self))
+        elif State == "ante_cleared":
+            self.add_item(Button(f"Cobrar {M.Prize(G):,}".replace(",", "."), "💰", discord.ButtonStyle.green, self.CashOut))
+            Next = G["cleared"]
+            self.add_item(Button(f"Seguir marchando (jefe del ante {Next + 1}: x{M.LADDER[Next]:g})", "⚔️",
+                                 discord.ButtonStyle.red, self.Continue))
 
     def Embed(self, state: str | None = None) -> discord.Embed:
         G = self.game
         State = state or G["state"]
         Money = lambda A: FormatAmount(A, self.config)  # noqa: E731
+        Fields = []
         if State == "playing":
+            Blind = M.BLINDS[G["blind"]][0]
             Text = (
-                f"Llega a **{M.TARGETS[G['stage']]:,}** de señal con tus manos.\n".replace(",", ".")
-                + f"-# Elige hasta {M.MAX_PLAY} cartas en el menú: la imagen te muestra qué jugada harías."
+                f"**Ante {G['ante'] + 1}/{M.ANTES} · {Blind}**: llega a **{M.Target(G['ante'], G['blind']):,}** de señal.\n".replace(",", ".")
+                + "-# Elige cartas en el menú: la imagen te muestra la jugada y se iluminan los comodines que se activan."
             )
-            Color = discord.Color.from_rgb(150, 12, 18)
-        elif State == "cleared":
+            Color = LOJI_RED
+            Fields.append(("🃏 Tus comodines", JokerList(G)))
+        elif State == "shop":
+            Text = "🛒 **Intercambio de datos.** Compra comodines o actualizaciones con tus ◈ y sigue la marcha.\n" + "\n".join(
+                f"**[{i + 1}]** {OfferText(O)}" for i, O in enumerate(G["shop"])
+            )
+            Color = discord.Color.dark_gold()
+            Fields.append(("🃏 Tus comodines", JokerList(G)))
+        elif State == "ante_cleared":
             Text = (
-                f"✅ **Etapa {G['cleared']} superada.** Puedes cobrar {Money(M.Prize(G))} ahora o seguir marchando.\n"
-                f"-# Si sigues y no superas la siguiente etapa, lo pierdes todo."
+                f"✅ **¡Derrotaste al jefe del ante {G['cleared']}!** Puedes cobrar {Money(M.Prize(G))} "
+                f"(x{M.LADDER[G['cleared'] - 1]:g}) o seguir marchando.\n"
+                f"-# Si sigues y caes, lo pierdes todo. El próximo jefe paga x{M.LADDER[G['cleared']]:g}."
             )
             Color = discord.Color.green()
         elif State in ("won", "cashed"):
@@ -102,23 +168,32 @@ class MarchaView(discord.ui.View):
                 Text = f"🏆 **¡Completaste la Larga Marcha!** {Text}"
             Color = discord.Color.gold()
         else:
-            Text = f"💀 No llegaste a la señal. Pierdes {Money(G['bet'])}.\n-# *\"If I take a thousand steps backwards, when will I arrive?\"*"
+            Text = (
+                f"💀 Caíste en el ante {G['ante'] + 1}. Pierdes {Money(G['bet'])}.\n"
+                "-# *\"If I take a thousand steps backwards, when will I arrive?\"*"
+            )
             Color = discord.Color.dark_red()
         embed = discord.Embed(title="🃏 La Larga Marcha", description=(self.note + "\n" if self.note else "") + Text, color=Color)
+        for Name, Value in Fields:
+            embed.add_field(name=Name, value=Value[:1024], inline=False)
         embed.set_author(name=f"{self.member.display_name} apostó {G['bet']:,}".replace(",", "."), icon_url=self.member.display_avatar)
         embed.set_image(url="attachment://marcha.png")
-        embed.set_footer(text="Pareja 10×2 · Doble 20×2 · Trío 30×3 · Escalera 30×4 · Color 35×4 · Full 40×4 · Póker 60×7")
+        embed.set_footer(text=HAND_TABLE)
         return embed
 
     async def Render(self, state: str | None = None) -> tuple[discord.Embed, discord.File]:
-        Png = await asyncio.to_thread(Table, self.game, self.selected, state)
+        Picture = ShopPicture if (state or self.game["state"]) == "shop" else Table
+        Png = await asyncio.to_thread(Picture, self.game) if Picture is ShopPicture else await asyncio.to_thread(Table, self.game, self.selected, state)
         return self.Embed(state), discord.File(io.BytesIO(Png), "marcha.png")
 
     async def Update(self, interaction: discord.Interaction, state: str | None = None):
-        await interaction.response.defer()
+        if not interaction.response.is_done():
+            await interaction.response.defer()
         self.Build(state)
         embed, File = await self.Render(state)
         await interaction.edit_original_response(embed=embed, attachments=[File], view=self if self.children else None)
+
+    # ---- actions ----
 
     async def Act(self, interaction: discord.Interaction, action):
         self.busy = True
@@ -141,7 +216,7 @@ class MarchaView(discord.ui.View):
             self.busy = False
 
     async def Play(self, interaction: discord.Interaction):
-        await self.Act(interaction, lambda: M.Play(self.game, self.selected))
+        await self.Act(interaction, lambda: M.Play(self.game, self.selected, Eco().marcha.rng))
 
     async def Discard(self, interaction: discord.Interaction):
         await self.Act(interaction, lambda: M.Discard(self.game, self.selected))
@@ -150,8 +225,19 @@ class MarchaView(discord.ui.View):
         self.game["sort"] = "suit" if self.game.get("sort", "rank") == "rank" else "rank"
         await self.Act(interaction, lambda: None)
 
+    def Buyer(self, slot: int):
+        async def Handler(interaction: discord.Interaction):
+            await self.Act(interaction, lambda: M.Buy(self.game, slot))
+        return Handler
+
+    async def Reroll(self, interaction: discord.Interaction):
+        await self.Act(interaction, lambda: M.Reroll(self.game, Eco().marcha.rng))
+
+    async def Next(self, interaction: discord.Interaction):
+        await self.Act(interaction, lambda: M.NextBlind(self.game, Eco().marcha.rng))
+
     async def Continue(self, interaction: discord.Interaction):
-        await self.Act(interaction, lambda: M.NextStage(self.game, Eco().marcha.rng))
+        await self.Act(interaction, lambda: M.EnterShop(self.game))
 
     async def CashOut(self, interaction: discord.Interaction):
         self.busy = True
@@ -162,12 +248,3 @@ class MarchaView(discord.ui.View):
             await self.Update(interaction, "cashed")
         finally:
             self.busy = False
-
-
-class Button(discord.ui.Button):
-    def __init__(self, label: str, emoji, style, handler, disabled: bool = False):
-        super().__init__(label=label, emoji=emoji, style=style, disabled=disabled, row=1)
-        self.handler = handler
-
-    async def callback(self, interaction: discord.Interaction):
-        await self.handler(interaction)
