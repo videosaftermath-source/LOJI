@@ -55,7 +55,7 @@ Todas las apuestas aceptan `500`, `1.5k`, `todo` o `mitad`. La casa gana un poco
 **`/casino mines`**: abre casillas sin tocar minas. Más minas, más paga cada diamante. Al terminar: 🔁 Jugar de nuevo.
 **`/casino mayormenor`**: adivina si la siguiente carta es mayor o menor.
 **`/casino carrera`**: apuesta a un caballo. El favorito paga poco y el tapado mucho.
-**`/casino marcha`**: 🃏 *La Larga Marcha*, un póker por antes estilo Balatro. Supera ciegas sumando señal, gana ◈ y compra comodines y mejoras en la tienda. Tras cada jefe, cobra (×0,6 a ×60) o sigue. 5 al día; sin cantidad, retomas la tuya.
+**`/casino marcha`**: 🃏 *La Larga Marcha*, un póker por antes estilo Balatro. Supera ciegas sumando señal, gana ◈ y compra comodines y mejoras en la tienda. Tras cada jefe, cobra (×0,6 a ×75) o sigue. Cada jefe tiene una regla especial, y el último es LOJI. 5 al día; sin cantidad, retomas la tuya.
 **`/casino info`**: límites, ventaja de la casa y tus estadísticas.
 
 ## 🛒 Tienda, misiones y banco

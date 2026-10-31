@@ -402,8 +402,8 @@ class EconomyCasino(commands.Cog):
             Note = f"-# Te quedan {Left} marchas hoy."
             self.Played(ctx)
         View = MarchaView(ctx.author, Game, Config, Note)
-        embed, File = await View.Render()
-        View.message = await ctx.send(embed=embed, file=File, view=View)
+        embed, Files = await View.Render()
+        View.message = await ctx.send(embed=embed, files=Files, view=View)
 
     @casino.command(name="tragamonedas", description="Tragamonedas de lujo animada: mira girar los rodillos")
     @app_commands.describe(cantidad="Cuánto apuestas (500, 1.5k, todo, mitad)")

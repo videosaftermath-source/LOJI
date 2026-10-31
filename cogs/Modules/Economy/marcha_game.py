@@ -2,6 +2,7 @@
 
 import asyncio
 import io
+import os
 
 import discord
 
@@ -13,6 +14,7 @@ from core.economy.rewards import FormatAmount
 GAME_TIMEOUT = 15 * 60  # the game stays saved after this: /casino marcha picks it up again
 SORTS = {"rank": "🔢 Ordenar por palo", "suit": "🔢 Ordenar por número"}
 LOJI_RED = discord.Color.from_rgb(150, 12, 18)
+BOSS_ART = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))), "assets", "marcha", "bosses")
 HAND_TABLE = "Pareja 10×2 · Doble 20×2 · Trío 30×3 · Escalera 30×4 · Color 35×4 · Full 40×4 · Póker 60×7"
 
 
@@ -35,6 +37,31 @@ def OfferText(offer: dict | None) -> str:
         return f"{Info['emoji']} **{Info['name']}** ({M.JOKER_RARITY_LABELS[Info['rarity']]}): {Info['text']} · **◈{offer['price']}**"
     Label = M.HANDS_TABLE[offer["hand"]][0]
     return f"🛰️ **Actualización: {Label}**: sube un nivel esa jugada · **◈{offer['price']}**"
+
+
+def BossLine(game: dict, ante: int | None = None) -> str:
+    Name, Text, _ = M.BOSSES[M.BossOf(game, ante)]
+    return f"**{Name}**: {Text}"
+
+
+def ShownBoss(game: dict, state: str) -> str | None:
+    """Which boss portrait goes in the corner: the one you're fighting or the one coming next."""
+    if "bosses" not in game:
+        return None
+    Last = len(M.BLINDS) - 1
+    if state == "playing" and game["blind"] == Last:
+        return M.BossOf(game)
+    if state == "shop" and game["blind"] == Last - 1:
+        return M.BossOf(game)
+    return None
+
+
+def BossFile(boss: str) -> discord.File | None:
+    for Ext in ("gif", "png"):
+        Path = os.path.join(BOSS_ART, f"{boss}.{Ext}")
+        if os.path.exists(Path):
+            return discord.File(Path, f"jefe.{Ext}")
+    return None
 
 
 class CardSelect(discord.ui.Select):
@@ -126,7 +153,8 @@ class MarchaView(discord.ui.View):
             self.add_item(Button(f"Renovar · ◈{G['reroll']}", "🔄", discord.ButtonStyle.grey, self.Reroll,
                                  disabled=G["money"] < G["reroll"], row=0))
             Ante, Blind = (G["ante"] + 1, 0) if G["blind"] == len(M.BLINDS) - 1 else (G["ante"], G["blind"] + 1)
-            Next = f"{M.BLINDS[Blind][0]} ({M.Target(Ante, Blind):,})".replace(",", ".")
+            Name = M.BOSSES[M.BossOf(G, Ante)][0] if "bosses" in G and Blind == len(M.BLINDS) - 1 else M.BLINDS[Blind][0]
+            Next = f"{Name} ({M.Target(Ante, Blind):,})".replace(",", ".")
             self.add_item(Button(f"Siguiente: {Next}", "⚔️", discord.ButtonStyle.red, self.Next, row=0))
             if G["jokers"]:
                 self.add_item(SellSelect(self))
@@ -142,17 +170,22 @@ class MarchaView(discord.ui.View):
         Money = lambda A: FormatAmount(A, self.config)  # noqa: E731
         Fields = []
         if State == "playing":
-            Blind = M.BLINDS[G["blind"]][0]
-            Text = (
-                f"**Ante {G['ante'] + 1}/{M.ANTES} · {Blind}**: llega a **{M.Target(G['ante'], G['blind']):,}** de señal.\n".replace(",", ".")
-                + "-# Elige cartas en el menú: la imagen te muestra la jugada y se iluminan los comodines que se activan."
-            )
+            Boss = "bosses" in G and G["blind"] == len(M.BLINDS) - 1
+            Blind = "👹 Jefe" if Boss else M.BLINDS[G["blind"]][0]
+            Text = f"**Ante {G['ante'] + 1}/{M.ANTES} · {Blind}**: llega a **{M.Target(G['ante'], G['blind']):,}** de señal.\n".replace(",", ".")
+            if Boss:
+                Text += f"⚠️ {BossLine(G)}\n"
+            elif "bosses" in G:
+                Text += f"-# Jefe de este ante: {BossLine(G)}\n"
+            Text += "-# Elige cartas en el menú: la imagen te muestra la jugada y se iluminan los comodines que se activan."
             Color = LOJI_RED
             Fields.append(("🃏 Tus comodines", JokerList(G)))
         elif State == "shop":
             Text = "🛒 **Intercambio de datos.** Compra comodines o actualizaciones con tus ◈ y sigue la marcha.\n" + "\n".join(
                 f"**[{i + 1}]** {OfferText(O)}" for i, O in enumerate(G["shop"])
             )
+            if ShownBoss(G, "shop"):
+                Text += f"\n\n👹 **Se acerca el jefe** {BossLine(G)}"
             Color = discord.Color.dark_gold()
             Fields.append(("🃏 Tus comodines", JokerList(G)))
         elif State == "ante_cleared":
@@ -181,17 +214,27 @@ class MarchaView(discord.ui.View):
         embed.set_footer(text=HAND_TABLE)
         return embed
 
-    async def Render(self, state: str | None = None) -> tuple[discord.Embed, discord.File]:
-        Picture = ShopPicture if (state or self.game["state"]) == "shop" else Table
-        Png = await asyncio.to_thread(Picture, self.game) if Picture is ShopPicture else await asyncio.to_thread(Table, self.game, self.selected, state)
-        return self.Embed(state), discord.File(io.BytesIO(Png), "marcha.png")
+    async def Render(self, state: str | None = None) -> tuple[discord.Embed, list[discord.File]]:
+        State = state or self.game["state"]
+        if State == "shop":
+            Png = await asyncio.to_thread(ShopPicture, self.game)
+        else:
+            Png = await asyncio.to_thread(Table, self.game, self.selected, state)
+        embed = self.Embed(state)
+        Files = [discord.File(io.BytesIO(Png), "marcha.png")]
+        Boss = ShownBoss(self.game, State)
+        Portrait = BossFile(Boss) if Boss else None
+        if Portrait:
+            embed.set_thumbnail(url=f"attachment://{Portrait.filename}")
+            Files.append(Portrait)
+        return embed, Files
 
     async def Update(self, interaction: discord.Interaction, state: str | None = None):
         if not interaction.response.is_done():
             await interaction.response.defer()
         self.Build(state)
-        embed, File = await self.Render(state)
-        await interaction.edit_original_response(embed=embed, attachments=[File], view=self if self.children else None)
+        embed, Files = await self.Render(state)
+        await interaction.edit_original_response(embed=embed, attachments=Files, view=self if self.children else None)
 
     # ---- actions ----
 

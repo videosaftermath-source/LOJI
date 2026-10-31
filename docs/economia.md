@@ -101,10 +101,14 @@ Juego de póker por antes, lo más parecido posible a Balatro, con estética LOJ
 - Por ciega: mano de 8 cartas, 4 manos y 3 descartes. Puntos = (fichas de la jugada + cartas que puntúan) × multi, y luego los comodines de izquierda a derecha.
 - **◈ Datos** (dinero dentro de la partida): empiezas con 4; al superar una ciega ganas 3/4/5, más 1 por mano sobrante, más intereses (1 por cada 5, máximo 5).
 - **Tienda** tras cada ciega: 2 ofertas (comodín o actualización de jugada), renovar por 5 (+1 cada vez) y vender comodines por la mitad. Máximo 5 comodines. Hay 24 comodines propios (comunes, poco comunes y raros).
-- **Cobrar** tras cada jefe: ×0,6 · ×0,8 · ×1 · ×1,6 · ×4 · ×10 · ×25 · ×60. Un bot simple vence los antes 1-6 el 96/95/91/48/14/5% de las veces: los primeros son el calentamiento.
+- **Jefes** (tercera ciega de cada ante), con retrato en `assets/marcha/bosses/`. Los antes 1-7 sacan uno al azar; el 8 siempre es **LOJI**, con retrato animado:
+  - Nailoong: las ♥ no puntúan · El Coronado de Calaveras: las figuras no puntúan · El Iracundo: 1 descarte
+  - El Recaudador: cada mano cuesta ◈1 · El Koala: la primera mano no cuenta · **LOJI**: anula un comodín al azar en cada mano
+  - Para añadir un jefe: su retrato en `assets/marcha/bosses/<id>.png` y una línea en `BOSSES` (`core/economy/marcha.py`).
+- **Cobrar** tras cada jefe: ×0,6 · ×0,8 · ×1,1 · ×2 · ×5 · ×12 · ×30 · ×75. Con jefes, un bot simple vence los antes 1-7 el 95/92/79/39/13/4/1% de las veces.
 - Límite diario (5) y apuesta máxima de 3.000 (también por el límite global del casino).
 - Se guarda en `eco_marcha` y sobrevive a reinicios.
-- **Fase C (pendiente):** jefes con reglas especiales (LOJI como jefe final), arte de TFR y torneo semanal.
+- **Pendiente:** 3 jefes más, retratos para los comodines y torneo semanal.
 
 ## Boosters
 

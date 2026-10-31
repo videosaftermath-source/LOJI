@@ -156,3 +156,38 @@ def test_daily_limit_and_refund_on_failed_start():
         run(s.economy.Add(G, 6, 100, "seed"))
     with pytest.raises(M.MarchaError):
         run(s.marcha.Start(m, "100", config))
+
+
+def test_boss_order_and_rules():
+    rng = random.Random(4)
+    g = M.NewGame(100, rng)
+    assert len(g["bosses"]) == M.ANTES and g["bosses"][-1] == M.FINAL_BOSS
+    assert all(B in M.BOSS_POOL for B in g["bosses"][:-1])
+    assert M.Rule(g) == {}  # not a boss blind
+    g["blind"] = len(M.BLINDS) - 1
+    for boss, check in (
+        ("nailoong", lambda: M.Score(["KH", "KS"], g)["chips"] == 10 + 10),  # the K♥ doesn't score
+        ("calaveras", lambda: M.Score(["KH", "KS"], g)["chips"] == 10),
+        ("koala", lambda: M.Score(["AH"], {**g, "hands": M.HANDS})["total"] == 0 and M.Score(["AH"], {**g, "hands": 2})["total"] > 0),
+    ):
+        g["bosses"][0] = boss
+        assert check(), boss
+    g["bosses"][0] = "iracundo"
+    M.NewBlind(g, rng)
+    assert g["discards"] == 1
+    g["bosses"][0], g["money"] = "recaudador", 5
+    M.NewBlind(g, rng)
+    g["score"] = 0
+    M.Play(g, g["hand"][:1], rng)
+    assert g["money"] == 4
+
+
+def test_loji_seals_a_joker():
+    rng = random.Random(5)
+    g = M.NewGame(100, rng)
+    g["jokers"] = ["camarada", "ojo"]
+    g["ante"], g["blind"] = M.ANTES - 1, len(M.BLINDS) - 1
+    M.NewBlind(g, rng)
+    assert g["sealed"] in (0, 1)
+    s = M.Score(["AH"], g)
+    assert len(s["triggered"]) == 1 and g["jokers"][g["sealed"]] not in s["triggered"]

@@ -53,6 +53,45 @@ HANDS_TABLE = {
 }
 
 
+# ---- bosses (the third blind of each ante) ----
+# id -> (name, rule shown to players, rule). Antes 1-7 draw from BOSS_POOL at random; LOJI is always last.
+BOSSES = {
+    "nailoong": ("Nailoong", "Se comió tus corazones: las cartas ♥ no puntúan", {"debuff_suit": "H"}),
+    "calaveras": ("El Coronado de Calaveras", "Las figuras (J, Q, K) no puntúan", {"debuff_faces": True}),
+    "iracundo": ("El Iracundo", "Solo tienes 1 descarte", {"discards": 1}),
+    "recaudador": ("El Recaudador", "Cada mano que juegas te cobra ◈1", {"hand_cost": 1}),
+    "koala": ("El Koala", "Siesta: tu primera mano no cuenta", {"first_hand_zero": True}),
+    "loji": ("LOJI", "En cada mano anula uno de tus comodines al azar", {"seal_joker": True}),
+}
+FINAL_BOSS = "loji"
+BOSS_POOL = [B for B in BOSSES if B != FINAL_BOSS]
+
+
+def BossOrder(rng: random.Random) -> list[str]:
+    """A boss per ante: the pool shuffled (repeating once it runs out), then LOJI."""
+    Order: list[str] = []
+    while len(Order) < ANTES - 1:
+        Pool = BOSS_POOL[:]
+        rng.shuffle(Pool)
+        Order += Pool
+    return Order[: ANTES - 1] + [FINAL_BOSS]
+
+
+def BossOf(game: dict, ante: int | None = None) -> str:
+    return game["bosses"][game["ante"] if ante is None else ante]
+
+
+def Rule(game: dict) -> dict:
+    """The current boss rule (empty outside boss blinds)."""
+    if game.get("blind") != len(BLINDS) - 1 or "bosses" not in game:
+        return {}
+    return BOSSES[BossOf(game)][2]
+
+
+def Debuffed(card: str, rule: dict) -> bool:
+    return card[1] == rule.get("debuff_suit") or (rule.get("debuff_faces", False) and card[0] in FACES)
+
+
 def Target(ante: int, blind: int) -> int:
     return int(ANTE_BASE[ante] * BLINDS[blind][1])
 
@@ -197,16 +236,20 @@ def HandBase(hand: str, level: int) -> tuple[int, int]:
 def Score(cards: list[str], game: dict | None = None) -> dict:
     """Chips, mult and total for a played hand, with the game's hand levels and jokers."""
     Game = game or {}
+    Rule_ = Rule(Game)
     Hand, Scoring = Evaluate(cards)
     Level = Game.get("levels", {}).get(Hand, 1)
     Chips, Mult = HandBase(Hand, Level)
-    Jokers = Game.get("jokers", [])
+    Sealed = Game.get("sealed") if Rule_.get("seal_joker") else None
+    Jokers = [J for i, J in enumerate(Game.get("jokers", [])) if i != Sealed]
     Ctx = {
         "played": cards, "scoring": Scoring, "contains": Contains(cards, Hand),
         "jokers": len(Jokers), "money": Game.get("money", 0), "discards": Game.get("discards", DISCARDS),
     }
     Triggers = []
     for Card in Scoring:
+        if Debuffed(Card, Rule_):
+            continue
         Chips += CardChips(Card)
         for J in Jokers:
             if JOKERS[J][5] == "card":
@@ -224,9 +267,12 @@ def Score(cards: list[str], game: dict | None = None) -> dict:
                 Mult *= Effect.get("xmult", 1)
                 Triggers.append(J)
     Mult = round(Mult, 2)
+    Siesta = Rule_.get("first_hand_zero", False) and Game.get("hands") == HANDS
     return {
         "hand": Hand, "label": HANDS_TABLE[Hand][0], "level": Level, "scoring": Scoring,
-        "chips": Chips, "mult": Mult, "total": int(Chips * Mult), "triggered": list(dict.fromkeys(Triggers)),
+        "chips": Chips, "mult": Mult, "total": 0 if Siesta else int(Chips * Mult),
+        "triggered": list(dict.fromkeys(Triggers)), "siesta": Siesta,
+        "debuffed": [C for C in Scoring if Debuffed(C, Rule_)],
     }
 
 
@@ -248,12 +294,27 @@ def NewBlind(game: dict, rng: random.Random):
     Deck = NewDeck(rng)
     game.update(
         deck=Deck[HAND_SIZE:], hand=Deck[:HAND_SIZE], score=0, hands=HANDS, discards=DISCARDS,
-        last=None, state="playing", shop=[], earned=None,
+        last=None, state="playing", shop=[], earned=None, sealed=None,
     )
+    Rule_ = Rule(game)
+    if "discards" in Rule_:
+        game["discards"] = Rule_["discards"]
+    Seal(game, rng)
+
+
+def Seal(game: dict, rng: random.Random):
+    """LOJI's rule: picks the joker that won't work for the next hand."""
+    if Rule(game).get("seal_joker") and game["jokers"]:
+        game["sealed"] = rng.randrange(len(game["jokers"]))
+    else:
+        game["sealed"] = None
 
 
 def NewGame(bet: int, rng: random.Random) -> dict:
-    Game = {"bet": bet, "ante": 0, "blind": 0, "cleared": 0, "money": START_MONEY, "jokers": [], "levels": {}}
+    Game = {
+        "bet": bet, "ante": 0, "blind": 0, "cleared": 0, "money": START_MONEY, "jokers": [], "levels": {},
+        "bosses": BossOrder(rng),
+    }
     NewBlind(Game, rng)
     return Game
 
@@ -283,11 +344,15 @@ def Play(game: dict, cards: list[str], rng: random.Random | None = None) -> dict
     """Plays a hand. When the blind is beaten: pays ◈ and moves to the shop (or the ante choice)."""
     if game["state"] != "playing" or game["hands"] <= 0:
         raise ValueError("No puedes jugar ahora.")
+    Rng = rng or random.Random()
     Result = Score(cards, game)
     Take(game, cards)
     game["score"] += Result["total"]
     game["hands"] -= 1
     game["last"] = {**Result, "cards": cards}
+    Cost = Rule(game).get("hand_cost", 0)
+    if Cost:
+        game["money"] = max(0, game["money"] - Cost)
     if game["score"] >= Target(game["ante"], game["blind"]):
         Earned = Earnings(game)
         game["money"] += Earned["total"]
@@ -298,12 +363,13 @@ def Play(game: dict, cards: list[str], rng: random.Random | None = None) -> dict
         else:
             game["state"] = "shop"
         if game["state"] in ("shop", "ante_cleared"):
-            game["shop"] = NewShop(game, rng or random.Random())
+            game["shop"] = NewShop(game, Rng)
             game["reroll"] = REROLL_BASE
     elif game["hands"] == 0:
         game["state"] = "failed"
     else:
         Draw(game)
+        Seal(game, Rng)
     return Result
 
 
@@ -395,10 +461,10 @@ def NextBlind(game: dict, rng: random.Random):
 # ---------------- prizes ----------------
 
 GAME = "marcha"  # key in config["casino"] and in the casino ledger refs
-# What cashing out after beating each ante's boss pays (x bet). A simple simulated player beats
-# antes 1-6 about 96%, 95%, 91%, 48%, 14% and 5% of the time; the first antes are the warm-up.
+# What cashing out after beating each ante's boss pays (x bet). With the boss rules, a simple
+# simulated player beats antes 1-7 about 95%, 92%, 79%, 39%, 13%, 4% and 1% of the time.
 # Deep antes pay a lot because they need a good joker build; the daily limit and bet cap keep it safe.
-LADDER = (0.6, 0.8, 1.0, 1.6, 4, 10, 25, 60)
+LADDER = (0.6, 0.8, 1.1, 2, 5, 12, 30, 75)
 
 
 def Prize(game: dict) -> int:

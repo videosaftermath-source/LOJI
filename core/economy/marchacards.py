@@ -51,7 +51,7 @@ def GlowText(img: Image.Image, xy, text: str, font, fill, anchor="la"):
     ImageDraw.Draw(img).text(xy, text, font=font, fill=fill, anchor=anchor)
 
 
-def Card(card: str, selected: bool) -> Image.Image:
+def Card(card: str, selected: bool, debuffed: bool = False) -> Image.Image:
     Img = Image.new("RGBA", (CARD_W + 16, CARD_H + 16), (0, 0, 0, 0))
     D = ImageDraw.Draw(Img)
     Box = (8, 8, 8 + CARD_W, 8 + CARD_H)
@@ -67,10 +67,18 @@ def Card(card: str, selected: bool) -> Image.Image:
     D.text((Box[0] + 10, Box[1] + 34), Suit, font=Font(18, bold=False), fill=Color)
     D.text(((Box[0] + Box[2]) / 2, (Box[1] + Box[3]) / 2 + 12), Suit, font=Font(52, bold=False), fill=Color, anchor="mm")
     D.text((Box[2] - 9, Box[3] - 6), Rank, font=Font(18), fill=Color, anchor="rd")
+    if debuffed:
+        # The boss cancelled it: greyed out with a red cross.
+        Shade = Image.new("RGBA", Img.size, (0, 0, 0, 0))
+        ImageDraw.Draw(Shade).rounded_rectangle(Box, 10, fill=(20, 0, 4, 150))
+        Img.alpha_composite(Shade)
+        D = ImageDraw.Draw(Img)
+        D.line((Box[0] + 14, Box[1] + 14, Box[2] - 14, Box[3] - 14), fill=RED, width=5)
+        D.line((Box[2] - 14, Box[1] + 14, Box[0] + 14, Box[3] - 14), fill=RED, width=5)
     return Img
 
 
-def JokerChip(joker_id: str, lit: bool = False) -> Image.Image:
+def JokerChip(joker_id: str, lit: bool = False, sealed: bool = False) -> Image.Image:
     """Small joker card for the table row."""
     Info = M.JokerInfo(joker_id)
     Img = Image.new("RGBA", (JOKER_W, JOKER_H), (0, 0, 0, 0))
@@ -80,6 +88,11 @@ def JokerChip(joker_id: str, lit: bool = False) -> Image.Image:
     Img.alpha_composite(Icon(Info["emoji"], Info["name"], "common", 40), ((JOKER_W - 40) // 2, 8))
     D.text((JOKER_W / 2, 62), Info["name"], font=Font(13), fill=TEXT, anchor="mm")
     D.text((JOKER_W / 2, 80), ShortText(Info["text"], 24), font=Font(10, bold=False), fill=MUTED, anchor="mm")
+    if sealed:
+        Shade = Image.new("RGBA", Img.size, (0, 0, 0, 0))
+        ImageDraw.Draw(Shade).rounded_rectangle((0, 0, JOKER_W - 1, JOKER_H - 1), 10, fill=(40, 0, 6, 190), outline=RED, width=3)
+        Img.alpha_composite(Shade)
+        GlowText(Img, (JOKER_W / 2, JOKER_H / 2), "SELLADO", Font(18), RED_GLOW, anchor="mm")
     return Img
 
 
@@ -95,14 +108,14 @@ def Header(img: Image.Image, game: dict, title: str):
     D.text((W - 120, 30), f"ANTE {game['ante'] + 1}/{M.ANTES}", font=Font(18), fill=TEXT, anchor="ra")
 
 
-def JokerRow(img: Image.Image, game: dict, y: int, lit: set[str] = frozenset()):
+def JokerRow(img: Image.Image, game: dict, y: int, lit: set[str] = frozenset(), sealed: int | None = None):
     W = img.size[0]
     D = ImageDraw.Draw(img)
     Total = M.JOKER_SLOTS * JOKER_W + (M.JOKER_SLOTS - 1) * 12
     X = (W - Total) // 2
     for i in range(M.JOKER_SLOTS):
         if i < len(game["jokers"]):
-            img.alpha_composite(JokerChip(game["jokers"][i], game["jokers"][i] in lit), (X, y))
+            img.alpha_composite(JokerChip(game["jokers"][i], game["jokers"][i] in lit and i != sealed, i == sealed), (X, y))
         else:
             D.rounded_rectangle((X, y, X + JOKER_W - 1, y + JOKER_H - 1), 10, outline=(70, 30, 36), width=2)
             D.text((X + JOKER_W / 2, y + JOKER_H / 2), "vacío", font=Font(13, bold=False), fill=(90, 50, 56), anchor="mm")
@@ -120,10 +133,11 @@ def Table(game: dict, selected: list[str] | None = None, state: str | None = Non
     W, H = SIZE
     Img = Background(SIZE)
     D = ImageDraw.Draw(Img)
-    Name = M.BLINDS[game["blind"]][0]
+    Rule = M.Rule(game)
+    Name = M.BOSSES[M.BossOf(game)][0] if Rule else M.BLINDS[game["blind"]][0]
     Header(Img, game, f"LA LARGA MARCHA · {Name.upper()}")
     Shown = M.Score(selected, game) if selected else game.get("last")
-    JokerRow(Img, game, 66, set((Shown or {}).get("triggered", [])))
+    JokerRow(Img, game, 66, set((Shown or {}).get("triggered", [])), game.get("sealed") if Rule.get("seal_joker") else None)
     Target = M.Target(game["ante"], game["blind"])
     D.text((32, 178), "SEÑAL", font=Font(16), fill=MUTED)
     D.text((W - 32, 176), f"{game['score']:,} / {Target:,}".replace(",", "."), font=Font(20), fill=TEXT, anchor="ra")
@@ -135,17 +149,21 @@ def Table(game: dict, selected: list[str] | None = None, state: str | None = Non
     D.text((32, 238), f"MANOS {game['hands']}/{M.HANDS}", font=Font(18), fill=TEXT)
     D.text((200, 238), f"DESCARTES {game['discards']}/{M.DISCARDS}", font=Font(18), fill=TEXT)
     D.text((W - 32, 240), f"Premio al vencer al jefe: x{M.LADDER[game['ante']]:g}", font=Font(16, bold=False), fill=MUTED, anchor="ra")
+    if Rule:
+        GlowText(Img, (W / 2, 278), "⚠ " + M.BOSSES[M.BossOf(game)][1].upper(), Font(15), RED_GLOW, anchor="mm")
     if Shown:
         Level = f" nv.{Shown['level']}" if Shown.get("level", 1) > 1 else ""
         Mult = f"{Shown['mult']:g}"
         Line = f"{'▸ ' if selected else ''}{Shown['label'].upper()}{Level}   {Shown['chips']} × {Mult} = {Shown['total']:,}".replace(",", ".")
+        if Shown.get("siesta"):
+            Line = f"{'▸ ' if selected else ''}{Shown['label'].upper()}   SIESTA: NO CUENTA"
         GlowText(Img, (W / 2, 312), Line, Font(26), TEXT if selected else RED_GLOW, anchor="mm")
     Picked = set(selected or [])
     Hand = game["hand"]
     Total = len(Hand) * CARD_W + (len(Hand) - 1) * CARD_GAP
     X = (W - Total) // 2
     for C in Hand:
-        Img.alpha_composite(Card(C, C in Picked), (X - 8, CARDS_Y - (RAISE if C in Picked else 0) - 8))
+        Img.alpha_composite(Card(C, C in Picked, M.Debuffed(C, Rule)), (X - 8, CARDS_Y - (RAISE if C in Picked else 0) - 8))
         X += CARD_W + CARD_GAP
     State = state or game["state"]
     if State in BANNERS:
