@@ -94,6 +94,15 @@ Consejos:
 - Evita premios de dinero real (Nitro y similares) en la tienda: hacen que la gente quiera abusar del sistema y el casino deja de ser un juego.
 - Si tras unas semanas el top tiene mucho más que 25.000 de media, sube los roles caros antes de bajar los ingresos: quitarle ingresos a la gente se siente peor que ver precios más altos.
 
+## La Larga Marcha (`/casino marcha`)
+
+Juego de póker por etapas inspirado en los roguelikes de cartas, con estética LOJI.
+- Mano de 8 cartas. Por etapa tienes 4 manos y 3 descartes, y juegas de 1 a 5 cartas. Puntos = (fichas de la jugada + valor de las cartas que puntúan) × multi.
+- Etapas: 450, 650 y 900 de señal. Tras cada una puedes cobrar ×1, ×1,3 o ×3,3 la entrada, o seguir (si fallas, pierdes todo).
+- Los premios se calibraron simulando miles de partidas con un jugador simple, que recupera ~90-93%. Como es un juego de habilidad, hay **límite diario** (5) para que nadie lo farmee.
+- La partida se guarda en `eco_marcha`, así que sobrevive a reinicios.
+- Próximas fases: B = comodines y tienda entre etapas (con arte de TFR); C = run completa, jefes y torneo semanal.
+
 ## Boosters
 
 - Se detecta con `premium_since` del miembro: en cuanto deja de boostear pierde los beneficios.

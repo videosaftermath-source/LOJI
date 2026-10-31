@@ -40,6 +40,7 @@ from core.economy.casino import (
     ROULETTE_BETS,
 )
 from cogs.Modules.Economy.casino_games import HiLoView, HorseChoices, MinesView, RaceTrack
+from cogs.Modules.Economy.marcha_game import MarchaView
 from core.economy.cards import AnimationSeconds
 from core.economy.config import EcoConfig
 from core.economy.slotgif import HOLD_MS, SlotsAnimation
@@ -377,6 +378,27 @@ class EconomyCasino(commands.Cog):
             await Message.edit(embed=Frame(Shown))
         await asyncio.sleep(SPIN_STEP)
         await Message.edit(embed=Frame(3, final=True))
+
+    @casino.command(name="marcha", description="🃏 La Larga Marcha: póker por etapas. Cobra o sigue marchando")
+    @app_commands.describe(cantidad="Entrada (500, 1k...). Sin cantidad, sigues tu marcha en curso")
+    @ModuleIsEnabled(MODULE)
+    async def marcha(self, ctx: commands.Context, cantidad: str | None = None):
+        await ctx.defer()
+        Config = await EcoConfig().Get(ctx.guild.id)
+        Game = await Eco().marcha.Active(ctx.guild.id, ctx.author.id)
+        Note = "⏯️ Retomas tu marcha en curso." if Game else ""
+        if not Game:
+            if not cantidad:
+                return await ctx.send(f"{Emojis.no} Pon la entrada: `/casino marcha cantidad:500`.", ephemeral=True)
+            try:
+                Game, Left = await Eco().marcha.Start(ctx.author, cantidad, Config)
+            except EconomyError as e:
+                return await Fail(ctx, e, Config)
+            Note = f"-# Te quedan {Left} marchas hoy."
+            self.Played(ctx)
+        View = MarchaView(ctx.author, Game, Config, Note)
+        embed, File = await View.Render()
+        View.message = await ctx.send(embed=embed, file=File, view=View)
 
     @casino.command(name="tragamonedas", description="Tragamonedas de lujo animada: mira girar los rodillos")
     @app_commands.describe(cantidad="Cuánto apuestas (500, 1.5k, todo, mitad)")

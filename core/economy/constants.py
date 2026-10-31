@@ -22,6 +22,7 @@ STATS_DAILY = "eco_stats_daily"
 BANNERS = "eco_banners"
 PITY = "eco_pity"
 PULLS = "eco_pulls"
+MARCHA = "eco_marcha"
 
 # Discord select menus hold at most 25 options, so these are capped there.
 MAX_ITEMS = 25
@@ -172,6 +173,9 @@ DEFAULT_CONFIG: dict = {
         "slots": {"min": 20, "max": 5_000, "cooldown": 5, "edge": 0.10},
         # Same reels and paytable as slots, animated; a bit better odds since each spin takes longer.
         "deluxe": {"min": 50, "max": 5_000, "cooldown": 8, "edge": 0.08},
+        # La Larga Marcha: a skill game, so its prizes are fixed (core/economy/marcha.py) and
+        # a daily limit stops good players from farming it. "edge" isn't used.
+        "marcha": {"min": 100, "max": 2_000, "cooldown": 5, "edge": 0.0, "daily_limit": 5},
         "coinflip": {"min": 20, "max": 20_000, "cooldown": 3, "edge": 0.02},
         # Classic payouts (x2, blackjack x2.5): the rules alone give the house ~1.4% (~5% playing badly).
         # Any edge set here is taken from the winnings on top of that.
@@ -252,6 +256,7 @@ SECTIONS = {
     "casino2": "🎲 Casino 2",
     "economy": "📈 Inflación, demanda y banco",
     "booster": "💎 Boosters",
+    "marcha": "🃏 La Larga Marcha",
 }
 
 SETTINGS: list[Setting] = [
@@ -351,6 +356,11 @@ SETTINGS: list[Setting] = [
             Setting(Section, f"casino.{Game}.edge", f"{Label}: ventaja casa (0.03 = 3%)", float, 0, 0.5),
         )
     ],
+    Setting("marcha", "casino.marcha.min", "Marcha: entrada mínima", int, 1, 10_000_000),
+    Setting("marcha", "casino.marcha.max", "Marcha: entrada máxima", int, 1, 100_000_000),
+    Setting("marcha", "casino.marcha.daily_limit", "Marcha: partidas por día", int, 1, 100,
+            "Es un juego de habilidad: el límite evita que alguien muy bueno lo farmee."),
+    Setting("marcha", "casino.marcha.cooldown", "Marcha: espera entre partidas (s)", int, 0, 3600),
     Setting("casino", "casino.crash.max_multiplier", "Crash: multiplicador máximo", int, 2, 1000),
     Setting("casino2", "casino.mines.max_multiplier", "Mines: multiplicador máximo", int, 2, 1000,
             "Al llegar, cobra solo. Sin tope, una racha imposible pagaría miles de millones."),

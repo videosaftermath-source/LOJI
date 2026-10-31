@@ -1,0 +1,109 @@
+import asyncio
+import random
+from types import SimpleNamespace as N
+
+import pytest
+
+import core.economy.marcha as M
+from core.economy.config import Merge
+from core.economy.constants import DEFAULT_CONFIG
+from core.economy.registry import Build
+from core.economy.service import EconomyService, InsufficientFunds
+from tests.economy.fakes import DB
+
+CONFIG = Merge(DEFAULT_CONFIG, {})
+G = 1
+
+
+def run(coro):
+    return asyncio.run(coro)
+
+
+@pytest.mark.parametrize(
+    "cards,hand,scoring",
+    [
+        (["AS", "KS", "QS", "JS", "TS"], "straight_flush", 5),
+        (["9H", "9S", "9D", "9C", "2H"], "four", 4),
+        (["9H", "9S", "9D", "2C", "2H"], "full_house", 5),
+        (["2H", "7H", "9H", "JH", "KH"], "flush", 5),
+        (["AH", "2S", "3D", "4C", "5H"], "straight", 5),
+        (["9H", "9S", "9D", "2C"], "three", 3),
+        (["9H", "9S", "2D", "2C", "KH"], "two_pair", 4),
+        (["9H", "9S", "KD"], "pair", 2),
+        (["9H", "KS", "2D"], "high", 1),
+        (["2H", "3H", "4H", "5H"], "high", 1),  # 4 suited cards aren't a flush
+    ],
+)
+def test_evaluate(cards, hand, scoring):
+    Hand, Scoring = M.Evaluate(cards)
+    assert Hand == hand and len(Scoring) == scoring
+
+
+def test_score_adds_scoring_cards_only():
+    s = M.Score(["KH", "KS", "2D"])  # pair of kings: 10 + 10 + 10 chips, x2
+    assert (s["chips"], s["mult"], s["total"]) == (30, 2, 60)
+    assert M.Score(["AH"])["total"] == (5 + 11) * 1
+
+
+def test_game_flow():
+    rng = random.Random(1)
+    g = M.NewGame(100, rng)
+    assert len(g["hand"]) == M.HAND_SIZE and g["hands"] == M.HANDS
+    with pytest.raises(ValueError):
+        M.Play(g, ["XX"])
+    with pytest.raises(ValueError):
+        M.Play(g, g["hand"][:6])
+    M.Discard(g, g["hand"][:3])
+    assert g["discards"] == M.DISCARDS - 1 and len(g["hand"]) == M.HAND_SIZE
+    g["score"] = M.TARGETS[0] - 1
+    M.Play(g, g["hand"][:1])
+    assert g["state"] == "cleared" and g["cleared"] == 1 and M.Prize(g) == int(100 * M.LADDER[0])
+    M.NextStage(g, rng)
+    assert g["stage"] == 1 and g["score"] == 0 and g["state"] == "playing"
+    for _ in range(M.HANDS):
+        if g["state"] == "playing":
+            g["score"] = 0
+            M.Play(g, g["hand"][:1])
+    assert g["state"] == "failed"
+
+
+def services():
+    s = Build(EconomyService(DB()))
+    run(s.Setup())
+    return s
+
+
+def member(uid):
+    return N(id=uid, guild=N(id=G))
+
+
+def test_start_charges_limits_and_pays_once():
+    s = services()
+    m = member(5)
+    run(s.economy.Add(G, 5, 10_000, "seed"))
+    game, left = run(s.marcha.Start(m, "1000", CONFIG))
+    assert left == CONFIG["casino"]["marcha"]["daily_limit"] - 1
+    assert run(s.economy.PeekBalance(G, 5)) == 9_000
+    with pytest.raises(M.MarchaError):  # one game at a time
+        run(s.marcha.Start(m, "1000", CONFIG))
+    game["cleared"], game["state"] = 2, "cleared"
+    assert run(s.marcha.Finish(m, game, cash_out=True)) == int(1000 * M.LADDER[1])
+    assert run(s.marcha.Finish(m, game, cash_out=True)) == 0  # double click pays nothing
+    assert run(s.economy.PeekBalance(G, 5)) == 9_000 + int(1000 * M.LADDER[1])
+    assert run(s.marcha.Active(G, 5)) is None
+
+
+def test_daily_limit_and_refund_on_failed_start():
+    s = services()
+    m = member(6)
+    config = Merge(DEFAULT_CONFIG, {"casino": {"marcha": {"daily_limit": 2, "cooldown": 0}}})
+    run(s.economy.Add(G, 6, 150, "seed"))
+    with pytest.raises(InsufficientFunds):
+        run(s.marcha.Start(m, "1000", config))  # failed start doesn't use up a game
+    for _ in range(2):
+        g, _ = run(s.marcha.Start(m, "100", config)) if run(s.economy.PeekBalance(G, 6)) >= 100 else (None, 0)
+        if g:
+            run(s.marcha.Finish(m, g, cash_out=False))
+        run(s.economy.Add(G, 6, 100, "seed"))
+    with pytest.raises(M.MarchaError):
+        run(s.marcha.Start(m, "100", config))
