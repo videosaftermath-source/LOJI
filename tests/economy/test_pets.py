@@ -319,3 +319,18 @@ def test_reset_user_wipes_everything_but_code_uses_and_boost_flag():
     assert run(eco.db[USERS].find_one({"guild_id": G, "user_id": 20}))["boost_rewarded"] == 123
     last = run(eco.ledger.find({"user_id": 20}).sort("ts", -1).to_list(length=1))[0]
     assert last["kind"] == "destroyed" and last["amount"] == -50_000 and last["bank"] == -1_000
+
+
+def test_every_starter_has_a_drawing_and_old_species_get_it():
+    import os
+
+    from core.economy.cards import ART_DIR
+    from core.economy.pet_catalog import STARTER_SPECIES, StarterDocs
+
+    for Row in STARTER_SPECIES:
+        assert os.path.exists(os.path.join(ART_DIR, f"{Row[0]}.png")), Row[0]
+    s = Build(EconomyService(DB()))
+    old = [{**D, "art": None} for D in StarterDocs(G)]
+    run(s.pets.species.insert_many(old))
+    run(s.pets.Setup())
+    assert run(s.pets.species.find_one({"guild_id": G, "species_id": "HAMSTER"}))["art"] == "hamster"

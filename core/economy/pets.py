@@ -15,7 +15,7 @@ from pymongo import ReturnDocument
 from pymongo.errors import DuplicateKeyError
 
 from core.economy.constants import ARCHETYPES, CREATED, MAX_PETS, MAX_SPECIES, MAX_SPECIES_PER_RARITY, PETS, RARITIES, SPECIES, USERS
-from core.economy.pet_catalog import STANDALONE, StarterDocs
+from core.economy.pet_catalog import ART, STANDALONE, StarterDocs
 from core.economy.rewards import Aware
 from core.economy.service import EconomyError, EconomyService
 from core.economy.shop import NewId
@@ -147,6 +147,9 @@ class Pets:
         await self.pets.create_index([("guild_id", 1), ("user_id", 1), ("species_id", 1)], unique=True)
         await self.pets.create_index([("guild_id", 1), ("pet_id", 1)], unique=True)
         await self.pets.create_index([("guild_id", 1), ("xp", -1)])
+        # Starter species loaded before they had drawings get them (custom art is left alone).
+        for Key, Art in ART.items():
+            await self.species.update_many({"species_id": Key.upper(), "art": None}, {"$set": {"art": Art}})
 
     # ---- species (admin) ----
 

@@ -29,7 +29,8 @@ STARTER_SPECIES = [
     ("pumpkin", "Calabaza Traviesa", "🎃", "legendary", "lucky", "Nació la noche de Halloween. ¿Truco o trato? Siempre trato... para ti."),
 ]
 # Bundled drawings (assets/pets/<name>.png) used on the cards instead of the emoji.
-ART = {"pumpkin": "pumpkin", "shiba": "shiba"}
+# Every starter has one (tools/draw_pets.py draws the chibi heads).
+ART = {Row[0]: Row[0] for Row in STARTER_SPECIES}
 # Exclusive species: outside every evolution chain, only obtainable from the gacha (or an admin gift).
 STANDALONE = {"wolf", "pumpkin", "shiba"}
 

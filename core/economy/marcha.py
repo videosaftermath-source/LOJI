@@ -62,7 +62,7 @@ BOSSES = {
     "recaudador": ("El Recaudador", "Cada mano que juegas te cobra ◈1", {"hand_cost": 1}),
     "koala": ("El Koala", "Siesta: tu primera mano no cuenta", {"first_hand_zero": True}),
     "heisenberg": ("Heisenberg", "Say my name: si juegas tu jugada más usada, pierdes todos tus ◈", {"steal_on_favorite": True}),
-    "griton": ("El Gritón", "Debes jugar exactamente 5 cartas", {"exact_cards": 5}),
+    "griton": ("Gunther Fehlinger", "Debes jugar exactamente 5 cartas", {"exact_cards": 5}),
     "corvus": ("Corvus", "Cada jugada que hagas baja 1 nivel", {"level_down": True}),
     "loji": ("LOJI", "En cada mano anula uno de tus comodines al azar", {"seal_joker": True}),
 }

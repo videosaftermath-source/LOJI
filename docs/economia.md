@@ -104,7 +104,7 @@ Juego de póker por antes, lo más parecido posible a Balatro, con estética LOJ
 - **Jefes** (tercera ciega de cada ante), con retrato en `assets/marcha/bosses/`. Los antes 1-7 sacan uno al azar; el 8 siempre es **LOJI**, con retrato animado:
   - Nailoong: las ♥ no puntúan · El Coronado de Calaveras: las figuras no puntúan · El Iracundo: 1 descarte
   - El Recaudador: cada mano cuesta ◈1 · El Koala: la primera mano no cuenta · Heisenberg: si juegas tu jugada más usada, te quita todos los ◈
-  - El Gritón: hay que jugar exactamente 5 cartas · Corvus: cada jugada baja 1 nivel · **LOJI**: anula un comodín al azar en cada mano
+  - Gunther Fehlinger: hay que jugar exactamente 5 cartas · Corvus: cada jugada baja 1 nivel · **LOJI**: anula un comodín al azar en cada mano
   - Para añadir un jefe: su retrato en `assets/marcha/bosses/<id>.png` y una línea en `BOSSES` (`core/economy/marcha.py`).
 - **Cobrar** tras cada jefe: ×0,6 · ×0,8 · ×1,1 · ×2 · ×5 · ×12 · ×30 · ×75. Con los 8 jefes, un bot simple vence los antes 1-6 el 95/94/80/36/9/2% de las veces.
 - **Iconos de comodines:** [game-icons.net](https://game-icons.net) (Lorc, Delapouite, Caro Asercion), CC BY 3.0, en `assets/marcha/jokers/`. Son siluetas blancas que el bot tiñe según la rareza. El crédito está en el botón Attributions de `/info`.
