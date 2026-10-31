@@ -43,6 +43,11 @@ def SuggestionEmbed(doc: dict, config: dict, copy: bool = False) -> discord.Embe
             P = PRIORITIES[D["priority"]]
             embed.add_field(name="Encargado", value=f"🏢 {Dep['name'] if Dep else 'Departamento borrado'} · {P[0]} Prioridad {P[1].lower()}", inline=False)
         embed.add_field(name="Motivo", value=D["reason"][:1024], inline=False)
+    if doc.get("task"):
+        from core.mail.tasks import TASK_STATUSES
+
+        Emoji, Label = TASK_STATUSES[doc.get("task_status", "open")]
+        embed.add_field(name="📋 Tarea", value=f"#{doc['task']} · {Emoji} {Label}", inline=False)
     embed.set_footer(text=("Copia para debatir · " if copy else "") + "Sugerencia para el Tenno")
     return embed
 
@@ -190,6 +195,13 @@ async def Apply(interaction: discord.Interaction, number: int, action: str, deci
     Doc = await Store().Decide(Guild.id, number, action, decision)
     if not Doc:
         return "Esa sugerencia ya estaba decidida."
+    Task = None
+    if action == "do":
+        from cogs.Modules.Mail.tasks import CreateTask
+
+        Task = await CreateTask(Guild, Doc, decision, config)
+        await Store().col.update_one({"_id": Doc["_id"]}, {"$set": {"task": Task["number"], "task_status": "open"}})
+        Doc.update(task=Task["number"], task_status="open")
     View = DecisionView(Doc)
     await Refresh(Guild, Doc["message"], SuggestionEmbed(Doc, config), View)
     if action == "debate":
@@ -213,7 +225,10 @@ async def Apply(interaction: discord.Interaction, number: int, action: str, deci
             await Author.send(Text)
         except discord.HTTPException:
             pass
-    return f"{Emoji} Sugerencia #{number}: **{Label}**." + (" Enviada a «Cosas por debatir»." if action == "debate" else "")
+    Extra = " Enviada a «Cosas por debatir»." if action == "debate" else ""
+    if Task:
+        Extra = f" Creada la **tarea #{Task['number']}**."
+    return f"{Emoji} Sugerencia #{number}: **{Label}**.{Extra}"
 
 
 # ---------------- /mail ----------------

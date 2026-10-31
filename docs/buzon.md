@@ -1,6 +1,6 @@
 # Buzón (sugerencias y tareas del staff)
 
-Reemplaza al modmail. Fases: 1) departamentos, cargos y credenciales ✅ · 2) `/mail` y decisiones ✅ · 3) `/tareas` · 4) quitar el modmail.
+Reemplaza al modmail. Fases: 1) departamentos, cargos y credenciales ✅ · 2) `/mail` y decisiones ✅ · 3) `/tareas` ✅ · 4) quitar el modmail.
 
 ## Permisos
 - **Por rol.** Cada departamento y cada cargo está ligado a un rol de Discord.
@@ -22,6 +22,17 @@ Reemplaza al modmail. Fases: 1) departamentos, cargos y credenciales ✅ · 2) `
 5. El autor recibe cada decisión por **MD**. Los botones siguen funcionando aunque el bot se reinicie.
 
 Datos: `mail_suggestions` (numeradas por servidor) y `mail_counters`.
+
+## Tareas
+- Cada **Se realizará** crea una **tarea** (con su propio número). Se publica en el **canal del departamento**, mencionando a su rol, y la sugerencia original muestra su estado.
+- Botones: **🙋 Reclamar · ✅ Hecha · ↩️ Soltar · 🔄 Reabrir**. Siguen funcionando aunque el bot se reinicie.
+  - Reclamar y marcar como hecha: cualquiera con **el rol del departamento**.
+  - Soltar: quien la reclamó.
+  - Reabrir y actuar sobre cualquier tarea: Tenno, Consejo Supremo y Director de Moderación, por rol o con su credencial.
+- Al terminarla, el autor de la sugerencia recibe un MD.
+- `/tareas` (staff): lista ordenada por prioridad, con filtros por departamento y estado (abiertas, sin reclamar, reclamadas, hechas). Empieza en tu departamento si perteneces a uno solo.
+
+Datos: `mail_tasks`.
 
 ## Comandos
 - `/buzon config`: panel para el rol de staff, el canal de sugerencias, el canal «Cosas por debatir», los roles de los cargos, los departamentos (rol y canal de tareas; crear, renombrar, borrar) y las credenciales.
