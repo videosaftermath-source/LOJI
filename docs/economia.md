@@ -97,16 +97,16 @@ Consejos:
 ## La Larga Marcha (`/casino marcha`)
 
 Juego de póker por antes, lo más parecido posible a Balatro, con estética LOJI.
-- **8 antes** de 3 ciegas cada uno: Patrulla (×1), Muralla (×1,5) y Jefe (×2). Los objetivos base por ante están más abajo, en Cobrar.
+- **8 antes** de 3 ciegas cada uno: Patrulla (×1), Muralla (×1,5) y Jefe (×2,25). Los objetivos base por ante están más abajo, en Cobrar.
 - Por ciega: mano de 8 cartas, 4 manos y 3 descartes. Puntos = (fichas de la jugada + cartas que puntúan) × multi, y luego los comodines de izquierda a derecha.
 - **◈ Datos** (dinero dentro de la partida): empiezas con 4; al superar una ciega ganas 3/4/5, más 1 por mano sobrante, más intereses (1 por cada 5, máximo 5).
 - **Tienda** tras cada ciega: 2 ofertas (comodín o actualización de jugada), renovar por 5 (+1 cada vez) y vender comodines por la mitad. Máximo 5 comodines. Hay 24 comodines propios (comunes, poco comunes y raros).
 - **Jefes** (tercera ciega de cada ante), con retrato en `assets/marcha/bosses/`. Los antes 1-7 sacan uno al azar; el 8 siempre es **LOJI**, con retrato animado:
   - Nailoong: las ♥ no puntúan · El Coronado de Calaveras: las figuras no puntúan · El Iracundo: 1 descarte
-  - El Recaudador: cada mano cuesta ◈1 · El Koala: la primera mano no cuenta · Heisenberg: si juegas tu jugada más usada, te quita todos los ◈
-  - Gunther Fehlinger: hay que jugar exactamente 5 cartas · Corvus: cada jugada baja 1 nivel · **LOJI**: anula un comodín al azar en cada mano
+  - El Recaudador: cada mano cuesta ◈2 · El Koala: la primera mano no cuenta · Heisenberg: si juegas tu jugada más usada, te quita todos los ◈
+  - Gunther Fehlinger: hay que jugar exactamente 5 cartas · Corvus: cada jugada baja 1 nivel · **LOJI**: pide ×3 de señal y anula un comodín al azar en cada mano
   - Para añadir un jefe: su retrato en `assets/marcha/bosses/<id>.png` y una línea en `BOSSES` (`core/economy/marcha.py`).
-- **Cobrar** tras cada jefe: ×0,6 · ×1 · ×1,1 · ×1,5 · ×3 · ×5 · ×7 · ×10 (máximo). Objetivos base por ante: 300, 800, 1.800, 3.500 (accesibles) y 14.000, 30.000, 55.000, 90.000 (desafío). Un bot simple vence los antes 1-6 el 95/91/83/61/6/1% de las veces.
+- **Cobrar** tras cada jefe: ×0,6 · ×1 · ×1,1 · ×1,5 · ×3 · ×5 · ×7 · ×10 (máximo). Objetivos base por ante: 300, 800, 1.800, 3.500 (accesibles) y 14.000, 30.000, 55.000, 90.000 (desafío). Con jefes ×2,25, un bot simple vence los antes 1-5 el 94/89/82/52/4% de las veces.
 - **Iconos de comodines:** [game-icons.net](https://game-icons.net) (Lorc, Delapouite, Caro Asercion), CC BY 3.0, en `assets/marcha/jokers/`. Son siluetas blancas que el bot tiñe según la rareza. El crédito está en el botón Attributions de `/info`.
 - Límite diario (5) y apuesta máxima de 3.000 (también por el límite global del casino).
 - Se guarda en `eco_marcha` y sobrevive a reinicios.

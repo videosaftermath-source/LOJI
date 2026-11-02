@@ -184,7 +184,7 @@ class MarchaView(discord.ui.View):
                                  disabled=G["money"] < G["reroll"], row=0))
             Ante, Blind = (G["ante"] + 1, 0) if G["blind"] == len(M.BLINDS) - 1 else (G["ante"], G["blind"] + 1)
             Name = M.BOSSES[M.BossOf(G, Ante)][0] if "bosses" in G and Blind == len(M.BLINDS) - 1 else M.BLINDS[Blind][0]
-            Next = f"{Name} ({M.Target(Ante, Blind):,})".replace(",", ".")
+            Next = f"{Name} ({M.Target(Ante, Blind, G):,})".replace(",", ".")
             self.add_item(Button(f"Siguiente: {Next}", "⚔️", discord.ButtonStyle.red, self.Next, row=0))
             if G["jokers"]:
                 self.add_item(SellSelect(self))
@@ -202,7 +202,7 @@ class MarchaView(discord.ui.View):
         if State == "playing":
             Boss = "bosses" in G and G["blind"] == len(M.BLINDS) - 1
             Blind = "👹 Jefe" if Boss else M.BLINDS[G["blind"]][0]
-            Text = f"**Ante {G['ante'] + 1}/{M.ANTES} · {Blind}**: llega a **{M.Target(G['ante'], G['blind']):,}** de señal.\n".replace(",", ".")
+            Text = f"**Ante {G['ante'] + 1}/{M.ANTES} · {Blind}**: llega a **{M.Target(G["ante"], G["blind"], G):,}** de señal.\n".replace(",", ".")
             if Boss:
                 Text += f"⚠️ {BossLine(G)}\n"
                 if (G.get("last") or {}).get("robbed"):

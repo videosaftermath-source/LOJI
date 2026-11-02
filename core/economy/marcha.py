@@ -29,7 +29,7 @@ DISCARDS = 3
 # ---- run structure (like Balatro: antes of three blinds) ----
 ANTES = 8
 ANTE_BASE = (300, 800, 1800, 3500, 14000, 30000, 55000, 90000)  # first blind of each ante: gentle to 4, steep after
-BLINDS = (("Patrulla", 1.0, 3), ("Muralla", 1.5, 4), ("Jefe", 2.0, 5))  # (name, x base score, ◈ reward)
+BLINDS = (("Patrulla", 1.0, 3), ("Muralla", 1.5, 4), ("Jefe", 2.25, 5))  # (name, x base score, ◈ reward)
 START_MONEY = 4
 INTEREST_EVERY, INTEREST_MAX = 5, 5  # +1 ◈ per 5 held, at most +5
 MONEY_PER_HAND_LEFT = 1
@@ -59,12 +59,12 @@ BOSSES = {
     "nailoong": ("Nailoong", "Se comió tus corazones: las cartas ♥ no puntúan", {"debuff_suit": "H"}),
     "calaveras": ("El Coronado de Calaveras", "Las figuras (J, Q, K) no puntúan", {"debuff_faces": True}),
     "iracundo": ("El Iracundo", "Solo tienes 1 descarte", {"discards": 1}),
-    "recaudador": ("El Recaudador", "Cada mano que juegas te cobra ◈1", {"hand_cost": 1}),
+    "recaudador": ("El Recaudador", "Cada mano que juegas te cobra ◈2", {"hand_cost": 2}),
     "koala": ("El Koala", "Siesta: tu primera mano no cuenta", {"first_hand_zero": True}),
     "heisenberg": ("Heisenberg", "Say my name: si juegas tu jugada más usada, pierdes todos tus ◈", {"steal_on_favorite": True}),
     "griton": ("Gunther Fehlinger", "Debes jugar exactamente 5 cartas", {"exact_cards": 5}),
     "corvus": ("Corvus", "Cada jugada que hagas baja 1 nivel", {"level_down": True}),
-    "loji": ("LOJI", "En cada mano anula uno de tus comodines al azar", {"seal_joker": True}),
+    "loji": ("LOJI", "Pide ×3 de señal y en cada mano anula uno de tus comodines al azar", {"seal_joker": True, "target": 3.0}),
 }
 FINAL_BOSS = "loji"
 BOSS_POOL = [B for B in BOSSES if B != FINAL_BOSS]
@@ -105,8 +105,12 @@ def Debuffed(card: str, rule: dict) -> bool:
     return card[1] == rule.get("debuff_suit") or (rule.get("debuff_faces", False) and card[0] in FACES)
 
 
-def Target(ante: int, blind: int) -> int:
-    return int(ANTE_BASE[ante] * BLINDS[blind][1])
+def Target(ante: int, blind: int, game: dict | None = None) -> int:
+    """Score needed; a boss may ask for more than the usual blind multiplier (LOJI)."""
+    Multiplier = BLINDS[blind][1]
+    if game is not None and blind == len(BLINDS) - 1 and "bosses" in game:
+        Multiplier = BOSSES[game["bosses"][ante]][2].get("target", Multiplier)
+    return int(ANTE_BASE[ante] * Multiplier)
 
 
 def Rank(card: str) -> int:
@@ -378,7 +382,7 @@ def Play(game: dict, cards: list[str], rng: random.Random | None = None) -> dict
         game["levels"][Result["hand"]] -= 1
     game.setdefault("played", {})
     game["played"][Result["hand"]] = game["played"].get(Result["hand"], 0) + 1
-    if game["score"] >= Target(game["ante"], game["blind"]):
+    if game["score"] >= Target(game["ante"], game["blind"], game):
         Earned = Earnings(game)
         game["money"] += Earned["total"]
         game["earned"] = Earned
@@ -487,7 +491,7 @@ def NextBlind(game: dict, rng: random.Random):
 
 GAME = "marcha"  # key in config["casino"] and in the casino ledger refs
 # What cashing out after beating each ante's boss pays (x bet), capped at x10. A simple simulated player
-# beats antes 1-6 about 95%, 91%, 83%, 61%, 6% and 1% of the time: x1 and x1.5 are within reach,
+# beats antes 1-5 about 94%, 89%, 82%, 52% and 4% of the time (bosses x2.25): x1 and x1.5 are within reach,
 # antes 5+ are a real challenge, and cashing out anywhere returns at most ~92% for that player.
 LADDER = (0.6, 1.0, 1.1, 1.5, 3, 5, 7, 10)
 

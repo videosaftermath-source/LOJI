@@ -179,7 +179,7 @@ def test_boss_order_and_rules():
     M.NewBlind(g, rng)
     g["score"] = 0
     M.Play(g, g["hand"][:1], rng)
-    assert g["money"] == 4
+    assert g["money"] == 3  # El Recaudador takes ◈2 per hand
 
 
 def test_loji_seals_a_joker():
@@ -214,3 +214,10 @@ def test_new_boss_rules():
     g["levels"] = {"high": 3}
     M.Play(g, g["hand"][:1], rng)
     assert g["levels"]["high"] == 2
+
+
+def test_loji_asks_for_more():
+    g = M.NewGame(100, random.Random(7))
+    last = M.ANTES - 1
+    assert M.Target(last, 2, g) == int(M.ANTE_BASE[last] * 3.0)
+    assert M.Target(0, 2, g) == int(M.ANTE_BASE[0] * M.BLINDS[2][1])

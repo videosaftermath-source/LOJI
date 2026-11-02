@@ -156,7 +156,7 @@ def Table(game: dict, selected: list[str] | None = None, state: str | None = Non
     Header(Img, game, f"LA LARGA MARCHA · {Name.upper()}")
     Shown = M.Score(selected, game) if selected else game.get("last")
     JokerRow(Img, game, 66, set((Shown or {}).get("triggered", [])), game.get("sealed") if Rule.get("seal_joker") else None)
-    Target = M.Target(game["ante"], game["blind"])
+    Target = M.Target(game["ante"], game["blind"], game)
     D.text((32, 178), "SEÑAL", font=Font(16), fill=MUTED)
     D.text((W - 32, 176), f"{game['score']:,} / {Target:,}".replace(",", "."), font=Font(20), fill=TEXT, anchor="ra")
     Bar = (32, 204, W - 32, 222)
