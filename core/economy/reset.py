@@ -1,6 +1,6 @@
 """Wipes one user's economy (admin tool for mistakes or abuse)."""
 
-from core.economy.constants import DESTROYED, EFFECTS, INVENTORY, PETS, PITY, PULLS, QUEST_PROGRESS, USERS
+from core.economy.constants import DESTROYED, EFFECTS, INVENTORY, MARCHA, PETS, PITY, PULLS, QUEST_PROGRESS, USERS
 
 # Everything a user owns or has progressed. Code uses are kept on purpose, so a reset
 # can't be used to redeem the same codes again; the ledger is kept as the audit trail.
@@ -11,6 +11,7 @@ WIPED = {
     PITY: "contadores del gacha",
     PULLS: "historial del gacha",
     QUEST_PROGRESS: "progreso de misiones",
+    MARCHA: "marcha en curso",
 }
 # Kept on the user doc so a reset doesn't pay the one-time boost reward again.
 KEEP_FIELDS = ("boost_rewarded",)

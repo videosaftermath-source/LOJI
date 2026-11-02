@@ -221,3 +221,14 @@ def test_loji_asks_for_more():
     last = M.ANTES - 1
     assert M.Target(last, 2, g) == int(M.ANTE_BASE[last] * 3.0)
     assert M.Target(0, 2, g) == int(M.ANTE_BASE[0] * M.BLINDS[2][1])
+
+
+def test_a_deleted_game_pays_nothing():
+    s = services()
+    m = member(9)
+    run(s.economy.Add(G, 9, 5_000, "seed"))
+    game, _ = run(s.marcha.Start(m, "1000", CONFIG))
+    game["cleared"], game["state"] = 3, "ante_cleared"
+    run(s.marcha.games.delete_one({"guild_id": G, "user_id": 9}))  # what /eco-admin cancelar-marcha does
+    assert run(s.marcha.Finish(m, game, cash_out=True)) == 0
+    assert run(s.economy.PeekBalance(G, 9)) == 4_000

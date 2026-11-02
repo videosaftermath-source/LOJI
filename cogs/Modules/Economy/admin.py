@@ -309,6 +309,25 @@ class EconomyAdmin(commands.Cog):
             ephemeral=True,
         )
 
+    @eco_admin.command(name="cancelar-marcha", description="Anula la partida de La Larga Marcha de alguien (no cobra nada)")
+    @app_commands.describe(usuario="De quién", devolver="¿Le devuelves la entrada?", motivo="Por qué (queda en el registro)")
+    @Permissions("Admin")
+    async def cancelar_marcha(self, ctx: commands.Context, usuario: discord.User, devolver: bool = False, motivo: str = "Sin motivo"):
+        Config = await EcoConfig().Get(ctx.guild.id)
+        Game = await Eco().marcha.Active(ctx.guild.id, usuario.id)
+        if not Game:
+            return await ctx.send(f"{Emojis.no} {usuario.mention} no tiene ninguna marcha en curso.", ephemeral=True)
+        # Deleting the saved game is what voids it: its table can no longer cash out or save.
+        await Eco().marcha.games.delete_one({"guild_id": ctx.guild.id, "user_id": usuario.id})
+        Note = ""
+        if devolver:
+            await Economy().Add(ctx.guild.id, usuario.id, int(Game["bet"]), f"Admin {ctx.author.id}: entrada devuelta ({motivo})", ref="casino:marcha")
+            Note = f" Le devolviste la entrada ({FormatAmount(int(Game['bet']), Config)})."
+        logger.warning(f"[Economy] {ctx.author.id} cancelled {usuario.id}'s marcha in {ctx.guild.id} (ante {Game['ante'] + 1}): {motivo}")
+        await ctx.send(
+            f"{Emojis.tick} Anulada la marcha de {usuario.mention} (iba por el ante {Game['ante'] + 1}).{Note}", ephemeral=True,
+        )
+
     @eco_admin.command(name="reiniciar", description="Borra TODA la economía de alguien: dinero, banco, mascotas, items y progreso")
     @app_commands.describe(usuario="A quién reiniciar", motivo="Por qué (queda en el registro)")
     @Permissions("Admin")
