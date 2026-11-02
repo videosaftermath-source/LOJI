@@ -28,7 +28,7 @@ DISCARDS = 3
 
 # ---- run structure (like Balatro: antes of three blinds) ----
 ANTES = 8
-ANTE_BASE = (300, 800, 2000, 5000, 11000, 20000, 35000, 50000)  # first blind of each ante (as in Balatro)
+ANTE_BASE = (300, 800, 1800, 3500, 14000, 30000, 55000, 90000)  # first blind of each ante: gentle to 4, steep after
 BLINDS = (("Patrulla", 1.0, 3), ("Muralla", 1.5, 4), ("Jefe", 2.0, 5))  # (name, x base score, ◈ reward)
 START_MONEY = 4
 INTEREST_EVERY, INTEREST_MAX = 5, 5  # +1 ◈ per 5 held, at most +5
@@ -486,10 +486,10 @@ def NextBlind(game: dict, rng: random.Random):
 # ---------------- prizes ----------------
 
 GAME = "marcha"  # key in config["casino"] and in the casino ledger refs
-# What cashing out after beating each ante's boss pays (x bet). With the boss rules, a simple
-# simulated player beats antes 1-6 about 95%, 94%, 80%, 36%, 9% and 2% of the time.
-# Deep antes pay a lot because they need a good joker build; the daily limit and bet cap keep it safe.
-LADDER = (0.6, 0.8, 1.1, 2, 5, 12, 30, 75)
+# What cashing out after beating each ante's boss pays (x bet), capped at x10. A simple simulated player
+# beats antes 1-6 about 95%, 91%, 83%, 61%, 6% and 1% of the time: x1 and x1.5 are within reach,
+# antes 5+ are a real challenge, and cashing out anywhere returns at most ~92% for that player.
+LADDER = (0.6, 1.0, 1.1, 1.5, 3, 5, 7, 10)
 
 
 def Prize(game: dict) -> int:

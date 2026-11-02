@@ -97,7 +97,7 @@ Consejos:
 ## La Larga Marcha (`/casino marcha`)
 
 Juego de póker por antes, lo más parecido posible a Balatro, con estética LOJI.
-- **8 antes** de 3 ciegas cada uno: Patrulla (×1), Muralla (×1,5) y Jefe (×2). Objetivo base por ante: 300, 800, 2.000, 5.000, 11.000, 20.000, 35.000 y 50.000 (como en Balatro).
+- **8 antes** de 3 ciegas cada uno: Patrulla (×1), Muralla (×1,5) y Jefe (×2). Los objetivos base por ante están más abajo, en Cobrar.
 - Por ciega: mano de 8 cartas, 4 manos y 3 descartes. Puntos = (fichas de la jugada + cartas que puntúan) × multi, y luego los comodines de izquierda a derecha.
 - **◈ Datos** (dinero dentro de la partida): empiezas con 4; al superar una ciega ganas 3/4/5, más 1 por mano sobrante, más intereses (1 por cada 5, máximo 5).
 - **Tienda** tras cada ciega: 2 ofertas (comodín o actualización de jugada), renovar por 5 (+1 cada vez) y vender comodines por la mitad. Máximo 5 comodines. Hay 24 comodines propios (comunes, poco comunes y raros).
@@ -106,7 +106,7 @@ Juego de póker por antes, lo más parecido posible a Balatro, con estética LOJ
   - El Recaudador: cada mano cuesta ◈1 · El Koala: la primera mano no cuenta · Heisenberg: si juegas tu jugada más usada, te quita todos los ◈
   - Gunther Fehlinger: hay que jugar exactamente 5 cartas · Corvus: cada jugada baja 1 nivel · **LOJI**: anula un comodín al azar en cada mano
   - Para añadir un jefe: su retrato en `assets/marcha/bosses/<id>.png` y una línea en `BOSSES` (`core/economy/marcha.py`).
-- **Cobrar** tras cada jefe: ×0,6 · ×0,8 · ×1,1 · ×2 · ×5 · ×12 · ×30 · ×75. Con los 8 jefes, un bot simple vence los antes 1-6 el 95/94/80/36/9/2% de las veces.
+- **Cobrar** tras cada jefe: ×0,6 · ×1 · ×1,1 · ×1,5 · ×3 · ×5 · ×7 · ×10 (máximo). Objetivos base por ante: 300, 800, 1.800, 3.500 (accesibles) y 14.000, 30.000, 55.000, 90.000 (desafío). Un bot simple vence los antes 1-6 el 95/91/83/61/6/1% de las veces.
 - **Iconos de comodines:** [game-icons.net](https://game-icons.net) (Lorc, Delapouite, Caro Asercion), CC BY 3.0, en `assets/marcha/jokers/`. Son siluetas blancas que el bot tiñe según la rareza. El crédito está en el botón Attributions de `/info`.
 - Límite diario (5) y apuesta máxima de 3.000 (también por el límite global del casino).
 - Se guarda en `eco_marcha` y sobrevive a reinicios.

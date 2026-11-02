@@ -24,7 +24,7 @@ GAMES_GUIDE = {
         "Tienes 8 cartas. Elige hasta 5 y juega la mejor combinación: **fichas × multi** suma *señal*. Llega a la señal "
         "de cada ciega con 4 manos y 3 descartes. Entre ciegas, gasta tus **◈ Datos** en comodines y mejoras. "
         "La tercera ciega de cada ante es un **jefe** con una regla que te complica la vida.",
-        "Tras vencer a cada jefe eliges: **cobrar** o **seguir**. Ante 1 ×0,6 → 3 ×1,1 → 4 ×2 → 5 ×5 → 6 ×12 → 7 ×30 → **LOJI ×75**.",
+        "Tras vencer a cada jefe eliges: **cobrar** o **seguir**. Ante 1 ×0,6 → 2 ×1 → 3 ×1,1 → 4 ×1,5 → 5 ×3 → 6 ×5 → 7 ×7 → **LOJI ×10**.",
         "Ahorra ◈: cada 5 te dan +1 de interés. Y fíjate en qué jefe viene antes de llegar.",
     ),
     "coinflip": (
@@ -195,7 +195,7 @@ def TutorialEmbed() -> discord.Embed:
     ), inline=False)
     embed.add_field(name="5️⃣ Cobrar o seguir", value=(
         "En la partida de verdad pagas una entrada. Tras vencer a cada jefe eliges **cobrar** o **seguir**: "
-        "×0,6 → ×1,1 → ×2 → ×5 → ×12 → ×30 → **×75 si vences a LOJI**. Si caes, lo pierdes todo."
+        "×0,6 → **×1** → ×1,1 → **×1,5** → ×3 → ×5 → ×7 → **×10 si vences a LOJI**. Si caes, lo pierdes todo."
     ), inline=False)
     embed.set_footer(text="La práctica es gratis, dura un ante y no cuenta para el límite diario.")
     return embed
