@@ -1,6 +1,7 @@
 """/perfil: automatic staff profiles, the staff panel (by department) and each member's own text."""
 
 import logging
+import time
 from datetime import datetime, timezone
 
 import discord
@@ -14,6 +15,8 @@ logger = logging.getLogger(__name__)
 LOJI_RED = discord.Color.from_rgb(150, 12, 18)
 PANEL_TIMEOUT = 600
 MAX_LISTED = 25
+TICKETS = "Tickets"  # Birb's ticket documents
+TICKET_CACHE_SECONDS = 120  # so not every message in the server hits the database
 _store: Profiles | None = None
 
 
@@ -159,6 +162,7 @@ class StaffPanel(discord.ui.View):
 class StaffProfiles(commands.Cog):
     def __init__(self, client: commands.Bot):
         self.client = client
+        self.tickets: dict[int, tuple[float, dict | None]] = {}
 
     perfil = app_commands.Group(name="perfil", description="Perfiles del staff de LOJI", guild_only=True)
 
@@ -244,6 +248,52 @@ class StaffProfiles(commands.Cog):
         if not await Store().SetSince(interaction.guild.id, usuario.id, Since):
             return await interaction.response.send_message(f"**{usuario.display_name}** no tiene perfil de staff.", ephemeral=True)
         await interaction.response.send_message(f"✅ **{usuario.display_name}** tiene su cargo desde el **{Since:%d/%m/%Y}** ({Duration(Since)}).", ephemeral=True)
+
+    # ---- tickets: "Te atiende" card ----
+
+    async def TicketOf(self, channel_id: int) -> dict | None:
+        Cached = self.tickets.get(channel_id)
+        if Cached and Cached[0] > time.monotonic():
+            return Cached[1]
+        Doc = await Store().db[TICKETS].find_one({"ChannelID": channel_id, "closed": None})
+        self.tickets[channel_id] = (time.monotonic() + TICKET_CACHE_SECONDS, Doc)
+        return Doc
+
+    async def ShowCard(self, channel, member: discord.Member, ticket: dict, config: dict):
+        """Posts the staff member's profile in the ticket, once per person and ticket."""
+        Profile = await self.Ensure(member, config)
+        if not Profile:
+            return
+        Marked = await Store().db[TICKETS].update_one(
+            {"_id": ticket["_id"], "profiles_shown": {"$ne": member.id}}, {"$addToSet": {"profiles_shown": member.id}}
+        )
+        if not Marked.modified_count:
+            return
+        self.tickets.pop(channel.id, None)
+        embed = await ProfileEmbed(member, Profile, config, compact=True)
+        embed.title = f"🎫 Te atiende {member.display_name}"
+        try:
+            await channel.send(embed=embed, allowed_mentions=discord.AllowedMentions.none())
+        except discord.HTTPException as e:
+            logger.warning(f"[Profiles] Couldn't post the profile in ticket {channel.id}: {e}")
+
+    @commands.Cog.listener()
+    async def on_ticket_claimed(self, channel, member: discord.Member):
+        Ticket = await Store().db[TICKETS].find_one({"ChannelID": channel.id})
+        if Ticket:
+            await self.ShowCard(channel, member, Ticket, await Mail().Get(channel.guild.id))
+
+    @commands.Cog.listener()
+    async def on_message(self, message: discord.Message):
+        if message.author.bot or not message.guild or not hasattr(message.author, "roles"):
+            return
+        Config = await Mail().Get(message.guild.id)
+        if not Rank(message.author, MinRole(message.guild, Config)):
+            return  # only staff (checked before touching the database)
+        Ticket = await self.TicketOf(message.channel.id)
+        if not Ticket or int(Ticket.get("UserID") or 0) == message.author.id or message.author.id in Ticket.get("profiles_shown", []):
+            return
+        await self.ShowCard(message.channel, message.author, Ticket, Config)
 
     @commands.Cog.listener()
     async def on_member_update(self, before: discord.Member, after: discord.Member):

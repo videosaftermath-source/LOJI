@@ -54,6 +54,7 @@ def Duration(since: datetime | None, now: datetime | None = None) -> str:
 
 class Profiles:
     def __init__(self, db):
+        self.db = db
         self.col = db[PROFILES]
         self.feedback = db[FEEDBACK]
 

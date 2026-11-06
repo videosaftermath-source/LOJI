@@ -839,6 +839,7 @@ class TicketsPub(commands.Cog):
             content=f"{Emojis.tick} **{interaction.user.display_name},** you've claimed the ticket!"
         )
         self.client.dispatch("pticket_claim", Result.get("_id"), interaction.user)
+        self.client.dispatch("ticket_claimed", interaction.channel, interaction.user)
 
     @tickets.command(description="Unclaim a ticket.")
     @ModuleIsEnabled("Tickets")

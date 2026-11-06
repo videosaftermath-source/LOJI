@@ -72,3 +72,34 @@ def test_rating_from_feedback():
     avg, count = run(p.Rating(G, 5))
     assert count == 3 and abs(avg - 8) < 1e-9
     assert run(p.Rating(G, 6)) == (None, 0)
+
+
+def test_ticket_card_once_per_staff_member():
+    import discord
+
+    import core.mail.config as C
+    import cogs.Modules.Profiles.profiles as PP
+
+    db = DB()
+    C._shared, PP._store = C.MailConfig(db), Profiles(db)
+    roles = {10: N(id=10, position=5, is_default=lambda: False, mention="@Helper", color=discord.Color(0))}
+    guild = N(id=G, name="ESS", get_role=lambda r: roles.get(r))
+    sent = []
+
+    async def send(**k):
+        sent.append(k)
+
+    channel = N(id=500, guild=guild, send=send)
+    staff = N(id=3, display_name="Ana", roles=[roles[10]], guild=guild, bot=False, display_avatar=N(url="http://a"))
+    owner = N(id=7, display_name="Pepe", roles=[], guild=guild, bot=False)
+
+    async def scenario():
+        await C._shared.Set(G, {"profile_min_role": 10})
+        await db["Tickets"].insert_one({"ChannelID": 500, "UserID": 7, "closed": None})
+        cog = PP.StaffProfiles(N())
+        await cog.on_message(N(author=owner, guild=guild, channel=channel))
+        await cog.on_ticket_claimed(channel, staff)
+        await cog.on_message(N(author=staff, guild=guild, channel=channel))
+
+    run(scenario())
+    assert len(sent) == 1 and sent[0]["embed"].title == "🎫 Te atiende Ana"

@@ -116,6 +116,7 @@ class PTicketControl(discord.ui.View):
                 }
             },
         )
+        interaction.client.dispatch("ticket_claimed", interaction.channel, interaction.user)
         embed = discord.Embed(
             color=discord.Color.green(),
             title="Ticket Claimed",

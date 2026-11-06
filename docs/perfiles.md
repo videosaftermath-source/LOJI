@@ -15,3 +15,17 @@ Todos los que tienen un rol **igual o superior al rol mínimo** (configurable en
 Los comandos viejos de Birb (`/staff add`, `remove`, `edit`, `view`, `introduction`, `panel` y `list`) están ocultos; queda `/staff leaderboard`.
 
 Datos: `StaffProfiles` (la misma ficha que usa `/gestion` para comentarios y sanciones) y `feedback`.
+
+## Tickets
+Los tickets son los de Birb, y se configuran en `/config` → Tickets.
+- **Al reclamar** un ticket (con el botón o con `/tickets claim`), el bot publica la tarjeta **"🎫 Te atiende…"** con el perfil de quien lo reclamó: cargo, tiempo, departamento, especialización y calificación.
+- Si alguien del staff **escribe en un ticket sin reclamarlo**, su tarjeta sale con su primer mensaje.
+- Sale **una vez por persona y ticket**.
+
+### Varias clases de ticket (p. ej. Comité de Ética)
+Birb permite tantos paneles como quieras:
+1. `/config` → **Tickets** → crea un **panel simple** por cada clase (por ejemplo «Reporte», «Reporte a staff», «Apelación»). Cada uno tiene su categoría, sus roles de staff y sus nombres de canal.
+2. Para que el usuario elija la clase desde un solo mensaje, crea un **panel múltiple** que agrupe esos paneles.
+3. Envíalo con `/tickets panel`.
+
+Así «Reporte a staff» puede ir solo al rol del Comité de Ética, y «Reporte» a Moderación.
