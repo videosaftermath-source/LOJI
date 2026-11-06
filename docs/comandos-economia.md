@@ -95,7 +95,7 @@ Tenno y Consejo Supremo: botón **➕ Nueva tarea** para crearlas sin pasar por 
 ## 🛠️ Administración
 
 **`/config`**: **todo** se configura aquí:
-> 📮 **Mando Central**: departamentos, cargos, credenciales, canales y rol mínimo de perfiles (con asistente)
+> 📮 **Mando Central**: departamentos, cargos, credenciales, canales y roles con perfil de staff (con asistente)
 > 🪙 **Economía**: ganancias, chat, mascotas, gacha, casino, La Larga Marcha, inflación, banco y boosters
 > Y lo de Birb: módulos, permisos, tickets, feedback...
 

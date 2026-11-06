@@ -1,6 +1,6 @@
 # Perfiles y panel de staff
 
-Todos los que tienen un rol **igual o superior al rol mínimo** (configurable en `/config` → 📮 Mando Central, según la jerarquía de roles de Discord) tienen perfil de staff.
+Tienen perfil de staff quienes tienen alguno de los **roles con perfil** que eligen los admins en `/config` → 📮 Mando Central. Es una lista propia, independiente de la jerarquía de Birb. El **cargo** de cada uno es el más alto de esos roles que tenga, según el orden de roles de Discord.
 
 - **Automático:** `/perfil sincronizar` crea los perfiles del staff actual. Después se actualizan solos: si alguien sube de rango, su tiempo en el cargo vuelve a empezar; si deja el staff, el perfil se archiva y conserva su texto.
 - **Cada perfil muestra:**

@@ -3,7 +3,7 @@
 import discord
 
 from core.bot.HelpEmbeds import NotYourPanel
-from core.mail.config import OFFICES, CanConfigure, Department, Mail, MailError
+from core.mail.config import OFFICES, Department, Mail, MailError
 
 PANEL_TIMEOUT = 600
 LOJI_RED = discord.Color.from_rgb(150, 12, 18)
@@ -15,19 +15,24 @@ HELP = {
     "offices.tenno.role": "¿Cuál es el rol del **Tenno**?",
     "offices.consejo.role": "¿Cuál es el rol del **Consejo Supremo**?",
     "offices.director.role": "¿Cuál es el rol del **Director de Moderación**?",
-    "profile_min_role": "¿Cuál es el **rol más bajo del staff**? Ese rol y todos los que estén por encima tendrán perfil de staff.",
+    "profile_roles": "¿Qué **roles del staff** tienen perfil? Elige todos los que cuenten (puedes elegir varios). El cargo de cada uno será el más alto que tenga.",
 }
 GENERAL = {
     "staff_role": ("Rol de staff (quién puede usar /mail)", "role"),
     "suggestions_channel": ("Canal de sugerencias", "channel"),
     "debate_channel": ("Canal «Cosas por debatir» (Consejo Supremo)", "channel"),
     **{f"offices.{O}.role": (f"Rol de {Name}", "role") for O, Name in OFFICES.items()},
-    "profile_min_role": ("Rol mínimo con perfil de staff", "role"),
+    "profile_roles": ("Roles con perfil de staff", "roles"),
 }
 
 
 def Role(guild: discord.Guild, role_id) -> str:
     return f"<@&{role_id}>" if role_id and guild.get_role(role_id) else "*sin configurar*"
+
+
+def Roles(guild: discord.Guild, role_ids: list) -> str:
+    Found = [R for R in (guild.get_role(I) for I in role_ids) if R]
+    return " ".join(R.mention for R in sorted(Found, key=lambda R: -R.position)) if Found else "*sin configurar*"
 
 
 def Channel(guild: discord.Guild, channel_id) -> str:
@@ -47,7 +52,7 @@ def Checklist(guild: discord.Guild, config: dict) -> tuple[list[str], int, int]:
         ("Rol de staff", bool(config["staff_role"] and guild.get_role(config["staff_role"]))),
         ("Canal de sugerencias", bool(config["suggestions_channel"] and guild.get_channel(config["suggestions_channel"]))),
         ("Canal «Cosas por debatir»", bool(config["debate_channel"] and guild.get_channel(config["debate_channel"]))),
-        ("Rol mínimo de perfiles", bool(config.get("profile_min_role") and guild.get_role(config["profile_min_role"]))),
+        ("Roles con perfil de staff", any(guild.get_role(R) for R in config.get("profile_roles") or [])),
     ]
     Items += [(f"Rol de {Name}", bool(config["offices"][O]["role"] and guild.get_role(config["offices"][O]["role"]))) for O, Name in OFFICES.items()]
     Items += [
@@ -74,7 +79,7 @@ def PanelEmbed(guild: discord.Guild, config: dict) -> discord.Embed:
             f"> **Staff:** {Role(guild, config['staff_role'])}\n"
             f"> **Sugerencias:** {Channel(guild, config['suggestions_channel'])}\n"
             f"> **Cosas por debatir:** {Channel(guild, config['debate_channel'])}\n"
-            f"> **Rol mínimo de perfiles:** {Role(guild, config.get('profile_min_role'))}"
+            f"> **Roles con perfil:** {Roles(guild, config.get('profile_roles') or [])}"
         ),
         inline=False,
     )
@@ -188,14 +193,17 @@ class WizardStep(Panel):
         Path, Kind, _ = steps[index]
         if Kind == "role":
             Picker = discord.ui.RoleSelect(placeholder="Elige el rol", row=0)
+        elif Kind == "roles":
+            Picker = discord.ui.RoleSelect(placeholder="Elige los roles (varios)", min_values=1, max_values=25, row=0)
         else:
             Picker = discord.ui.ChannelSelect(placeholder="Elige el canal", channel_types=[discord.ChannelType.text], row=0)
         Picker.callback = self.Pick
         self.add_item(Picker)
 
     async def Pick(self, interaction: discord.Interaction):
-        Path = self.steps[self.index][0]
-        Value = int(interaction.data["values"][0])
+        Path, Kind, _ = self.steps[self.index]
+        Values = [int(V) for V in interaction.data["values"]]
+        Value = Values if Kind == "roles" else Values[0]
         if Path.startswith("department:"):
             _, DepId, Field = Path.split(":")
             try:
@@ -223,18 +231,21 @@ class PickTarget(Panel):
         self.path = path
         if kind == "role":
             Picker = discord.ui.RoleSelect(placeholder="Elige el rol", row=0)
+        elif kind == "roles":
+            Picker = discord.ui.RoleSelect(placeholder="Elige los roles (varios)", min_values=1, max_values=25, row=0)
         else:
             Picker = discord.ui.ChannelSelect(placeholder="Elige el canal", channel_types=[discord.ChannelType.text], row=0)
         Picker.callback = self.Pick
         self.add_item(Picker)
 
     async def Pick(self, interaction: discord.Interaction):
-        await Mail().Set(interaction.guild.id, {self.path: int(interaction.data["values"][0])})
+        Values = [int(V) for V in interaction.data["values"]]
+        await Mail().Set(interaction.guild.id, {self.path: Values if GENERAL[self.path][1] == "roles" else Values[0]})
         await ShowMain(interaction, self.author, "✅ Guardado.")
 
     @discord.ui.button(label="Quitar", emoji="🧹", style=discord.ButtonStyle.grey, row=1)
     async def Clear(self, interaction: discord.Interaction, _):
-        await Mail().Set(interaction.guild.id, {self.path: None})
+        await Mail().Set(interaction.guild.id, {self.path: [] if GENERAL[self.path][1] == "roles" else None})
         await ShowMain(interaction, self.author, "🧹 Quitado.")
 
     @discord.ui.button(label="Volver", emoji="⬅️", style=discord.ButtonStyle.grey, row=1)

@@ -157,7 +157,7 @@ def DefaultConfig(guild_id: int) -> dict:
         "staff_role": None,
         "suggestions_channel": None,
         "debate_channel": None,
-        "profile_min_role": None,
+        "profile_roles": [],
         "offices": {O: {"role": None, "credential": None} for O in OFFICES},
         "departments": [NewDepartment(Name, Group) for Name, Group in DEFAULT_DEPARTMENTS],
     }

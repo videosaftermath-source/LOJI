@@ -29,8 +29,9 @@ def Store() -> Profiles:
     return _store
 
 
-def MinRole(guild: discord.Guild, config: dict):
-    return guild.get_role(config.get("profile_min_role") or 0)
+def StaffRoles(guild: discord.Guild, config: dict) -> set[int]:
+    """The roles the admins chose for staff profiles (only those that still exist)."""
+    return {R for R in config.get("profile_roles") or [] if guild.get_role(R)}
 
 
 def CanManage(member, config: dict) -> bool:
@@ -168,14 +169,14 @@ class StaffProfiles(commands.Cog):
 
     async def Ensure(self, member: discord.Member, config: dict) -> dict | None:
         """The member's profile, created or updated from their roles right now."""
-        return await Store().Sync(member.guild.id, member, Rank(member, MinRole(member.guild, config)))
+        return await Store().Sync(member.guild.id, member, Rank(member, StaffRoles(member.guild, config)))
 
     @perfil.command(name="ver", description="Mira tu perfil de staff (o el de alguien)")
     @app_commands.describe(usuario="De quién (por defecto, tú)")
     async def ver(self, interaction: discord.Interaction, usuario: discord.Member | None = None):
         Config = await Mail().Get(interaction.guild.id)
-        if not MinRole(interaction.guild, Config):
-            return await interaction.response.send_message("❌ Falta configurar el **rol mínimo de staff** en `/config` → 📮 Mando Central.", ephemeral=True)
+        if not StaffRoles(interaction.guild, Config):
+            return await interaction.response.send_message("❌ Falta configurar el **roles de staff para perfiles** en `/config` → 📮 Mando Central.", ephemeral=True)
         Member = usuario or interaction.user
         Profile = await self.Ensure(Member, Config)
         if not Profile:
@@ -185,7 +186,7 @@ class StaffProfiles(commands.Cog):
     @perfil.command(name="editar", description="Escribe tu descripción y tu especialización")
     async def editar(self, interaction: discord.Interaction):
         Config = await Mail().Get(interaction.guild.id)
-        Profile = await self.Ensure(interaction.user, Config) if MinRole(interaction.guild, Config) else None
+        Profile = await self.Ensure(interaction.user, Config) if StaffRoles(interaction.guild, Config) else None
         if not Profile:
             return await interaction.response.send_message("❌ Solo el staff tiene perfil.", ephemeral=True)
         await interaction.response.send_modal(EditModal(Profile))
@@ -193,16 +194,16 @@ class StaffProfiles(commands.Cog):
     @perfil.command(name="panel", description="Panel del staff: busca por departamento y mira sus perfiles")
     async def panel(self, interaction: discord.Interaction):
         Config = await Mail().Get(interaction.guild.id)
-        Min = MinRole(interaction.guild, Config)
-        if not Min:
-            return await interaction.response.send_message("❌ Falta configurar el **rol mínimo de staff** en `/config` → 📮 Mando Central.", ephemeral=True)
+        Staff = StaffRoles(interaction.guild, Config)
+        if not Staff:
+            return await interaction.response.send_message("❌ Falta configurar el **roles de staff para perfiles** en `/config` → 📮 Mando Central.", ephemeral=True)
         await interaction.response.defer(ephemeral=True)
         if not interaction.guild.chunked:
             await interaction.guild.chunk()
         Members, Ranks = [], {}
         for P in await Store().Active(interaction.guild.id):
             M = interaction.guild.get_member(P["staff"])
-            if M and Rank(M, Min):
+            if M and Rank(M, Staff):
                 Members.append(M)
                 Ranks[M.id] = P.get("rank")
         View = StaffPanel(interaction.user, interaction.guild, Config, Members, Ranks)
@@ -213,9 +214,9 @@ class StaffProfiles(commands.Cog):
         Config = await Mail().Get(interaction.guild.id)
         if not CanManage(interaction.user, Config):
             return await interaction.response.send_message("❌ Solo el Tenno, el Consejo Supremo o un administrador.", ephemeral=True)
-        Min = MinRole(interaction.guild, Config)
-        if not Min:
-            return await interaction.response.send_message("❌ Falta configurar el **rol mínimo de staff** en `/config` → 📮 Mando Central.", ephemeral=True)
+        Staff = StaffRoles(interaction.guild, Config)
+        if not Staff:
+            return await interaction.response.send_message("❌ Falta configurar el **roles de staff para perfiles** en `/config` → 📮 Mando Central.", ephemeral=True)
         await interaction.response.defer(ephemeral=True)
         if not interaction.guild.chunked:
             await interaction.guild.chunk()  # the full member list, so nobody is missed
@@ -224,7 +225,7 @@ class StaffProfiles(commands.Cog):
         for Member in interaction.guild.members:
             if Member.bot:
                 continue
-            if await Store().Sync(interaction.guild.id, Member, Rank(Member, Min)):
+            if await Store().Sync(interaction.guild.id, Member, Rank(Member, Staff)):
                 Synced += 1
                 Seen.add(Member.id)
         for P in await Store().Active(interaction.guild.id):
@@ -232,7 +233,7 @@ class StaffProfiles(commands.Cog):
                 await Store().col.update_one({"_id": P["_id"]}, {"$set": {"active": False}})
                 Archived += 1
         await interaction.followup.send(
-            f"✅ **{Synced}** perfiles al día" + (f" · {Archived} archivados (ya no son staff)" if Archived else "") + f".\n-# Rol mínimo: {Min.mention}",
+            f"✅ **{Synced}** perfiles al día" + (f" · {Archived} archivados (ya no son staff)" if Archived else "") + f".\n-# Roles de staff: {len(Staff)}",
             ephemeral=True, allowed_mentions=discord.AllowedMentions.none(),
         )
 
@@ -292,7 +293,7 @@ class StaffProfiles(commands.Cog):
         if message.author.bot or not message.guild or not hasattr(message.author, "roles"):
             return
         Config = await Mail().Get(message.guild.id)
-        if not Rank(message.author, MinRole(message.guild, Config)):
+        if not Rank(message.author, StaffRoles(message.guild, Config)):
             return  # only staff (checked before touching the database)
         Ticket = await self.TicketOf(message.channel.id)
         if not Ticket or int(Ticket.get("UserID") or 0) == message.author.id or message.author.id in Ticket.get("profiles_shown", []):
@@ -306,9 +307,9 @@ class StaffProfiles(commands.Cog):
             return
         try:
             Config = await Mail().Get(after.guild.id)
-            Min = MinRole(after.guild, Config)
-            if Min:
-                await Store().Sync(after.guild.id, after, Rank(after, Min))
+            Staff = StaffRoles(after.guild, Config)
+            if Staff:
+                await Store().Sync(after.guild.id, after, Rank(after, Staff))
         except Exception as e:
             logger.warning(f"[Profiles] Couldn't sync {after.id}: {e}")
 

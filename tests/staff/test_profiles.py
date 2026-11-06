@@ -24,10 +24,12 @@ def member(uid, *roles):
     return N(id=uid, roles=list(roles), display_name=f"user{uid}")
 
 
-def test_rank_is_the_highest_role_from_the_minimum():
-    assert Rank(member(1, HELPER, SENIOR), HELPER) is SENIOR
-    assert Rank(member(1, role(99, 2)), HELPER) is None
-    assert Rank(member(1, MOD), None) is None
+def test_rank_is_the_highest_of_the_chosen_roles():
+    chosen = {HELPER.id, SENIOR.id}  # MOD isn't chosen: it doesn't count, even if it's in between
+    assert Rank(member(1, HELPER, SENIOR), chosen) is SENIOR
+    assert Rank(member(1, MOD), chosen) is None
+    assert Rank(member(1, MOD, HELPER), chosen) is HELPER
+    assert Rank(member(1, SENIOR), set()) is None
 
 
 def test_groups_from_departments_and_offices():
@@ -94,7 +96,7 @@ def test_ticket_card_once_per_staff_member():
     owner = N(id=7, display_name="Pepe", roles=[], guild=guild, bot=False)
 
     async def scenario():
-        await C._shared.Set(G, {"profile_min_role": 10})
+        await C._shared.Set(G, {"profile_roles": [10]})
         await db["Tickets"].insert_one({"ChannelID": 500, "UserID": 7, "closed": None})
         cog = PP.StaffProfiles(N())
         await cog.on_message(N(author=owner, guild=guild, channel=channel))

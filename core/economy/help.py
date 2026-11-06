@@ -80,7 +80,7 @@ Herramientas del staff de LOJI:
 🎫 **Tickets:** al reclamar un ticket (o en tu primer mensaje en él), aparece tu tarjeta de perfil."""),
     ("admin", "🛠️ Administración", """\
 **`/config`**: **todo** se configura aquí:
-> 📮 **Mando Central**: departamentos, cargos, credenciales, canales y rol mínimo de perfiles (con asistente)
+> 📮 **Mando Central**: departamentos, cargos, credenciales, canales y roles con perfil de staff (con asistente)
 > 🪙 **Economía**: ganancias, chat, mascotas, gacha, casino, La Larga Marcha, inflación, banco y boosters
 > Y lo de Birb: módulos, permisos, tickets, feedback...
 

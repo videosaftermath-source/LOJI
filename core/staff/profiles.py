@@ -1,6 +1,6 @@
 """
-Staff profiles: created automatically for everyone at or above a minimum role (Discord's role order).
-Rank and departments come from roles; each person writes their description and specialty;
+Staff profiles: created automatically for everyone who has one of the staff roles the admins chose
+(independent of Birb's hierarchy). Their rank is the highest of those roles; departments come from roles; each person writes their description and specialty;
 the rating comes from /feedback (1-10). Shares the StaffProfiles documents with /gestion.
 """
 
@@ -19,11 +19,9 @@ def Now() -> datetime:
     return datetime.now(timezone.utc)
 
 
-def Rank(member, min_role) -> object | None:
-    """The member's highest role at or above `min_role` (their cargo), or None if they aren't staff."""
-    if min_role is None:
-        return None
-    Roles = [R for R in getattr(member, "roles", []) if R.position >= min_role.position and not getattr(R, "is_default", lambda: False)()]
+def Rank(member, staff_roles: set[int]) -> object | None:
+    """The highest of the chosen staff roles the member has (their cargo), or None if they aren't staff."""
+    Roles = [R for R in getattr(member, "roles", []) if R.id in staff_roles]
     return max(Roles, key=lambda R: R.position, default=None)
 
 
