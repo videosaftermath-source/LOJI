@@ -11,7 +11,7 @@ Gana créditos, colecciona mascotas y gástalos en la tienda, el gacha o el casi
 **`/pagar <usuario> <cantidad>`**: pásale créditos a alguien. Paga un impuesto por tramos: cuanto más mandas, más porcentaje se cobra de la parte alta.
 **`/top`**: los más ricos del servidor.
 
-💬 **Chatear también da dinero** en los canales elegidos por el staff, si tienes al menos 250 créditos. Hay un tope diario y el spam no cuenta.
+💬 **Chatear también da dinero** en los canales elegidos por el staff, desde tu primer mensaje. Si completas tu racha de chat y estás por perderla, te avisamos por MD. Hay un tope diario y el spam no cuenta.
 -# Los precios pueden subir si hay mucho dinero en circulación (inflación)."""),
     ("mascotas", "🐾 Mascotas", """\
 Las mascotas salen del gacha. La **activa** te da una ventaja según su tipo:

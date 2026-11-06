@@ -199,10 +199,12 @@ def NextPayout(
         "earned_today": EarnedToday + Amount,
         "streak": Streak,
         "qualified_day": activity.get("qualified_day"),
+        "qualified_at": activity.get("qualified_at"),
     }
     QualifiedNow = False
     if not QualifiedToday and PaidToday + 1 >= settings["streak_messages"]:
         Fields["streak"] = Streak + 1
         Fields["qualified_day"] = Today.isoformat()
+        Fields["qualified_at"] = now  # the streak reminder counts 24 h from here
         QualifiedNow = True
     return Payout(Amount, Fields, Mult, QualifiedNow)

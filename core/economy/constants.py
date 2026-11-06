@@ -107,7 +107,9 @@ DEFAULT_CONFIG: dict = {
     "leaderboard": {"page_size": 10},
     "activity": {
         "channels": [],
-        "min_balance": 250,
+        "welcome_dm": True,  # DM once when someone first reaches welcome_at from chatting
+        "welcome_at": 150,
+        "streak_reminder": True,  # DM when a chat streak is about to be lost
         "min": 5,
         "max": 15,
         "cooldown": 60,
@@ -228,8 +230,6 @@ GAME_COMMANDS = {
 # How often voice time is paid (the task interval).
 VOICE_TICK_MINUTES = 5
 
-# How long the chat listener remembers whether someone can earn (saves DB reads on every message).
-ELIGIBILITY_CACHE_SECONDS = 300
 MODULE_CACHE_SECONDS = 60
 
 
@@ -279,8 +279,11 @@ SETTINGS: list[Setting] = [
     Setting("work", "daily.cooldown", "Diario: espera (segundos)", int, HOUR, 7 * DAY),
     Setting("work", "daily.grace", "Diario: tiempo antes de perder racha (s)", int, HOUR, 14 * DAY,
             "Debe ser mayor que la espera del diario."),
-    Setting("activity", "activity.min_balance", "Saldo mínimo para ganar por chat", int, 0, 10_000_000,
-            "Quien tenga menos no gana por chat (ni gasta recursos del bot)."),
+    Setting("activity", "activity.welcome_dm", "MD de bienvenida al juntar monedas (sí/no)", bool,
+            help="Una sola vez por persona, cuando junta sus primeras monedas chateando."),
+    Setting("activity", "activity.welcome_at", "MD de bienvenida: a partir de", int, 1, 10_000_000),
+    Setting("activity", "activity.streak_reminder", "Avisar antes de perder la racha de chat (sí/no)", bool,
+            help="Si pasan 24 h desde que completó su racha y aún no la renovó, le escribe por MD."),
     Setting("activity", "activity.min", "Por mensaje: mínimo", int, 0, 100_000),
     Setting("activity", "activity.max", "Por mensaje: máximo", int, 0, 100_000),
     Setting("activity", "activity.cooldown", "Espera entre pagos (segundos)", int, 5, DAY),

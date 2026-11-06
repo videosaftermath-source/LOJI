@@ -6,7 +6,7 @@ Documento vivo para no perder decisiones entre sesiones.
 | Fase | Estado | Qué incluye |
 |---|---|---|
 | 1 | ✅ | Servicio central (`core/economy/service.py`), `/saldo`, `/trabajar`, `/diario`, `/pagar`, `/top`, `/eco-admin` |
-| 2 | ✅ | Pago por chat (canales elegidos, saldo mínimo 250, anti-spam, rachas, topes), voz opcional, impuesto de `/pagar` por tramos |
+| 2 | ✅ | Pago por chat (canales elegidos, sin saldo mínimo, anti-spam, rachas con aviso por MD, MD de bienvenida a las 150, topes), voz opcional, impuesto de `/pagar` por tramos |
 | 3 | ✅ | Tienda (rol, consumible, coleccionable), inventario, boosts con tope global, códigos de canje, misiones |
 | 4 | ✅ | Mascotas: especies, rarezas, arquetipos, niveles, cuidado con desgaste perezoso, evolución, catálogo de 16 especies |
 | 5a | ✅ | Gacha: banners, pity (soft/hard), 50/50, x1/x10, GIFs y tarjetas con Pillow |

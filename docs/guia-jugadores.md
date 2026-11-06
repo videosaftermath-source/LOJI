@@ -6,7 +6,7 @@ Aquí puedes ganar **créditos**, coleccionar **mascotas**, tirar en el **gacha*
 ## 💰 Cómo ganar dinero
 > **`/diario`**: tu recompensa del día (200 + 25 por cada día de racha, hasta **375**). Si pasan 48 h sin reclamarla, pierdes la racha.
 > **`/trabajar`**: de **50 a 150** créditos. Se puede usar **cada hora**.
-> 💬 **Chatear**: cada mensaje en los canales de economía da **5 a 15** créditos (como mucho uno por minuto). Necesitas al menos **250** créditos para que cuente.
+> 💬 **Chatear**: cada mensaje en los canales de economía da **5 a 15** créditos (como mucho uno por minuto). Cuenta desde tu primer mensaje.
 > 🔥 Si mandas 10 mensajes al día, haces **racha de chat**: cada día seguido ganas más, hasta **x1.5**.
 > 📜 **`/misiones`**: misiones diarias, semanales y únicas con premios.
 > 🎁 **`/canjear <código>`**: códigos de regalo del staff. ¡Atento a los anuncios!
@@ -92,7 +92,7 @@ Si boosteas el servidor:
 > Las mascotas solo dan su ventaja mientras están **activas** y **bien cuidadas**.
 
 ## 🚀 Plan para tu primera semana
-> **Día 1:** `/diario` + `/trabajar` + chatea hasta llegar a 250 y que el chat empiece a pagar.
+> **Día 1:** `/diario` + `/trabajar` + chatea un rato: cada mensaje ya paga.
 > **Días 2-4:** ahorra para tus primeras tiradas del **gacha** (la épica sale asegurada cada 10).
 > **Cuando tengas mascota:** actívala y cuídala cada día. Si es Rentista, **cóbrala a diario**.
 > **Después:** sube a tu mascota de nivel, evoluciónala y ve por la **legendaria** 🌟
