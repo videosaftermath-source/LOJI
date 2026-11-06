@@ -108,17 +108,6 @@ async def ModuleOptions(Config, data=None):
             ),
         ),
         discord.SelectOption(
-            label="Modmail",
-            description="",
-            value="Modmail",
-            emoji=f"{Emojis.message_received}",
-            default=(
-                Config.get("Modules", {}).get("Modmail", False) or False
-                if not data
-                else False
-            ),
-        ),
-        discord.SelectOption(
             label="Custom Commands",
             description="",
             value="customcommands",

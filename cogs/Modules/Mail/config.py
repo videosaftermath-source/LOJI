@@ -1,7 +1,6 @@
-"""/buzon: configuration of departments, high offices, channels and credentials."""
+"""Mando Central settings panel (opened from /config): departments, high offices, channels and credentials."""
 
 import discord
-from discord.ext import commands
 
 from core.bot.HelpEmbeds import NotYourPanel
 from core.mail.config import OFFICES, CanConfigure, Department, Mail, MailError
@@ -349,37 +348,9 @@ class CredentialModal(discord.ui.Modal):
             Code = await Mail().SetCredential(interaction.guild.id, self.office, self.code.value.strip())
         except MailError as e:
             return await ShowMain(interaction, self.author, f"❌ {e}")
-        await ShowMain(
-            interaction, self.author,
+        # Only you see it (the panel may be open in a public channel through /config).
+        await interaction.response.send_message(
             f"🔑 Credencial de **{OFFICES[self.office]}**: ||`{Code}`||\n"
             "-# Guárdala y compártela solo con quien corresponda: no se vuelve a mostrar (se guarda cifrada).",
+            ephemeral=True,
         )
-
-
-class MailSetup(commands.Cog):
-    def __init__(self, client: commands.Bot):
-        self.client = client
-
-    @commands.hybrid_group(name="buzon", description="Buzón de sugerencias y tareas del staff")
-    @commands.guild_only()
-    async def buzon(self, ctx: commands.Context):
-        pass
-
-    @buzon.command(name="config", description="Configura departamentos, cargos, canales y credenciales")
-    async def config(self, ctx: commands.Context):
-        Config = await Mail().Get(ctx.guild.id)
-        if not CanConfigure(ctx.author, Config):
-            return await ctx.send("❌ Solo el Tenno (o un administrador del servidor) puede configurar el buzón.", ephemeral=True)
-        await ctx.send(embed=PanelEmbed(ctx.guild, Config), view=MainPanel(ctx.author, Config), ephemeral=True)
-
-    @buzon.command(name="departamentos", description="Cómo está organizado el staff")
-    async def departamentos(self, ctx: commands.Context):
-        Config = await Mail().Get(ctx.guild.id)
-        embed = PanelEmbed(ctx.guild, Config)
-        embed.title = "📮 Departamentos del staff"
-        embed.set_footer(text="Tu rol decide en qué departamento puedes reclamar tareas.")
-        await ctx.send(embed=embed, ephemeral=True, allowed_mentions=discord.AllowedMentions.none())
-
-
-async def setup(client: commands.Bot) -> None:
-    await client.add_cog(MailSetup(client))

@@ -1,4 +1,4 @@
-"""Player guide for the economy: shown by /eco-ayuda and copied into docs/comandos-economia.md."""
+"""The bot's guide: shown by /ayuda (one menu for everything) and copied into docs/comandos-economia.md."""
 
 # (key, title, text). Each text stays under Discord's 4096-character embed description limit.
 HELP_SECTIONS: list[tuple[str, str, str]] = [
@@ -68,24 +68,33 @@ Si boosteas el servidor:
 • **Más suerte en el gacha:** la legendaria y la épica salen un 50% más. La pity es la misma para todos.
 • **500 créditos** de regalo al boostear, una vez por boost.
 Los beneficios duran mientras mantengas el boost."""),
-    ("staff", "🛠️ Staff (/eco-admin)", """\
-Requieren permiso de **Administrar servidor**.
+    ("mando", "📮 Mando Central (staff)", """\
+Herramientas del staff de LOJI:
 
-**`/eco-admin dar` / `quitar`**: dar o quitar créditos.
-**`/eco-admin config`**: todos los ajustes por secciones (ganancias, chat, anti-spam, mascotas, gacha, casino, inflación, banco y boosters).
-**`/eco-admin tienda`** · **`codigos`** · **`misiones`** · **`mascotas`** · **`gacha`**: crear y editar el contenido.
-**`/eco-admin regalar-mascota`**: dar una mascota (premios o pruebas).
-**`/eco-admin stats`**: dinero en circulación, inflación, flujos y gráfico.
-**`/eco-admin desbloquear`**: quitar un bloqueo anti-spam.
-**`/eco-admin hacienda`**: top 10 de quién más ganó en 24 h, 3, 7 o 14 días, separado por casino, trabajo/chat, premios, admins y transferencias, con alertas.
-**`/eco-admin reiniciar`**: borrar toda la economía de alguien (dinero, banco, mascotas, items y progreso). Pide confirmación.
+**`/mail`**: escribe al Tenno: sugerencias, peticiones, dudas o reportes. Recibes la respuesta por MD.
+**`/tareas`**: lo que hay que hacer, ordenado por prioridad y con filtros por departamento. Reclámalas y márcalas como hechas desde su mensaje.
+-# Tenno y Consejo Supremo: botón **➕ Nueva tarea** para crearlas sin pasar por `/mail`.
+**`/perfil ver [usuario]`**: el perfil de staff: cargo, tiempo en el cargo, departamento, especialización y calificación.
+**`/perfil editar`**: escribe tu descripción y tu especialización.
+**`/perfil panel`**: busca al staff por Departamento Administrativo, sub-unidades o departamento.
+🎫 **Tickets:** al reclamar un ticket (o en tu primer mensaje en él), aparece tu tarjeta de perfil."""),
+    ("admin", "🛠️ Administración", """\
+**`/config`**: **todo** se configura aquí:
+> 📮 **Mando Central**: departamentos, cargos, credenciales, canales y rol mínimo de perfiles (con asistente)
+> 🪙 **Economía**: ganancias, chat, mascotas, gacha, casino, La Larga Marcha, inflación, banco y boosters
+> Y lo de Birb: módulos, permisos, tickets, feedback...
+
+**`/eco-admin`**: `dar` · `quitar` · `tienda` · `codigos` · `misiones` · `mascotas` · `regalar-mascota` · `gacha` · `stats` · `hacienda` · `desbloquear` · `reiniciar` · `cancelar-marcha`
+**`/perfil sincronizar`** · **`/perfil fecha`**: perfiles de staff.
+**`/anuncio`** y **`/embed`**: mensajes con el diseño de LOJI.
 -# Precios recomendados y balance: docs/economia.md"""),
+
 ]
 
 
 def HelpMarkdown() -> str:
     """The whole guide as Markdown (for the docs file)."""
-    Parts = ["# Guía de la economía\n", "En Discord: `/eco-ayuda` (con un menú para cada sección).\n"]
+    Parts = ["# Guía de LOJI\n", "En Discord: `/ayuda` (con un menú para cada sección).\n"]
     for _, Title, Text in HELP_SECTIONS:
         Body = "\n".join(L[3:] if L.startswith("-# ") else L for L in Text.splitlines())
         Parts.append(f"## {Title}\n\n{Body}\n")

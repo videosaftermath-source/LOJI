@@ -325,14 +325,13 @@ class HelpView(discord.ui.View):
     @discord.ui.select(placeholder="Elige una sección")
     async def Section(self, interaction: discord.Interaction, select: discord.ui.Select):
         if interaction.user.id != self.author.id:
-            return await interaction.response.send_message("Usa `/eco-ayuda` para abrir la tuya 😉", ephemeral=True)
+            return await interaction.response.send_message("Usa `/ayuda` para abrir la tuya 😉", ephemeral=True)
         await interaction.response.edit_message(embed=HelpEmbed(select.values[0]), view=self)
 
 
 class EconomyHelp(commands.Cog):
-    @commands.hybrid_command(name="eco-ayuda", aliases=["eco-help"], description="Cómo funciona la economía y todos sus comandos")
+    @commands.hybrid_command(name="ayuda", aliases=["eco-ayuda", "eco-help"], description="Todos los comandos de LOJI explicados, por secciones")
     @commands.guild_only()
-    @ModuleIsEnabled(MODULE)
     async def ecoayuda(self, ctx: commands.Context):
         await ctx.send(embed=HelpEmbed(HELP_SECTIONS[0][0]), view=HelpView(ctx.author))
 

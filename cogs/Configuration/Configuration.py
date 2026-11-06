@@ -45,6 +45,8 @@ class ConfigMenu(discord.ui.Select):
         selection = self.values[0]
         if interaction.user.id != self.author.id:
             return await interaction.followup.send(embed=NotYourPanel(), ephemeral=True)
+        if selection in ("LOJI_MAIL", "LOJI_ECO"):
+            return await LojiSection(interaction, selection)
         embed = discord.Embed(color=discord.Colour.dark_embed())
 
         await Reset(interaction, lambda: ConfigMenu(Options(Config), interaction.user))
@@ -384,6 +386,23 @@ class ConfigMenu(discord.ui.Select):
         await interaction.edit_original_response(embed=embed, view=view)
 
 
+async def LojiSection(interaction: discord.Interaction, selection: str):
+    """LOJI's own settings live here too, so everything is configured from /config."""
+    if selection == "LOJI_MAIL":
+        from cogs.Modules.Mail.config import MainPanel, PanelEmbed
+        from core.mail.config import CanConfigure, Mail
+
+        Config = await Mail().Get(interaction.guild.id)
+        if not CanConfigure(interaction.user, Config):
+            return await interaction.followup.send("❌ Solo el Tenno (o un administrador) configura el Mando Central.", ephemeral=True)
+        return await interaction.edit_original_response(embed=PanelEmbed(interaction.guild, Config), view=MainPanel(interaction.user, Config))
+    from cogs.Modules.Economy.admin import ConfigEmbed, ConfigPanel
+    from core.economy.config import EcoConfig
+
+    Config = await EcoConfig().Get(interaction.guild.id)
+    await interaction.edit_original_response(embed=ConfigEmbed(interaction.guild, Config, "general"), view=ConfigPanel(interaction.user, interaction.guild, Config))
+
+
 def DefaultEmbed(guild: discord.Guild):
     embed = discord.Embed(
         title="Configuration",
@@ -440,6 +459,18 @@ def Options(Config: dict = None):
             description="Hierarchies for both promotions & infractions.",
             emoji=f"{Emojis.hierarchy}",
         ),
+        discord.SelectOption(
+            label="Mando Central (LOJI)",
+            value="LOJI_MAIL",
+            description="Buzón, tareas, departamentos, cargos y perfiles de staff",
+            emoji="📮",
+        ),
+        discord.SelectOption(
+            label="Economía (LOJI)",
+            value="LOJI_ECO",
+            description="Ganancias, chat, mascotas, gacha, casino, Marcha, inflación...",
+            emoji="🪙",
+        ),
     ]
 
     ModuleAddons = [
@@ -472,12 +503,6 @@ def Options(Config: dict = None):
             value="Tickets",
             emoji=f"{Emojis.tickets}",
             description="",
-        ),
-        discord.SelectOption(
-            label="Modmail",
-            description="",
-            value="Modmail",
-            emoji=f"{Emojis.message_received}",
         ),
         discord.SelectOption(
             label="Custom Commands",

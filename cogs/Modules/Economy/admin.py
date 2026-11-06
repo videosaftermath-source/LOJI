@@ -393,16 +393,6 @@ class EconomyAdmin(commands.Cog):
         )
         await ctx.send(embed=embed, ephemeral=True, allowed_mentions=discord.AllowedMentions.none())
 
-    @eco_admin.command(name="config", description="Ver y editar la configuración de la economía")
-    @Permissions("Admin")
-    async def config(self, ctx: commands.Context):
-        Config = await EcoConfig().Get(ctx.guild.id)
-        await ctx.send(
-            embed=ConfigEmbed(ctx.guild, Config, "general"),
-            view=ConfigPanel(ctx.author, ctx.guild, Config),
-            ephemeral=True,
-        )
-
     @eco_admin.command(name="tienda", description="Crear y editar los items de la tienda")
     @Permissions("Admin")
     async def tienda(self, ctx: commands.Context):

@@ -18,7 +18,6 @@ from cogs.Events.on_infraction_approval import CaseApproval
 from cogs.Events.on_ticket import PTicketControl
 from cogs.Tasks.qotd import *
 from cogs.Events.on_error import Tree
-from cogs.Events.modmail import ModmailClosure, Links
 from cogs.Modules.tickets import ButtonHandler
 from cogs.Modules.staffmanagement import PromotionRequestView
 from core.db import client, db
@@ -170,7 +169,6 @@ class Client(commands.AutoShardedBot):
             "cogs.Modules.staff",
             "cogs.Modules.promotions",
             "cogs.Modules.infractions",
-            "cogs.Modules.modmail",
             "cogs.Modules.commands",
             "cogs.Modules.data",
             "cogs.Modules.integrations",
@@ -178,7 +176,6 @@ class Client(commands.AutoShardedBot):
             "cogs.Modules.staffmanagement",
             "cogs.Modules.embeds",
             "cogs.Modules.announce",
-            "cogs.Modules.Mail.config",
             "cogs.Modules.Mail.mail",
             "cogs.Modules.Mail.tasks",
             "cogs.Modules.Profiles.profiles",
@@ -204,7 +201,6 @@ class Client(commands.AutoShardedBot):
             "cogs.Events.Dev.on_guild",
             "cogs.Events.Dev.welcome",
             "cogs.Events.on_counter",
-            "cogs.Events.modmail",
             "cogs.Events.on_thread_create",
             "cogs.Events.Dev.topgg",
             "cogs.Events.Dev.analytics",
@@ -375,8 +371,6 @@ class Client(commands.AutoShardedBot):
         self.add_view(Voti())
         self.add_view(Staffview())
         self.add_view(ResetLeaderboard())
-        self.add_view(ModmailClosure())
-        self.add_view(Links())
         self.add_view(CaseApproval())
         self.add_view(PTicketControl())
         self.add_view(PromotionRequestView())

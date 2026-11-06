@@ -19,7 +19,7 @@ Aquí puedes ganar **créditos**, coleccionar **mascotas**, tirar en el **gacha*
 > **`/top`**: los más ricos del servidor.
 > **`/pagar @usuario cantidad`**: envía créditos. Tiene impuesto: 5% hasta 1.000; 8% de 1.000 a 10.000; 12% de 10.000 a 50.000; 15% de ahí en adelante.
 > **`/tienda`**, **`/inventario`** y **`/usar`**: compra roles y boosts, y úsalos.
-> **`/eco-ayuda`**: la ayuda completa dentro de Discord.
+> **`/ayuda`**: la ayuda completa dentro de Discord.
 
 ✅ **Rutina recomendada:** `/diario` → `/trabajar` cada vez que puedas → chatea en los canales → revisa `/misiones`.
 =====
@@ -97,4 +97,4 @@ Si boosteas el servidor:
 > **Cuando tengas mascota:** actívala y cuídala cada día. Si es Rentista, **cóbrala a diario**.
 > **Después:** sube a tu mascota de nivel, evoluciónala y ve por la **legendaria** 🌟
 
-¿Dudas? **`/eco-ayuda`** o pregúntale al staff. ¡Suerte! 🍀
+¿Dudas? **`/ayuda`** o pregúntale al staff. ¡Suerte! 🍀

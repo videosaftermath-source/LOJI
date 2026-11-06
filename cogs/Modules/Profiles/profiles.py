@@ -175,7 +175,7 @@ class StaffProfiles(commands.Cog):
     async def ver(self, interaction: discord.Interaction, usuario: discord.Member | None = None):
         Config = await Mail().Get(interaction.guild.id)
         if not MinRole(interaction.guild, Config):
-            return await interaction.response.send_message("❌ Falta configurar el **rol mínimo de staff** en `/buzon config`.", ephemeral=True)
+            return await interaction.response.send_message("❌ Falta configurar el **rol mínimo de staff** en `/config` → 📮 Mando Central.", ephemeral=True)
         Member = usuario or interaction.user
         Profile = await self.Ensure(Member, Config)
         if not Profile:
@@ -195,8 +195,10 @@ class StaffProfiles(commands.Cog):
         Config = await Mail().Get(interaction.guild.id)
         Min = MinRole(interaction.guild, Config)
         if not Min:
-            return await interaction.response.send_message("❌ Falta configurar el **rol mínimo de staff** en `/buzon config`.", ephemeral=True)
+            return await interaction.response.send_message("❌ Falta configurar el **rol mínimo de staff** en `/config` → 📮 Mando Central.", ephemeral=True)
         await interaction.response.defer(ephemeral=True)
+        if not interaction.guild.chunked:
+            await interaction.guild.chunk()
         Members, Ranks = [], {}
         for P in await Store().Active(interaction.guild.id):
             M = interaction.guild.get_member(P["staff"])
@@ -213,8 +215,10 @@ class StaffProfiles(commands.Cog):
             return await interaction.response.send_message("❌ Solo el Tenno, el Consejo Supremo o un administrador.", ephemeral=True)
         Min = MinRole(interaction.guild, Config)
         if not Min:
-            return await interaction.response.send_message("❌ Falta configurar el **rol mínimo de staff** en `/buzon config`.", ephemeral=True)
+            return await interaction.response.send_message("❌ Falta configurar el **rol mínimo de staff** en `/config` → 📮 Mando Central.", ephemeral=True)
         await interaction.response.defer(ephemeral=True)
+        if not interaction.guild.chunked:
+            await interaction.guild.chunk()  # the full member list, so nobody is missed
         Synced = Archived = 0
         Seen = set()
         for Member in interaction.guild.members:

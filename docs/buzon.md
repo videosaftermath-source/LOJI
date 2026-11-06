@@ -1,6 +1,6 @@
 # Buzón (sugerencias y tareas del staff)
 
-Reemplaza al modmail. Fases: 1) departamentos, cargos y credenciales ✅ · 2) `/mail` y decisiones ✅ · 3) `/tareas` ✅ · 4) quitar el modmail.
+Reemplaza al modmail. Fases: 1) departamentos, cargos y credenciales ✅ · 2) `/mail` y decisiones ✅ · 3) `/tareas` ✅ · 4) quitar el modmail ✅.
 
 ## Permisos
 - **Por rol.** Cada departamento y cada cargo está ligado a un rol de Discord.
@@ -36,8 +36,8 @@ Datos: `mail_suggestions` (numeradas por servidor) y `mail_counters`.
 Datos: `mail_tasks`.
 
 ## Comandos
-- `/buzon config`: lista de verificación (qué falta configurar), **🧭 asistente** paso a paso y panel para el rol de staff, el canal de sugerencias, el canal «Cosas por debatir», los roles de los cargos, los departamentos (rol y canal de tareas; crear, renombrar, borrar) y las credenciales.
-- `/buzon departamentos`: cómo está organizado el staff.
+- `/config` → 📮 Mando Central: lista de verificación (qué falta configurar), **🧭 asistente** paso a paso y panel para el rol de staff, el canal de sugerencias, el canal «Cosas por debatir», los roles de los cargos, los departamentos (rol y canal de tareas; crear, renombrar, borrar) y las credenciales.
+- El organigrama del staff se ve en `/perfil panel`.
 
 Departamentos iniciales: Moderación, Comité de Ética, Control de Calidad, Gestión de la Comunidad y Gestión del Staff (estos 4, en el grupo Mod Senior).
 
