@@ -33,22 +33,30 @@ class Tasks:
         await self.col.create_index([("guild_id", 1), ("number", 1)], unique=True)
         await self.col.create_index([("guild_id", 1), ("status", 1)])
 
-    async def Create(self, guild_id: int, suggestion: dict, department: str, priority: str, created_by: int) -> dict:
+    async def Create(
+        self, guild_id: int, suggestion: dict | None, department: str | None, priority: str, created_by: int,
+        title: str = "", text: str = "", owner: str = "dept",
+    ) -> dict:
+        """
+        A task from an accepted suggestion, or a direct one (suggestion None, with title and text).
+        owner: "dept" (the department claims it), "self" (the decider does it) or "done" (already done).
+        """
         Counter = await self.counters.find_one_and_update(
             {"_id": f"task:{guild_id}"}, {"$inc": {"value": 1}}, upsert=True, return_document=ReturnDocument.AFTER
         )
         Doc = {
             "guild_id": guild_id,
             "number": int(Counter["value"]),
-            "title": suggestion["title"],
-            "text": suggestion["text"],
-            "suggestion": suggestion["number"],
-            "suggestion_author": suggestion["author_id"],
-            "department": department,
+            "title": suggestion["title"] if suggestion else title,
+            "text": suggestion["text"] if suggestion else text,
+            "suggestion": suggestion["number"] if suggestion else None,
+            "suggestion_author": suggestion["author_id"] if suggestion else None,
+            "department": department if owner == "dept" else None,
             "priority": priority,
-            "status": "open",
-            "claimed_by": None,
-            "done_by": None,
+            "owner": owner,
+            "status": {"dept": "open", "self": "claimed", "done": "done"}[owner],
+            "claimed_by": created_by if owner != "dept" else None,
+            "done_by": created_by if owner == "done" else None,
             "created_by": created_by,
             "created_at": Now(),
             "message": None,
@@ -84,7 +92,9 @@ class Tasks:
 
     async def List(self, guild_id: int, statuses: tuple[str, ...], department: str | None = None) -> list[dict]:
         Query = {"guild_id": guild_id, "status": {"$in": list(statuses)}}
-        if department:
+        if department == "central":  # the Mando Central's own tasks (no department)
+            Query["department"] = None
+        elif department:
             Query["department"] = department
         Docs = await self.col.find(Query).to_list(length=None)
         return sorted(Docs, key=SortKey)

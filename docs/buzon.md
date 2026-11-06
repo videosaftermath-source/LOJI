@@ -17,7 +17,7 @@ Reemplaza al modmail. Fases: 1) departamentos, cargos y credenciales ✅ · 2) `
 ## `/mail`
 1. El staff escribe título y sugerencia, y se publica en el canal de sugerencias con **✅ Se realizará / 💬 Se debatirá / ❌ Rechazada**.
 2. Al pulsar un botón se pide el **porqué**. Si no tienes el rol de Tenno o de Consejo Supremo, también la **credencial**.
-3. **Se realizará:** además se elige **departamento** y **prioridad** (alta, media o baja). Eso crea la tarea en la fase 3.
+3. **Se realizará:** además se elige **quién se encarga**: un departamento, **🙋 Lo haré yo** (la tarea queda a tu cargo y nadie más la toma) o **✅ Ya lo hice** (queda resuelta al momento). También la **prioridad** (alta, media o baja).
 4. **Se debatirá:** se publica una copia en «Cosas por debatir», donde solo se puede aceptar o rechazar. Al decidir, se actualizan las dos.
 5. El autor recibe cada decisión por **MD**. Los botones siguen funcionando aunque el bot se reinicie.
 
@@ -30,12 +30,13 @@ Datos: `mail_suggestions` (numeradas por servidor) y `mail_counters`.
   - Soltar: quien la reclamó.
   - Reabrir y actuar sobre cualquier tarea: Tenno, Consejo Supremo y Director de Moderación, por rol o con su credencial.
 - Al terminarla, el autor de la sugerencia recibe un MD.
+- **➕ Nueva tarea** (botón en `/tareas`): Tenno y Consejo Supremo, por rol o con credencial, crean tareas sin pasar por `/mail`.
 - `/tareas` (staff): lista ordenada por prioridad, con filtros por departamento y estado (abiertas, sin reclamar, reclamadas, hechas). Empieza en tu departamento si perteneces a uno solo.
 
 Datos: `mail_tasks`.
 
 ## Comandos
-- `/buzon config`: panel para el rol de staff, el canal de sugerencias, el canal «Cosas por debatir», los roles de los cargos, los departamentos (rol y canal de tareas; crear, renombrar, borrar) y las credenciales.
+- `/buzon config`: lista de verificación (qué falta configurar), **🧭 asistente** paso a paso y panel para el rol de staff, el canal de sugerencias, el canal «Cosas por debatir», los roles de los cargos, los departamentos (rol y canal de tareas; crear, renombrar, borrar) y las credenciales.
 - `/buzon departamentos`: cómo está organizado el staff.
 
 Departamentos iniciales: Moderación, Comité de Ética, Control de Calidad, Gestión de la Comunidad y Gestión del Staff (estos 4, en el grupo Mod Senior).

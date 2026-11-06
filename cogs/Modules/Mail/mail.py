@@ -12,7 +12,6 @@ from core.mail.config import (
 from core.mail.suggestions import OPEN, PRIORITIES, REASON_MAX, STATUSES, TEXT_MAX, TITLE_MAX, Suggestions
 
 logger = logging.getLogger(__name__)
-CHOICE_TIMEOUT = 300
 ACTIONS = {"do": "Se realizará", "debate": "Se debatirá", "reject": "Rechazada"}
 _store: Suggestions | None = None
 
@@ -38,17 +37,18 @@ def SuggestionEmbed(doc: dict, config: dict, copy: bool = False) -> discord.Embe
     if D:
         By = f"<@{D['by']}> · {OFFICES.get(D['office'], D['office'])}" + (" · 🔑" if D.get("credential") else "")
         embed.add_field(name="Decidió", value=By, inline=True)
-        if D.get("department"):
-            Dep = Department(config, D["department"])
+        if doc["status"] == "do" and D.get("priority"):
+            from cogs.Modules.Mail.tasks import OwnerText
+
             P = PRIORITIES[D["priority"]]
-            embed.add_field(name="Encargado", value=f"🏢 {Dep['name'] if Dep else 'Departamento borrado'} · {P[0]} Prioridad {P[1].lower()}", inline=False)
+            embed.add_field(name="Encargado", value=f"{OwnerText(D, config)} · {P[0]} Prioridad {P[1].lower()}", inline=False)
         embed.add_field(name="Motivo", value=D["reason"][:1024], inline=False)
     if doc.get("task"):
         from core.mail.tasks import TASK_STATUSES
 
         Emoji, Label = TASK_STATUSES[doc.get("task_status", "open")]
         embed.add_field(name="📋 Tarea", value=f"#{doc['task']} · {Emoji} {Label}", inline=False)
-    embed.set_footer(text=("Copia para debatir · " if copy else "") + "Sugerencia para el Tenno")
+    embed.set_footer(text=("Copia para debatir · " if copy else "") + "Mando Central de LOJI · para el Tenno")
     return embed
 
 
@@ -119,58 +119,18 @@ class ReasonModal(discord.ui.Modal):
             return await interaction.response.send_message(f"❌ {e}", ephemeral=True)
         Decision = {"by": interaction.user.id, "office": Office, "credential": Used, "reason": self.reason.value.strip()}
         if self.action == "do":
-            if not Config["departments"]:
-                return await interaction.response.send_message("❌ No hay departamentos. Créalos en `/buzon config`.", ephemeral=True)
-            View = AssignView(interaction.user, self.number, Decision, Config)
+            from cogs.Modules.Mail.tasks import OwnerPicker
+
+            async def Confirm(i: discord.Interaction, choice: dict) -> str:
+                return await Apply(i, self.number, "do", {**Decision, **choice}, Config)
+
             return await interaction.response.send_message(
-                f"✅ **#{self.number} se realizará.** ¿Qué departamento se encarga y con qué prioridad?", view=View, ephemeral=True
+                f"✅ **#{self.number} se realizará.** ¿Quién se encarga y con qué prioridad?",
+                view=OwnerPicker(interaction.user, Config, Confirm), ephemeral=True,
             )
         await interaction.response.defer(ephemeral=True)
         Note = await Apply(interaction, self.number, self.action, Decision, Config)
         await interaction.followup.send(Note, ephemeral=True)
-
-
-class AssignView(discord.ui.View):
-    """Second step of 'Se realizará': department and priority."""
-
-    def __init__(self, author, number: int, decision: dict, config: dict):
-        super().__init__(timeout=CHOICE_TIMEOUT)
-        self.author, self.number, self.decision, self.config = author, number, decision, config
-        self.department: str | None = None
-        self.priority = "medium"
-        Dep = discord.ui.Select(
-            placeholder="🏢 Departamento encargado",
-            options=[discord.SelectOption(label=D["name"], value=D["id"], description=D.get("group") or None) for D in config["departments"]][:25],
-            row=0,
-        )
-        Dep.callback = self.PickDepartment
-        Pri = discord.ui.Select(
-            placeholder="Prioridad",
-            options=[discord.SelectOption(label=f"Prioridad {L.lower()}", value=K, emoji=E, default=K == "medium") for K, (E, L) in PRIORITIES.items()],
-            row=1,
-        )
-        Pri.callback = self.PickPriority
-        self.add_item(Dep)
-        self.add_item(Pri)
-
-    async def interaction_check(self, interaction: discord.Interaction) -> bool:
-        return interaction.user.id == self.author.id
-
-    async def PickDepartment(self, interaction: discord.Interaction):
-        self.department = interaction.data["values"][0]
-        self.Confirm.disabled = False
-        await interaction.response.edit_message(view=self)
-
-    async def PickPriority(self, interaction: discord.Interaction):
-        self.priority = interaction.data["values"][0]
-        await interaction.response.defer()
-
-    @discord.ui.button(label="Confirmar", emoji="✅", style=discord.ButtonStyle.green, disabled=True, row=2)
-    async def Confirm(self, interaction: discord.Interaction, _):
-        await interaction.response.defer()
-        self.stop()
-        Note = await Apply(interaction, self.number, "do", {**self.decision, "department": self.department, "priority": self.priority}, self.config)
-        await interaction.edit_original_response(content=Note, view=None)
 
 
 # ---------------- applying a decision ----------------
@@ -200,8 +160,8 @@ async def Apply(interaction: discord.Interaction, number: int, action: str, deci
         from cogs.Modules.Mail.tasks import CreateTask
 
         Task = await CreateTask(Guild, Doc, decision, config)
-        await Store().col.update_one({"_id": Doc["_id"]}, {"$set": {"task": Task["number"], "task_status": "open"}})
-        Doc.update(task=Task["number"], task_status="open")
+        await Store().col.update_one({"_id": Doc["_id"]}, {"$set": {"task": Task["number"], "task_status": Task["status"]}})
+        Doc.update(task=Task["number"], task_status=Task["status"])
     View = DecisionView(Doc)
     await Refresh(Guild, Doc["message"], SuggestionEmbed(Doc, config), View)
     if action == "debate":
@@ -217,8 +177,14 @@ async def Apply(interaction: discord.Interaction, number: int, action: str, deci
     Emoji, Label, _ = STATUSES[action]
     Text = f"{Emoji} Tu sugerencia **#{number} «{Doc['title']}»** en **{Guild.name}**: **{Label}**.\n> {decision['reason'][:1500]}"
     if action == "do":
-        Dep = Department(config, decision["department"])
-        Text += f"\n🏢 Se encarga **{Dep['name'] if Dep else '—'}** · prioridad {PRIORITIES[decision['priority']][1].lower()}."
+        Owner = decision.get("owner", "dept")
+        if Owner == "done":
+            Text += f"\n✅ **Ya está resuelto** por {OFFICES.get(decision['office'], 'el Mando Central')}."
+        elif Owner == "self":
+            Text += f"\n🙋 Se encarga **personalmente** {OFFICES.get(decision['office'], 'el Mando Central')}."
+        else:
+            Dep = Department(config, decision["department"])
+            Text += f"\n🏢 Se encarga **{Dep['name'] if Dep else '—'}** · prioridad {PRIORITIES[decision['priority']][1].lower()}."
     Author = Guild.get_member(Doc["author_id"])
     if Author:
         try:

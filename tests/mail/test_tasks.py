@@ -46,3 +46,22 @@ def test_who_can_do_what():
     assert AllowedByRole(member(7, 40), "release", task, config) and not AllowedByRole(member(1, 40), "release", task, config)
     assert not AllowedByRole(member(1, 40), "reopen", task, config)
     assert AllowedByRole(member(2, 50), "reopen", task, config) and AllowedByRole(member(2, 50), "claim", task, config)
+
+
+def test_direct_tasks_and_owners():
+    t = Tasks(DB())
+    run(t.Setup())
+    mine = run(t.Create(G, None, "dep", "high", 8, title="Revisar", text="Canales", owner="self"))
+    done = run(t.Create(G, suggestion(3), "dep", "low", 8, owner="done"))
+    assert (mine["status"], mine["claimed_by"], mine["department"], mine["suggestion"]) == ("claimed", 8, None, None)
+    assert (done["status"], done["done_by"], done["title"]) == ("done", 8, "Torneos")
+    assert [x["number"] for x in run(t.List(G, ("claimed",), "central"))] == [mine["number"]]
+
+
+def test_whoever_took_it_can_finish_it():
+    from cogs.Modules.Mail.tasks import AllowedByRole
+
+    config = DefaultConfig(G)
+    task = {"department": None, "claimed_by": 8, "status": "claimed"}
+    assert AllowedByRole(N(id=8, roles=[]), "done", task, config)
+    assert not AllowedByRole(N(id=9, roles=[]), "done", task, config)
