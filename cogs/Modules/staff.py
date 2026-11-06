@@ -237,6 +237,9 @@ class StaffManage(discord.ui.View):
 class quota(commands.Cog):
     def __init__(self, client: commands.Bot):
         self.client = client
+        # Birb's staff database commands are replaced by /perfil (fewer commands for the staff).
+        for Name in ("add", "remove", "edit", "view", "introduction", "panel", "list"):
+            self.staff.remove_command(Name)
 
     @commands.hybrid_group(name="staff")
     async def staff(self, ctx: commands.Context):

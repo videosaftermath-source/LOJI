@@ -181,6 +181,7 @@ class Client(commands.AutoShardedBot):
             "cogs.Modules.Mail.config",
             "cogs.Modules.Mail.mail",
             "cogs.Modules.Mail.tasks",
+            "cogs.Modules.Profiles.profiles",
             "cogs.Modules.Economy.basics",
             "cogs.Modules.Economy.admin",
             "cogs.Modules.Economy.activity",

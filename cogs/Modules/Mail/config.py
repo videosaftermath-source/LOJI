@@ -16,12 +16,14 @@ HELP = {
     "offices.tenno.role": "¿Cuál es el rol del **Tenno**?",
     "offices.consejo.role": "¿Cuál es el rol del **Consejo Supremo**?",
     "offices.director.role": "¿Cuál es el rol del **Director de Moderación**?",
+    "profile_min_role": "¿Cuál es el **rol más bajo del staff**? Ese rol y todos los que estén por encima tendrán perfil de staff.",
 }
 GENERAL = {
     "staff_role": ("Rol de staff (quién puede usar /mail)", "role"),
     "suggestions_channel": ("Canal de sugerencias", "channel"),
     "debate_channel": ("Canal «Cosas por debatir» (Consejo Supremo)", "channel"),
     **{f"offices.{O}.role": (f"Rol de {Name}", "role") for O, Name in OFFICES.items()},
+    "profile_min_role": ("Rol mínimo con perfil de staff", "role"),
 }
 
 
@@ -46,6 +48,7 @@ def Checklist(guild: discord.Guild, config: dict) -> tuple[list[str], int, int]:
         ("Rol de staff", bool(config["staff_role"] and guild.get_role(config["staff_role"]))),
         ("Canal de sugerencias", bool(config["suggestions_channel"] and guild.get_channel(config["suggestions_channel"]))),
         ("Canal «Cosas por debatir»", bool(config["debate_channel"] and guild.get_channel(config["debate_channel"]))),
+        ("Rol mínimo de perfiles", bool(config.get("profile_min_role") and guild.get_role(config["profile_min_role"]))),
     ]
     Items += [(f"Rol de {Name}", bool(config["offices"][O]["role"] and guild.get_role(config["offices"][O]["role"]))) for O, Name in OFFICES.items()]
     Items += [
@@ -71,7 +74,8 @@ def PanelEmbed(guild: discord.Guild, config: dict) -> discord.Embed:
         value=(
             f"> **Staff:** {Role(guild, config['staff_role'])}\n"
             f"> **Sugerencias:** {Channel(guild, config['suggestions_channel'])}\n"
-            f"> **Cosas por debatir:** {Channel(guild, config['debate_channel'])}"
+            f"> **Cosas por debatir:** {Channel(guild, config['debate_channel'])}\n"
+            f"> **Rol mínimo de perfiles:** {Role(guild, config.get('profile_min_role'))}"
         ),
         inline=False,
     )
