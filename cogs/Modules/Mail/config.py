@@ -79,7 +79,8 @@ def PanelEmbed(guild: discord.Guild, config: dict) -> discord.Embed:
             f"> **Staff:** {Role(guild, config['staff_role'])}\n"
             f"> **Sugerencias:** {Channel(guild, config['suggestions_channel'])}\n"
             f"> **Cosas por debatir:** {Channel(guild, config['debate_channel'])}\n"
-            f"> **Roles con perfil:** {Roles(guild, config.get('profile_roles') or [])}"
+            f"> **Roles con perfil:** {Roles(guild, config.get('profile_roles') or [])}\n"
+            f"> **Tickets privados al reclamar:** {'🔒 sí' if config.get('ticket_private_claim', True) else '🔓 no'}"
         ),
         inline=False,
     )
@@ -150,6 +151,14 @@ class MainPanel(Panel):
         if not D:
             return await ShowMain(interaction, self.author, "Ese departamento ya no existe.")
         await interaction.response.edit_message(content=None, embed=DepartmentEmbed(interaction.guild, D), view=DepartmentPanel(self.author, D))
+
+    @discord.ui.button(label="Tickets privados", emoji="🔒", style=discord.ButtonStyle.grey, row=2)
+    async def PrivateTickets(self, interaction: discord.Interaction, _):
+        """While on, a claimed ticket is only seen by whoever claimed it (until it's unclaimed)."""
+        Config = await Mail().Get(interaction.guild.id)
+        On = not Config.get("ticket_private_claim", True)
+        await Mail().Set(interaction.guild.id, {"ticket_private_claim": On})
+        await ShowMain(interaction, self.author, "🔒 Al reclamar un ticket, el resto del equipo deja de verlo." if On else "🔓 Los tickets reclamados siguen visibles para todo el equipo.")
 
     @discord.ui.button(label="Asistente", emoji="🧭", style=discord.ButtonStyle.red, row=2)
     async def Wizard(self, interaction: discord.Interaction, _):

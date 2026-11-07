@@ -913,6 +913,7 @@ class TicketsPub(commands.Cog):
             content=f"{Emojis.tick} **{interaction.user.display_name},** the ticket has been transferred to **@{user.display_name}**!"
         )
         self.client.dispatch("pticket_claim", Result.get("_id"), user)
+        self.client.dispatch("ticket_claimed", interaction.channel, user)
 
     @tickets.command(description="Toggle automations in the ticket.")
     @ModuleIsEnabled("Tickets")

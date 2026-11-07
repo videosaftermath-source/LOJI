@@ -29,3 +29,11 @@ Birb permite tantos paneles como quieras:
 3. Envíalo con `/tickets panel`.
 
 Así «Reporte a staff» puede ir solo al rol del Comité de Ética, y «Reporte» a Moderación.
+
+### Tickets privados al reclamar
+Con la opción **🔒 Tickets privados** activada en `/config` → 📮 Mando Central (viene activada):
+- Al **reclamar** un ticket, los roles de staff de su panel dejan de verlo. Solo lo ven quien lo reclamó y el autor.
+- Al **transferirlo**, el acceso pasa a la otra persona.
+- Al **soltarlo** (`/tickets unclaim`), el equipo vuelve a verlo.
+
+Los administradores (permiso de Administrador de Discord) siempre ven todos los canales: eso no se puede cambiar.
