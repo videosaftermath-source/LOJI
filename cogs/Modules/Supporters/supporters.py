@@ -13,6 +13,7 @@ from core.supporters import DEFAULTS, VanityPattern, HasTag, HasVanity, SetActiv
 
 logger = logging.getLogger(__name__)
 SCAN_MINUTES = 20
+PRESENCE_BATCH = 100  # Discord's limit of members per presence request
 PANEL_TIMEOUT = 600
 LOJI_RED = discord.Color.from_rgb(150, 12, 18)
 _store: Supporters | None = None
@@ -36,6 +37,7 @@ class SupporterCog(commands.Cog):
         self.client = client
         self.known: dict[tuple[int, int], tuple[bool, bool]] = {}  # last seen (vanity, tag), to skip unchanged members
         self.loaded: set[int] = set()
+        self.presences: set[int] = set()  # guilds whose statuses were fetched since the bot started
         self.Scan.start()
 
     def cog_unload(self):
@@ -62,6 +64,9 @@ class SupporterCog(commands.Cog):
             Vanity = Tag = False
         else:
             Vanity, Tag = HasVanity(member, Config["vanity"]), HasTag(member, Guild.id)
+            if not Vanity and str(getattr(member, "status", "online")) == "offline":
+                # Offline people send no status: keep what we last saw instead of taking the role away.
+                Vanity = self.known.get(Key, (False, False))[0]
             if (Vanity or Tag) and (await Store().State(Guild.id, member.id)).get("opted_out"):
                 Vanity = Tag = False
         if not force and self.known.get(Key, (False, False)) == (Vanity, Tag):
@@ -132,9 +137,25 @@ class SupporterCog(commands.Cog):
         except Exception as e:
             logger.warning(f"[Supporters] Check failed for {member.id}: {e}")
 
-    async def ScanGuild(self, guild: discord.Guild, force: bool = False) -> int:
+    async def LoadPresences(self, guild: discord.Guild):
+        """Fetches everyone's status once after a restart. A plain member fetch comes without statuses,
+        and Discord's status updates are ignored for members the bot hasn't loaded yet."""
+        if guild.id in self.presences:
+            return
         if not guild.chunked:
             await guild.chunk()
+        Ids = [M.id for M in guild.members if not M.bot]
+        for Start in range(0, len(Ids), PRESENCE_BATCH):
+            try:
+                await guild.query_members(user_ids=Ids[Start:Start + PRESENCE_BATCH], presences=True, cache=True)
+            except Exception as e:
+                logger.warning(f"[Supporters] Couldn't fetch statuses in {guild.id}: {e}")
+                return
+        self.presences.add(guild.id)
+        logger.info(f"[Supporters] Loaded statuses for {len(Ids)} members in {guild.id}")
+
+    async def ScanGuild(self, guild: discord.Guild, force: bool = False) -> int:
+        await self.LoadPresences(guild)
         Count = 0
         for Member in guild.members:
             if await self.Check(Member, force):
@@ -272,6 +293,10 @@ class VanityPanel(Owned):
         await Store().Set(interaction.guild.id, {"enabled": not Config["enabled"]})
         await ShowPanel(interaction, self.author, "✅ Activado." if not Config["enabled"] else "⏸️ Desactivado: en la próxima revisión se quitan roles y beneficios.")
 
+    @discord.ui.button(label="Probar a alguien", emoji="🔍", style=discord.ButtonStyle.grey, row=1)
+    async def Test(self, interaction: discord.Interaction, _):
+        await interaction.response.edit_message(content="🔍 **¿A quién reviso?** Te digo qué ve el bot y qué falla.", embed=None, view=TestPick(self.author))
+
     @discord.ui.button(label="Revisar ahora", emoji="🔄", style=discord.ButtonStyle.blurple, row=1)
     async def Rescan(self, interaction: discord.Interaction, _):
         await interaction.response.defer()
@@ -284,6 +309,71 @@ class VanityPanel(Owned):
             content=f"🔄 Revisado: **{Count}** miembro{'s' if Count != 1 else ''} lleva{'n' if Count != 1 else ''} la vanity o el tag.",
             embed=PanelEmbed(interaction.guild, Config, await EcoConfig().Get(interaction.guild.id)), view=VanityPanel(self.author, Config),
         )
+
+
+class TestPick(Owned):
+    def __init__(self, author):
+        super().__init__(author)
+        Who = discord.ui.UserSelect(placeholder="Elige a un miembro", row=0)
+        Who.callback = self.Pick
+        self.add_item(Who)
+
+    async def Pick(self, interaction: discord.Interaction):
+        await interaction.response.defer()
+        Member = interaction.guild.get_member(int(interaction.data["values"][0]))
+        Cog = interaction.client.get_cog("SupporterCog")
+        if not Member or not Cog:
+            return await interaction.edit_original_response(content="❌ No encuentro a ese miembro.", view=TestPick(self.author))
+        await Cog.LoadPresences(interaction.guild)
+        Member = interaction.guild.get_member(Member.id) or Member
+        await interaction.edit_original_response(content=None, embed=await Diagnose(Cog, Member), view=TestPick(self.author))
+
+    @discord.ui.button(label="Volver", emoji="⬅️", style=discord.ButtonStyle.grey, row=1)
+    async def Back(self, interaction: discord.Interaction, _):
+        await ShowPanel(interaction, self.author)
+
+
+async def Diagnose(cog: SupporterCog, member: discord.Member) -> discord.Embed:
+    """What the bot sees for one member, applies it, and lists anything that blocks roles or the announcement."""
+    Guild, Config = member.guild, await Store().Get(member.guild.id)
+    Customs = [A for A in member.activities if str(getattr(A.type, "name", A.type)) == "custom"]
+    Status = " · ".join(f"`{(A.state or A.name or '')[:80]}`" for A in Customs) or "*sin estado personalizado (o desconectado/invisible)*"
+    Primary = getattr(member, "primary_guild", None)
+    TagText = f"`{Primary.tag}` de {'este servidor' if Primary.id == Guild.id else 'otro servidor'}" + ("" if Primary.identity_enabled else " (oculto)") if Primary and Primary.id else "*no lleva ningún tag*"
+    Vanity, Tag = HasVanity(member, Config["vanity"]), HasTag(member, Guild.id)
+    State = await Store().State(Guild.id, member.id)
+    Problems = []
+    if not Config["enabled"]:
+        Problems.append("El sistema está **desactivado**.")
+    if State.get("opted_out"):
+        Problems.append("Esta persona eligió **no participar** (`/privacidad`).")
+    Me = Guild.me
+    for Key, Label in (("vanity_role", "Rol por la vanity"), ("tag_role", "Rol por el tag")):
+        Role = Guild.get_role(Config[Key] or 0)
+        if Config[Key] and not Role:
+            Problems.append(f"{Label}: el rol ya no existe.")
+        elif Role and not Me.guild_permissions.manage_roles:
+            Problems.append("El bot no tiene permiso de **Gestionar roles**.")
+        elif Role and Role >= Me.top_role:
+            Problems.append(f"{Label}: {Role.mention} está **por encima del rol del bot**. Sube el rol del bot.")
+    if not Config["vanity_role"] and not Config["tag_role"]:
+        Problems.append("No hay **ningún rol** configurado (no se dan roles).")
+    Channel = Guild.get_channel(Config["announce_channel"] or 0)
+    if not Channel:
+        Problems.append("No hay **canal de anuncios** (no se anuncia).")
+    elif not Channel.permissions_for(Me).send_messages:
+        Problems.append(f"El bot no puede escribir en {Channel.mention}.")
+    Supporter = await cog.Check(member, force=True)
+    embed = discord.Embed(title=f"🔍 {member.display_name}", color=discord.Color.green() if Supporter else discord.Color.dark_grey())
+    embed.add_field(name="Estado que ve el bot", value=Status, inline=False)
+    embed.add_field(name="Tag", value=TagText, inline=False)
+    embed.add_field(name="Resultado", value=(
+        f"Vanity: {'✅' if Vanity else '❌'} · Tag: {'✅' if Tag else '❌'} → " + ("✅ **tiene los beneficios**" if Supporter else "❌ **no cumple**")
+        + f"\n-# Busco: `{Config['vanity']}` (también `.gg/{Slug(Config['vanity'])}` y `/{Slug(Config['vanity'])}`)"
+    ), inline=False)
+    embed.add_field(name="⚠️ Problemas" if Problems else "✅ Todo en orden", value="\n".join(f"• {P}" for P in Problems)[:1024] or "Roles y anuncio configurados correctamente.", inline=False)
+    embed.set_footer(text="El premio y el anuncio solo salen la primera vez que alguien empieza a cumplir")
+    return embed
 
 
 class PickTarget(Owned):
