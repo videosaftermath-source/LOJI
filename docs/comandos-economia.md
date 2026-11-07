@@ -74,6 +74,8 @@ El dinero del banco genera intereses diarios. Retirar tiene una pequeña comisi�
 
 ## 💎 Beneficios de booster
 
+🏷️ **¿Llevas nuestra vanity en tu estado o nuestro tag junto a tu nombre?** También ganas más, tienes más suerte en el gacha y un premio de bienvenida. Con `/privacidad` puedes no participar.
+
 Si boosteas el servidor:
 • **x1.3** en todo lo que ganas con trabajar, diario, chat y voz.
 • **Más suerte en el gacha:** la legendaria y la épica salen un 50% más. La pity es la misma para todos.
@@ -97,6 +99,7 @@ Tenno y Consejo Supremo: botón **➕ Nueva tarea** para crearlas sin pasar por 
 **`/config`**: **todo** se configura aquí:
 > 📮 **Mando Central**: departamentos, cargos, credenciales, canales y roles con perfil de staff (con asistente)
 > 🪙 **Economía**: ganancias, chat, mascotas, gacha, casino, La Larga Marcha, inflación, banco y boosters
+> 🏷️ **Vanity y tag**: roles, beneficios y anuncio para quien lleva la vanity en su estado o el tag del servidor
 > Y lo de Birb: módulos, permisos, tickets, feedback...
 
 **`/eco-admin`**: `dar` · `quitar` · `tienda` · `codigos` · `misiones` · `mascotas` · `regalar-mascota` · `gacha` · `stats` · `hacienda` · `desbloquear` · `reiniciar` · `cancelar-marcha`

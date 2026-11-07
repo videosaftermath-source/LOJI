@@ -45,7 +45,7 @@ class ConfigMenu(discord.ui.Select):
         selection = self.values[0]
         if interaction.user.id != self.author.id:
             return await interaction.followup.send(embed=NotYourPanel(), ephemeral=True)
-        if selection in ("LOJI_MAIL", "LOJI_ECO"):
+        if selection in ("LOJI_MAIL", "LOJI_ECO", "LOJI_VANITY"):
             return await LojiSection(interaction, selection)
         embed = discord.Embed(color=discord.Colour.dark_embed())
 
@@ -388,6 +388,10 @@ class ConfigMenu(discord.ui.Select):
 
 async def LojiSection(interaction: discord.Interaction, selection: str):
     """LOJI's own settings live here too, so everything is configured from /config."""
+    if selection == "LOJI_VANITY":
+        from cogs.Modules.Supporters.supporters import OpenPanel
+
+        return await OpenPanel(interaction)
     if selection == "LOJI_MAIL":
         from cogs.Modules.Mail.config import MainPanel, PanelEmbed
         from core.mail.config import CanConfigure, Mail
@@ -464,6 +468,12 @@ def Options(Config: dict = None):
             value="LOJI_MAIL",
             description="Buzón, tareas, departamentos, cargos y perfiles de staff",
             emoji="📮",
+        ),
+        discord.SelectOption(
+            label="Vanity y tag (LOJI)",
+            value="LOJI_VANITY",
+            description="Roles, beneficios y anuncio para quien lleva la vanity o el tag",
+            emoji="🏷️",
         ),
         discord.SelectOption(
             label="Economía (LOJI)",

@@ -1,6 +1,7 @@
 """Perks for people who boost the server."""
 
 from core.economy.constants import CREATED
+from core.supporters import Bonus
 
 MAX_TOP_RATE = 0.99  # legendary + epic + rare never fill the whole table
 
@@ -9,10 +10,16 @@ def IsBooster(member) -> bool:
     return getattr(member, "premium_since", None) is not None
 
 
-def EarningsMultiplier(member, config: dict) -> float:
+def BoosterMultiplier(member, config: dict) -> float:
     """x1.3 (by default) on work, daily, chat and voice earnings for boosters."""
     Settings = config["booster"]
     return float(Settings["multiplier"]) if Settings["enabled"] and IsBooster(member) else 1.0
+
+
+def EarningsMultiplier(member, config: dict) -> float:
+    """Booster bonus times the supporter bonus (vanity or tag): they stack with each other."""
+    Supporter, _ = Bonus(member.guild.id, member.id) if getattr(member, "guild", None) else (1.0, 0.0)
+    return round(BoosterMultiplier(member, config) * Supporter, 4)
 
 
 def Boosted(amount: int, member, config: dict) -> int:
@@ -23,8 +30,10 @@ def GachaSettings(member, config: dict) -> dict:
     """Gacha settings for this player: boosters get higher legendary/epic rates (pity stays the same)."""
     Settings = dict(config["gacha"])
     Booster = config["booster"]
-    if Booster["enabled"] and IsBooster(member) and Booster["gacha_luck"] > 0:
-        Extra = 1 + Booster["gacha_luck"]
+    Luck = (Booster["gacha_luck"] if Booster["enabled"] and IsBooster(member) else 0)
+    Luck += Bonus(member.guild.id, member.id)[1] if getattr(member, "guild", None) else 0
+    if Luck > 0:
+        Extra = 1 + Luck
         Settings["rate_legendary"] = Settings["rate_legendary"] * Extra
         Settings["rate_epic"] = Settings["rate_epic"] * Extra
         # Keep room for the other rarities.

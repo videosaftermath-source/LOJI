@@ -165,7 +165,12 @@ class EconomyBasics(commands.Cog):
             embed.add_field(name="💬 Chat", value=Value, inline=False)
         BoostRate = boost.EarningsMultiplier(Member, Config)
         if BoostRate > 1:
-            embed.add_field(name="💎 Booster", value=f"> Gana **x{BoostRate:g}** en trabajar, diario, chat y voz. ¡Gracias por boostear!", inline=False)
+            from core.supporters import Bonus
+
+            Why = [W for W, On in (("💎 booster", boost.BoosterMultiplier(Member, Config) > 1), ("🏷️ vanity o tag", Bonus(Member.guild.id, Member.id)[0] > 1)) if On]
+            embed.add_field(
+                name="✨ Bonus", value=f"> Gana **x{BoostRate:g}** en trabajar, diario, chat y voz ({' + '.join(Why)}). ¡Gracias por apoyar!", inline=False
+            )
         if Member == ctx.author:
             embed.add_field(
                 name="⏰ Disponibles",
@@ -206,7 +211,7 @@ class EconomyBasics(commands.Cog):
         self.client.dispatch("economy_progress", ctx.guild.id, ctx.author.id, "work", 1)
         Extra = f" (⚡ +{Bonus:.0%} por boosts y mascota)" if Bonus else ""
         if boost.EarningsMultiplier(ctx.author, Config) > 1:
-            Extra += f" (💎 x{boost.EarningsMultiplier(ctx.author, Config):g} por boostear)"
+            Extra += f" (💎 x{boost.EarningsMultiplier(ctx.author, Config):g} de bonus)"
         embed = discord.Embed(
             description=f"💼 {random.choice(WORK_LINES)} y ganaste {FormatAmount(Amount, Config)}{Extra}.\n-# Ahora tienes {FormatAmount(Updated['balance'], Config)}. Vuelve {Relative(Now + Cooldown)}.",
             color=discord.Color.green(),

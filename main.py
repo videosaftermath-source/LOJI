@@ -119,6 +119,7 @@ class Client(commands.AutoShardedBot):
         intents = discord.Intents.default()
         intents.members = True
         intents.message_content = True
+        intents.presences = True  # vanity link in custom statuses (enabled in the Developer Portal)
         return intents
 
     def _initialize_super(self, intents):
@@ -180,6 +181,7 @@ class Client(commands.AutoShardedBot):
             "cogs.Modules.Mail.mail",
             "cogs.Modules.Mail.tasks",
             "cogs.Modules.Profiles.profiles",
+            "cogs.Modules.Supporters.supporters",
             "cogs.Modules.Economy.basics",
             "cogs.Modules.Economy.admin",
             "cogs.Modules.Economy.activity",
