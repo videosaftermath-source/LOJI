@@ -75,6 +75,30 @@ class PTicketControl(discord.ui.View):
         )
 
     @discord.ui.button(
+        label="Soltar",
+        style=discord.ButtonStyle.grey,
+        custom_id="PTICKET:UNCLAIM",
+        emoji="↩️",
+        disabled=True,
+        row=1,
+    )
+    async def unclaim(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """Unclaims the ticket (same as /tickets unclaim): the team sees it again."""
+        await interaction.response.defer(ephemeral=True)
+        if not await TicketPermissions(interaction):
+            return await interaction.followup.send(f"{Emojis.no} No tienes permiso para soltar este ticket.", ephemeral=True)
+        Result = await interaction.client.db["Tickets"].find_one({"MessageID": int(interaction.message.id)})
+        if not Result:
+            return await interaction.followup.send("Este no es un canal de ticket.", ephemeral=True)
+        if not (Result.get("claimed") or {}).get("claimer"):
+            return await interaction.followup.send("Este ticket no está reclamado.", ephemeral=True)
+        await interaction.client.db["Tickets"].update_one(
+            {"_id": Result["_id"]}, {"$set": {"claimed": {"claimer": None, "claimedAt": None}}}
+        )
+        await interaction.followup.send(f"{Emojis.tick} Soltaste el ticket: el equipo vuelve a verlo.", ephemeral=True)
+        interaction.client.dispatch("unclaim", Result.get("_id"))
+
+    @discord.ui.button(
         label="Claim",
         style=discord.ButtonStyle.green,
         custom_id="PTICKET:CLAIM",
@@ -127,6 +151,7 @@ class PTicketControl(discord.ui.View):
         view = PTicketControl()
         view.claim.disabled = True
         view.claim.label = f"Claimed by @{interaction.user.name}"
+        view.unclaim.disabled = False
         await interaction.followup.send(embed=embed)
         await interaction.edit_original_response(view=view)
         name = f"claimed-{interaction.channel.name.split('-')[1]}"
@@ -315,6 +340,7 @@ class TicketsPublic(commands.Cog):
         view = PTicketControl()
         view.claim.disabled = True
         view.claim.label = f"Claimed by @{member.name}"
+        view.unclaim.disabled = False
         try:
             await Message.edit(view=view)
         except discord.Forbidden:
@@ -379,6 +405,7 @@ class TicketsPublic(commands.Cog):
         view = PTicketControl()
         view.claim.disabled = False
         view.claim.label = "Claim"
+        view.unclaim.disabled = True
         try:
             await Message.edit(view=view)
         except discord.Forbidden:
