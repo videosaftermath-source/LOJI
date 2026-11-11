@@ -37,4 +37,4 @@ Todo se **configura en `/config`** y todo se **explica en `/ayuda`**.
 - `/buzon departamentos` → `/perfil panel`.
 - `/eco-ayuda` → `/ayuda` (el prefijo `eco-ayuda` sigue funcionando).
 - Modmail → reemplazado por `/mail`.
-- `/staff add · remove · edit · view · introduction · panel · list` (Birb) → `/perfil`.
+- `/staff add · remove · edit · view · introduction · panel` (Birb) → `/perfil`. `/staff list` (lista automática por roles) sigue activo.

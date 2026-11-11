@@ -193,7 +193,9 @@ async def Apply(interaction: discord.Interaction, number: int, action: str, deci
             pass
     Extra = " Enviada a «Cosas por debatir»." if action == "debate" else ""
     if Task:
-        Extra = f" Creada la **tarea #{Task['number']}**."
+        from cogs.Modules.Mail.tasks import PostedText
+
+        Extra = f" Creada la **tarea #{Task['number']}**.{PostedText(Task)}"
     return f"{Emoji} Sugerencia #{number}: **{Label}**.{Extra}"
 
 

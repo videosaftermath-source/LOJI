@@ -28,8 +28,19 @@ class activityauto(commands.Cog):
         client.Tasks.add("Activity Expiration")
 
     @tasks.loop(minutes=5, reconnect=True)
-    @sentry_sdk.trace()
     async def Task(self):
+        # A database hiccup used to stop this loop for good (no report until a restart).
+        try:
+            await self.Run()
+        except Exception as e:
+            logger.exception(f"[QUOTA LOOP] {e!r}")
+
+    @Task.before_loop
+    async def BeforeTask(self):
+        await self.client.wait_until_ready()
+
+    @sentry_sdk.trace()
+    async def Run(self):
 
         if environment == "custom":
             autoactivityresult = (
@@ -68,7 +79,7 @@ class activityauto(commands.Cog):
                     "saturday",
                     "sunday",
                 ]
-                nextdate = data.get("nextdate")
+                nextdate = data.get("nextdate") or datetime.now()
                 day = data.get("day", "").lower()
                 CurrentDay = datetime.now().weekday()
                 if day not in days:
@@ -90,14 +101,9 @@ class activityauto(commands.Cog):
                 if datetime.now() < nextdate:
                     continue
 
-                guild = await self.client.fetch_guild(data.get("guild_id"))
+                guild = self.client.get_guild(data.get("guild_id")) or await self.client.fetch_guild(data.get("guild_id"))
                 if not guild:
                     continue
-
-                await self.client.db["auto activity"].update_one(
-                    {"guild_id": guild.id},
-                    {"$set": {"nextdate": NextDate, "lastposted": datetime.now()}},
-                )
 
                 logger.info(
                     f"[⏰] Sending Activity @{guild.name} next post is {NextDate}!"
@@ -124,9 +130,18 @@ class activityauto(commands.Cog):
                 async def Process(userdata):
                     async with semaphore:
                         try:
-                            user = await guild.fetch_member(userdata.get("user_id"))
-                        except:
-                            return
+                            await Judge(userdata)
+                        except Exception as e:
+                            # One member's problem must never cancel the whole weekly report.
+                            logger.warning(f"[QUOTA] Skipped {userdata.get('user_id')}: {e!r}")
+
+                async def Judge(userdata):
+                        user = guild.get_member(userdata.get("user_id"))
+                        if user is None:
+                            try:
+                                user = await guild.fetch_member(userdata.get("user_id"))
+                            except discord.HTTPException:
+                                return
                         if not user or not await check_admin_and_staff(guild, user):
                             return
 
@@ -202,18 +217,23 @@ class activityauto(commands.Cog):
                 embeds.append(loaembed)
                 embeds.append(failedembed)
 
-                if channel:
-                    view = ResetLeaderboard(failedids)
-                    try:
-                        await channel.send(embeds=embeds, view=view)
-                        logger.info(f"[Activity Auto] successfully sent @{guild.name}")
-                    except discord.Forbidden:
-                        logger.error("[ERROR] Cannot send to channel.")
-                else:
-                    logger.warning("[NOTFOUND] Channel not found")
+                view = ResetLeaderboard(failedids)
+                try:
+                    await channel.send(embeds=embeds, view=view)
+                    logger.info(f"[Activity Auto] successfully sent @{guild.name}")
+                except discord.HTTPException as e:
+                    # Not marked as posted: it tries again in 5 minutes.
+                    logger.error(f"[QUOTA] Cannot send to channel @{guild.name}: {e}")
+                    continue
+
+                # Only now the week counts as done (before, any error lost the whole week's report).
+                await self.client.db["auto activity"].update_one(
+                    {"guild_id": guild.id},
+                    {"$set": {"nextdate": NextDate, "lastposted": datetime.now()}},
+                )
 
             except Exception as e:
-                logger.error(f"[QUOTA ERROR] {e}")
+                logger.exception(f"[QUOTA ERROR] {e!r}")
                 continue
 
         del autoactivityresult

@@ -78,16 +78,35 @@ async def CreateTask(guild: discord.Guild, suggestion: dict, decision: dict, con
         title=decision.get("title", ""), text=decision.get("text", ""), owner=decision.get("owner", "dept"),
     )
     Dep = Department(config, Task["department"]) if Task["department"] else None
-    Channel = guild.get_channel((Dep or {}).get("channel") or 0)
-    if Channel:
-        Ping = f"<@&{Dep['role']}> nueva tarea" if Dep.get("role") else None
-        try:
-            Message = await Channel.send(content=Ping, embed=TaskEmbed(Task, config), view=TaskView(Task),
-                                         allowed_mentions=discord.AllowedMentions(roles=True))
-            await Store().SetMessage(guild.id, Task["number"], Channel.id, Message.id)
-        except discord.HTTPException as e:
-            logger.warning(f"[Mail] Couldn't post task: {e}")
+    # Department tasks go to the department's channel; the Mando Central's own ones to "Cosas por debatir".
+    ChannelId = (Dep or {}).get("channel") if Dep else config.get("debate_channel")
+    Channel = guild.get_channel(ChannelId or 0)
+    Task["posted_in"], Task["post_problem"] = None, None
+    if not Channel:
+        Task["post_problem"] = (
+            f"el departamento **{Dep['name']}** no tiene canal" if Dep else "no hay canal «Cosas por debatir» configurado"
+        ) + " (`/config` → Mando Central)"
+        return Task
+    Ping = f"<@&{Dep['role']}> nueva tarea" if Dep and Dep.get("role") else None
+    try:
+        Message = await Channel.send(content=Ping, embed=TaskEmbed(Task, config), view=TaskView(Task),
+                                     allowed_mentions=discord.AllowedMentions(roles=True))
+        await Store().SetMessage(guild.id, Task["number"], Channel.id, Message.id)
+        Task["message"] = {"channel": Channel.id, "id": Message.id}
+        Task["posted_in"] = Channel.id
+    except discord.HTTPException as e:
+        logger.warning(f"[Mail] Couldn't post task: {e}")
+        Task["post_problem"] = f"no puedo escribir en {Channel.mention} (revisa mis permisos ahí)"
     return Task
+
+
+def PostedText(task: dict) -> str:
+    """Where the task was posted, or why it wasn't (so it never 'disappears')."""
+    if task.get("posted_in"):
+        return f" Publicada en <#{task['posted_in']}>."
+    if task.get("post_problem"):
+        return f"\n⚠️ Guardada, pero **no se publicó**: {task['post_problem']}. Aparece igual en `/tareas`."
+    return ""
 
 
 # ---------------- buttons ----------------
@@ -228,20 +247,29 @@ class OwnerPicker(discord.ui.View):
             row=1,
         )
         Pri.callback = self.PickPriority
+        self.who, self.pri = Who, Pri
         self.add_item(Who)
         self.add_item(Pri)
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         return interaction.user.id == self.author.id
 
+    def Mark(self, select: discord.ui.Select, value: str):
+        """Discord forgets a select's choice when the message is edited; keep it shown."""
+        for Option in select.options:
+            Option.default = Option.value == value
+
     async def PickOwner(self, interaction: discord.Interaction):
         Value = interaction.data["values"][0]
         self.owner, self.department = (Value, None) if Value in OWNERS else ("dept", Value)
+        self.Mark(self.who, Value)
+        self.Mark(self.pri, self.priority)
         self.Confirm.disabled = False
         await interaction.response.edit_message(view=self)
 
     async def PickPriority(self, interaction: discord.Interaction):
         self.priority = interaction.data["values"][0]
+        self.Mark(self.pri, self.priority)
         await interaction.response.defer()
 
     @discord.ui.button(label="Confirmar", emoji="✅", style=discord.ButtonStyle.green, disabled=True, row=2)
@@ -288,7 +316,7 @@ class NewTaskModal(discord.ui.Modal, title="Nueva tarea del Mando Central"):
 
         async def Create(i: discord.Interaction, choice: dict) -> str:
             Task = await CreateTask(i.guild, None, {**Base, **choice}, Config)
-            return f"📋 Creada la **tarea #{Task['number']}** · {OwnerText(Task, Config)}."
+            return f"📋 Creada la **tarea #{Task['number']}** · {OwnerText(Task, Config)}.{PostedText(Task)}"
 
         await interaction.response.send_message("📋 ¿Quién se encarga y con qué prioridad?", view=OwnerPicker(interaction.user, Config, Create), ephemeral=True)
 

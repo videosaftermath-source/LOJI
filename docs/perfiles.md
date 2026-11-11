@@ -12,7 +12,7 @@ Tienen perfil de staff quienes tienen alguno de los **roles con perfil** que eli
 - **`/perfil panel`:** busca por Departamento Administrativo, por sub-unidades (grupos, como Mod Senior) o por departamento, y abre el perfil de cualquiera.
 - **Gestión** (Tenno, Consejo Supremo o administradores): `/perfil sincronizar` y `/perfil fecha`.
 
-Los comandos viejos de Birb (`/staff add`, `remove`, `edit`, `view`, `introduction`, `panel` y `list`) están ocultos; queda `/staff leaderboard`.
+Los comandos viejos de Birb (`/staff add`, `remove`, `edit`, `view`, `introduction` y `panel`) están ocultos; quedan `/staff leaderboard` y `/staff list` (add/remove/send).
 
 Datos: `StaffProfiles` (la misma ficha que usa `/gestion` para comentarios y sanciones) y `feedback`.
 

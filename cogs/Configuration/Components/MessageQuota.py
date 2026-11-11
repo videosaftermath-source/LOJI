@@ -458,6 +458,10 @@ class AutoActivity(discord.ui.Select):
             discord.SelectOption(label="Toggle", emoji=f"{Emojis.button}"),
             discord.SelectOption(label="Channel", emoji=f"{Emojis.tags}"),
             discord.SelectOption(label="Post Date", emoji=f"{Emojis.time}"),
+            discord.SelectOption(
+                label="Enviar ahora", value="Send Now", emoji="📤",
+                description="Manda el reporte de la semana (con Reset y Punish) ya",
+            ),
         ]
         super().__init__(
             placeholder="Auto Activity", min_values=1, max_values=1, options=options
@@ -480,6 +484,20 @@ class AutoActivity(discord.ui.Select):
             await interaction.response.send_message(view=view, ephemeral=True)
         if selection == "Post Date":
             await interaction.response.send_modal(PostDate())
+        if selection == "Send Now":
+            Auto = await interaction.client.db["auto activity"].find_one({"guild_id": interaction.guild.id})
+            if not Auto or not Auto.get("enabled") or not Auto.get("channel_id") or not Auto.get("day"):
+                return await interaction.response.send_message(
+                    f"{Emojis.no} Primero activa Auto Activity y pon **Channel** y **Post Date**.", ephemeral=True
+                )
+            # The weekly task posts it within 5 minutes and then goes back to the normal day.
+            await interaction.client.db["auto activity"].update_one(
+                {"guild_id": interaction.guild.id}, {"$set": {"nextdate": datetime.now() - timedelta(minutes=1)}}
+            )
+            await interaction.response.send_message(
+                f"📤 El reporte de la quota sale en <#{Auto['channel_id']}> en menos de 5 minutos, con los botones de Reset y Punish.",
+                ephemeral=True,
+            )
 
 
 class LogChannel(discord.ui.ChannelSelect):
