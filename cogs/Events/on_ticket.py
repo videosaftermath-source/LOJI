@@ -738,6 +738,24 @@ class TicketsPublic(commands.Cog):
     async def on_pticket_close(
         self, ObjectID: ObjectId, reason: str, member: discord.Member
     ):
+        try:
+            await self.CloseTicket(ObjectID, reason, member)
+        except Exception as e:
+            logging.exception(f"[on_pticket_close] Unexpected error closing {ObjectID}: {e!r}")
+            # Last resort: don't leave the ticket hanging on "closing".
+            T = await self.client.db["Tickets"].find_one({"_id": ObjectID})
+            Channel = self.client.get_channel((T or {}).get("ChannelID") or 0)
+            if Channel:
+                await self.client.db["Tickets"].update_one(
+                    {"_id": ObjectID, "closed": None},
+                    {"$set": {"closed": {"reason": reason, "closer": member.id, "closedAt": datetime.datetime.now()}}},
+                )
+                try:
+                    await Channel.delete(reason="Ticket cerrado")
+                except discord.HTTPException:
+                    pass
+
+    async def CloseTicket(self, ObjectID: ObjectId, reason: str, member: discord.Member):
         Result = await self.client.db["Tickets"].find_one({"_id": ObjectID})
         if not Result:
             return logging.critical(f"[TICKETS] Ticket with ID {ObjectID} not found")
@@ -786,7 +804,9 @@ class TicketsPublic(commands.Cog):
             {"name": Result.get("panel"), "guild": Guild.id}
         )
         if not P:
-            return logging.critical("[on_pticket_close] I can't find the panel.")
+            # A renamed or deleted panel used to leave the ticket stuck on "closing" forever.
+            logging.critical("[on_pticket_close] I can't find the panel; closing without transcript.")
+            P = {"name": Result.get("panel")}
         try:
             await self.client.db["Ticket Quota"].update_one(
                 {
@@ -802,19 +822,32 @@ class TicketsPublic(commands.Cog):
         # Always marked closed (before, only when there was a transcript channel).
         Closed = {"reason": reason, "closer": member.id, "closedAt": datetime.datetime.now()}
         await self.client.db["Tickets"].update_one({"_id": ObjectID}, {"$set": {"closed": Closed, "name": Result.get("name") or Channel.name}})
-        if user:
-            await ClosedDM(user, Guild, {**Result, "closed": Closed, "name": Result.get("name") or Channel.name}, reason, member)
+        # Each step is guarded and time-limited: whatever fails, the ticket still gets deleted.
+        async def Step(name, coro, seconds):
+            try:
+                await asyncio.wait_for(coro, timeout=seconds)
+            except Exception as e:
+                logging.exception(f"[on_pticket_close] {name} failed for ticket {ObjectID}: {e!r}")
 
-        TranscriptChannel = Guild.get_channel(P.get("TranscriptChannel") or 0)
-        if TranscriptChannel:
-            await SendTranscript(self.client, Guild, TranscriptChannel, Channel, P, {**Result, "_id": ObjectID}, reason, member, msg)
+        if user:
+            await Step("DM", ClosedDM(user, Guild, {**Result, "closed": Closed, "name": Result.get("name") or Channel.name}, reason, member), 20)
 
         try:
-            await Channel.delete()
-        except discord.Forbidden:
-            return logging.critical(
-                f"[on_pticket_close] Bot does not have permission to delete the channel {Channel.id}"
-            )
+            TranscriptChannel = Guild.get_channel(int(P.get("TranscriptChannel") or 0))
+        except (TypeError, ValueError):
+            TranscriptChannel = None
+        if TranscriptChannel:
+            await Step("Transcript", SendTranscript(self.client, Guild, TranscriptChannel, Channel, P, {**Result, "_id": ObjectID}, reason, member, msg), 120)
+
+        try:
+            await Channel.delete(reason=f"Ticket cerrado por {member}")
+        except discord.HTTPException as e:
+            logging.critical(f"[on_pticket_close] Can't delete the channel {Channel.id}: {e}")
+            if msg:
+                try:
+                    await msg.edit(content=f"{Emojis.no} No pude borrar este canal (me falta **Gestionar canales** aquí). El ticket ya está cerrado: bórralo a mano.")
+                except discord.HTTPException:
+                    pass
 
 
 class Review(discord.ui.Select):
