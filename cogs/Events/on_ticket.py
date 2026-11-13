@@ -128,6 +128,12 @@ async def Opener(client, guild, user_id):
 
 
 async def TicketPermissions(interaction: discord.Interaction):
+    """Ticket staff: admins, the panel's roles, or anyone in LOJI's staff hierarchy."""
+    from core.mail.config import Mail
+    from core.ticket_access import IsTicketStaff
+
+    if not interaction.guild:
+        return False
     t = await interaction.client.db["Tickets"].find_one(
         {"ChannelID": interaction.channel.id}
     )
@@ -135,13 +141,9 @@ async def TicketPermissions(interaction: discord.Interaction):
         return False
     P = await interaction.client.db["Panels"].find_one(
         {"name": t.get("panel"), "guild": interaction.guild.id, "type": "single"}
-    )
-    if not P:
-        return False
-    if not P.get("permissions"):
-        return False
-    if any(role.id in P.get("permissions") for role in interaction.user.roles):
-        return True
+    ) or {}
+    Config = await Mail().Get(interaction.guild.id)
+    return IsTicketStaff(interaction.user, P.get("permissions") or [], Config)
 
 
 async def DefaultEmbed(Member: discord.Member, Ticket: dict) -> discord.Embed:

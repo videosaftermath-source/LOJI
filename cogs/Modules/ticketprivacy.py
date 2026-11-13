@@ -7,6 +7,7 @@ channel back exactly as it was. Server admins always see every channel (Discord'
 import logging
 
 import discord
+from discord import app_commands
 from discord.ext import commands
 
 from core.mail.config import Mail
@@ -30,8 +31,62 @@ def Restored(data: dict) -> discord.PermissionOverwrite:
 
 
 class TicketPrivacy(commands.Cog):
+    admin = app_commands.Group(name="admin", description="Herramientas de administración", guild_only=True)
+
     def __init__(self, client: commands.Bot):
         self.client = client
+
+    async def ClaimedTickets(self, guild_id: int) -> list[dict]:
+        return await self.client.db[TICKETS].find(
+            {"GuildID": guild_id, "closed": None, "claimed.claimer": {"$ne": None}}
+        ).to_list(length=None)
+
+    async def TicketChoices(self, interaction: discord.Interaction, current: str):
+        Out = []
+        for T in await self.ClaimedTickets(interaction.guild.id):
+            Channel = interaction.guild.get_channel(T.get("ChannelID") or 0)
+            if not Channel:
+                continue
+            Claimer = interaction.guild.get_member(T["claimed"]["claimer"])
+            Label = f"#{Channel.name} · reclamado por {Claimer.display_name if Claimer else T['claimed']['claimer']}"
+            if current.lower() in Label.lower():
+                Out.append(app_commands.Choice(name=Label[:100], value=str(Channel.id)))
+        return Out[:25]
+
+    @admin.command(name="unclaim", description="Quita a la fuerza la reclamación de un ticket (admins y altos cargos)")
+    @app_commands.describe(ticket="El ticket reclamado (si lo dejas vacío, el canal donde estás)")
+    async def force_unclaim(self, interaction: discord.Interaction, ticket: str | None = None):
+        from core.ticket_access import CanForceUnclaim
+
+        Config = await Mail().Get(interaction.guild.id)
+        if not CanForceUnclaim(interaction.user, Config):
+            return await interaction.response.send_message(
+                "❌ Solo administradores, Tenno, Consejo Supremo y Director de Moderación.", ephemeral=True
+            )
+        ChannelId = int(ticket) if ticket and ticket.isdigit() else interaction.channel.id
+        Doc = await self.client.db[TICKETS].find_one({"GuildID": interaction.guild.id, "ChannelID": ChannelId, "closed": None})
+        if not Doc:
+            return await interaction.response.send_message("❌ Ese no es un ticket abierto. Elige uno de la lista.", ephemeral=True)
+        Claimer = (Doc.get("claimed") or {}).get("claimer")
+        if not Claimer:
+            return await interaction.response.send_message(f"Ese ticket (<#{ChannelId}>) no está reclamado.", ephemeral=True)
+        await self.client.db[TICKETS].update_one({"_id": Doc["_id"]}, {"$set": {"claimed": {"claimer": None, "claimedAt": None}}})
+        # Same as a normal unclaim: the team sees it again, the button comes back and the name goes back.
+        self.client.dispatch("unclaim", Doc["_id"])
+        Channel = interaction.guild.get_channel(ChannelId)
+        if Channel:
+            try:
+                await Channel.send(
+                    f"🔓 {interaction.user.mention} quitó la reclamación de <@{Claimer}>. El ticket vuelve a estar libre para el equipo.",
+                    allowed_mentions=discord.AllowedMentions(users=[discord.Object(Claimer)]),
+                )
+            except discord.HTTPException:
+                pass
+        await interaction.response.send_message(f"✅ <#{ChannelId}> ya no está reclamado por <@{Claimer}>.", ephemeral=True)
+
+    @force_unclaim.autocomplete("ticket")
+    async def force_unclaim_ticket(self, interaction: discord.Interaction, current: str):
+        return await self.TicketChoices(interaction, current)
 
     async def StaffRoles(self, ticket: dict) -> set[int]:
         Panel = await self.client.db[PANELS].find_one({"name": ticket.get("panel"), "type": "single", "guild": ticket.get("GuildID")}) or {}
