@@ -12,6 +12,62 @@ from core.integrations.r2 import upload_file_to_r2
 from core.ticket_names import ClaimedName, NextNumber, OpenName
 
 
+async def SendTranscript(client, guild, target, channel, panel: dict, ticket: dict, reason: str, closer, status_msg=None):
+    """The whole ticket as one .html file in the transcript channel (Discord stores it, not our database)."""
+    import io
+
+    from core.integrations.r2 import CompressImage
+    from core.transcript import Collect, Fit
+
+    try:
+        if status_msg:
+            await status_msg.edit(content=f"{Emojis.loading} Cerrando... (guardando la transcripción)")
+    except discord.HTTPException:
+        pass
+    try:
+        Messages = await Collect(channel, CompressImage)
+    except discord.HTTPException as e:
+        return logging.critical(f"[Transcript] Can't read the ticket channel: {e}")
+    Claimer = (ticket.get("claimed") or {}).get("claimer")
+
+    def Name(user_id):
+        M = guild.get_member(user_id) if user_id else None
+        return f"{M.display_name} (@{M.name})" if M else (str(user_id) if user_id else None)
+
+    Title = channel.name
+    Info = {
+        "title": Title, "guild": guild.name, "panel": panel.get("name"), "opened_by": Name(ticket.get("UserID")),
+        "claimed_by": Name(Claimer), "closed_by": f"{closer.display_name} (@{closer.name})", "reason": reason,
+        "opened": ticket.get("opened"), "closed": discord.utils.utcnow().timestamp(),
+    }
+    Html = await asyncio.to_thread(Fit, Info, Messages)
+    People = {}
+    for M in Messages:
+        if not M["bot"]:
+            People[M["author_id"]] = People.get(M["author_id"], 0) + 1
+    embed = discord.Embed(title=f"🎫 #{Title} cerrado", color=discord.Color.from_rgb(150, 12, 18), timestamp=discord.utils.utcnow())
+    embed.set_author(name=guild.name, icon_url=guild.icon.url if guild.icon else None)
+    embed.add_field(name="Panel", value=panel.get("name") or "—", inline=True)
+    embed.add_field(name="Abierto por", value=f"<@{ticket.get('UserID')}>", inline=True)
+    embed.add_field(name="Atendido por", value=f"<@{Claimer}>" if Claimer else "—", inline=True)
+    embed.add_field(name="Cerrado por", value=closer.mention, inline=True)
+    if ticket.get("opened"):
+        embed.add_field(name="Abierto", value=f"<t:{int(ticket['opened'])}:f>", inline=True)
+    embed.add_field(name="Mensajes", value=str(len(Messages)), inline=True)
+    embed.add_field(name="✅ Solución", value=(reason or "—")[:1024], inline=False)
+    embed.add_field(
+        name="Participantes", value="\n".join(f"<@{U}> · {N} msg" for U, N in sorted(People.items(), key=lambda x: -x[1]))[:1024] or "—", inline=False
+    )
+    embed.set_footer(text="Descarga el .html y ábrelo en el navegador para ver la conversación")
+    try:
+        Sent = await target.send(embed=embed, file=discord.File(io.BytesIO(Html), filename=f"{Title}.html"))
+        await client.db["Tickets"].update_one(
+            {"_id": ticket["_id"]}, {"$set": {"transcript_message": {"channel": target.id, "id": Sent.id}}}
+        )
+    except discord.HTTPException as e:
+        logging.critical(f"[Transcript] Couldn't send to the transcript channel: {e}")
+
+
 class CloseReasonModal(discord.ui.Modal, title="Cerrar ticket"):
     def __init__(self, ticket_id):
         super().__init__()
@@ -709,6 +765,7 @@ class TicketsPublic(commands.Cog):
             user = await Guild.fetch_member(Result.get("UserID"))
         except (discord.NotFound, discord.HTTPException):
             user = None
+        msg = None
         try:
             msg = await Channel.send(
                 f"{Emojis.loading} Ticket closing...",
@@ -722,8 +779,6 @@ class TicketsPublic(commands.Cog):
                     "Author": f"{member.name}/{member.id}",
                 },
             )
-        messages = []
-        compact = []
 
         P = await self.client.db["Panels"].find_one(
             {"name": Result.get("panel"), "guild": Guild.id}
@@ -748,108 +803,9 @@ class TicketsPublic(commands.Cog):
         if user:
             await ClosedDM(user, Guild, {**Result, "closed": Closed, "name": Result.get("name") or Channel.name}, reason, member)
 
-        if P.get("TranscriptChannel"):
-            await msg.edit(
-                content=f"{Emojis.loading} Ticket closing... (Saving transcript this may take a second.)"
-            )
-            async for message in Channel.history(limit=None):
-                if not message:
-                    continue
-                messages.append(
-                    f"[{message.created_at.strftime('%Y-%m-%d %H:%M:%S')}] {message.author.name}: {message.content}"
-                )
-
-                compact.append(
-                    {
-                        "author_id": message.author.id,
-                        "content": message.content,
-                        "author_name": message.author.name,
-                        "message_id": message.id,
-                        "author_avatar": str(
-                            message.author.avatar.url if message.author.avatar else ""
-                        ),
-                        "attachments": [
-                            await upload_file_to_r2(
-                                await attachment.read(), attachment.filename, message
-                            )
-                            for attachment in message.attachments
-                        ],
-                        "embeds": [embed.to_dict() for embed in message.embeds],
-                        "timestamp": message.created_at.timestamp(),
-                    }
-                )
-
-            await self.client.db["Tickets"].update_one(
-                {"_id": ObjectID},
-                {
-                    "$push": {"transcript": {"messages": messages, "compact": compact}},
-                    "$set": {"closed": Closed},
-                },
-            )
-            TranscriptChannel = Guild.get_channel(P.get("TranscriptChannel"))
-            if TranscriptChannel:
-                Users = {
-                    msg.get("author_id"): msg.get("author_name") for msg in compact
-                }
-                List = "\n".join(
-                    [
-                        f"<@{user_id}> ({user_name})"
-                        for user_id, user_name in Users.items()
-                    ]
-                )
-
-                embed = discord.Embed(
-                    title="Ticket Closed",
-                    color=discord.Color.dark_embed(),
-                )
-                embed.set_author(name=Guild.name, icon_url=Guild.icon)
-                embed.add_field(name="ID", value=Result.get("_id"), inline=True)
-                embed.add_field(
-                    name="Opened By", value=f"<@{Result.get('UserID')}>", inline=True
-                )
-                embed.add_field(name="Closed By", value=member.mention, inline=True)
-                embed.add_field(
-                    name="Time Created",
-                    value=f"<t:{int(Result.get('opened'))}:R>",
-                    inline=True,
-                )
-                embed.add_field(name="Reason", value=reason, inline=True)
-                embed.add_field(name="Channel", value=Channel.name)
-                embed.add_field(name="Participants", value=List, inline=False)
-
-                ButtonLink = discord.ui.View()
-                ButtonLink.add_item(
-                    discord.ui.Button(
-                        label="View Transcript",
-                        url=f"https://astrobirb.dev/transcript/{Result.get('_id')}",
-                        emoji=f"{Emojis.website}",
-                        style=discord.ButtonStyle.blurple,
-                    )
-                )
-                ReviewerMsg = None  # the user now gets ClosedDM (reason + feedback button)
-                try:
-                    if TranscriptChannel:
-                        msg = await TranscriptChannel.send(embed=embed, view=ButtonLink)
-                        if P.get("AllowReviews", False):
-                            if msg:
-                                await self.client.db["Tickets"].update_one(
-                                    {"_id": ObjectID},
-                                    {
-                                        "$set": {
-                                            "ReviewMSG": msg.id if msg else None,
-                                            "ReviewChannel": (
-                                                TranscriptChannel.id
-                                                if TranscriptChannel
-                                                else None
-                                            ),
-                                            "ReviewerMsg": (
-                                                ReviewerMsg.id if ReviewerMsg else None
-                                            ),
-                                        }
-                                    },
-                                )
-                except discord.Forbidden:
-                    pass
+        TranscriptChannel = Guild.get_channel(P.get("TranscriptChannel") or 0)
+        if TranscriptChannel:
+            await SendTranscript(self.client, Guild, TranscriptChannel, Channel, P, {**Result, "_id": ObjectID}, reason, member, msg)
 
         try:
             await Channel.delete()
