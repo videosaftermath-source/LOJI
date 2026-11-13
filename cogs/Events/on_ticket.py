@@ -9,6 +9,18 @@ from core.bot.CustomEmbed import DisplayEmbed
 from core.bot.emojis import *
 from core.format import ReplaceVariables
 from core.integrations.r2 import upload_file_to_r2
+from core.ticket_names import ClaimedName, NextNumber, OpenName
+
+
+async def Opener(client, guild, user_id):
+    """Who opened the ticket, for {user.name} in the channel name."""
+    Member = guild.get_member(user_id) if guild else None
+    if Member:
+        return Member
+    try:
+        return await client.fetch_user(user_id)
+    except (discord.HTTPException, TypeError):
+        return None
 
 
 async def TicketPermissions(interaction: discord.Interaction):
@@ -154,20 +166,11 @@ class PTicketControl(discord.ui.View):
         view.unclaim.disabled = False
         await interaction.followup.send(embed=embed)
         await interaction.edit_original_response(view=view)
-        name = f"claimed-{interaction.channel.name.split('-')[1]}"
-        if Panel.get("TicketNames", {}).get("Claimed", None):
-            replacements = {
-                "{author.name}": interaction.user.name,
-                "{author.id}": str(interaction.user.id),
-                "{user.id}": str(Result.get("UserID")),
-            }
-            try:
-                name = ReplaceVariables(
-                    Panel.get("TicketNames").get("Claimed"),
-                    replacements=replacements,
-                )
-            except Exception as e:
-                name = f"claimed-{interaction.channel.name.split('-')[1]}"
+        if Result.get("Number"):
+            User = await Opener(interaction.client, interaction.guild, Result.get("UserID"))
+            name = ClaimedName(Panel or {}, Result, User, interaction.user)
+        else:  # tickets opened before the numbering keep Birb's old name
+            name = f"claimed-{interaction.channel.name.split('-', 1)[-1]}"
 
         try:
             await interaction.channel.edit(
@@ -347,21 +350,11 @@ class TicketsPublic(commands.Cog):
             return logging.critical(
                 f"[on_pticket_claim] Bot does not have permission to edit the message {Message.id}"
             )
-        name = f"claimed-{Channel.name.split('-')[1]}"
-        if Panel.get("TicketNames", {}).get("Claimed", None):
-            replacements = {
-                "{author.name}": member.name,
-                "{author.id}": str(member.id),
-                "{user.name}": member.name,
-                "{user.id}": str(member.id),
-            }
-            try:
-                name = ReplaceVariables(
-                    Panel.get("TicketNames").get("Claimed"),
-                    replacements=replacements,
-                )
-            except Exception as e:
-                name = f"claimed-{Channel.name.split('-')[1]}"
+        if Result.get("Number"):
+            User = await Opener(self.client, getattr(Channel, "guild", None), Result.get("UserID"))
+            name = ClaimedName(Panel or {}, Result, User, member)
+        else:
+            name = f"claimed-{Channel.name.split('-', 1)[-1]}"
 
         try:
             await Channel.edit(
@@ -412,21 +405,7 @@ class TicketsPublic(commands.Cog):
             return logging.critical(
                 f"[on_unclaim] Bot does not have permission to edit the message {Message.id}"
             )
-        name = f"ticket-{author.name}"
-        if P.get("TicketNames", {}).get("Open", None):
-            replacements = {
-                "{author.name}": author.name,
-                "{author.id}": str(author.id),
-                "{user.name}": author.name,
-                "{user.id}": str(author.id),
-            }
-            try:
-                name = ReplaceVariables(
-                    P.get("TicketNames").get("Open"),
-                    replacements=replacements,
-                )
-            except Exception as e:
-                name = f"ticket-{author.name}"
+        name = OpenName(P, Result, author) if Result.get("Number") else f"ticket-{author.name}"
 
         try:
             await Channel.edit(
@@ -578,19 +557,11 @@ class TicketsPublic(commands.Cog):
             Overwrites[role] = discord.PermissionOverwrite(
                 read_messages=True, send_messages=True, read_message_history=True
             )
-        name = f"ticket-{author.name}"
-        if P.get("TicketNames", {}).get("Open", None):
-            replacements = {
-                "{author.name}": author.name,
-                "{author.id}": str(author.id),
-                "{user.name}": author.name,
-                "{user.id}": str(author.id),
-            }
-
-            name = ReplaceVariables(
-                P.get("TicketNames").get("Open"),
-                replacements=replacements,
-            )
+        # Each panel counts its own tickets: reporte-001, reporte-002...
+        if not Ticket.get("Number"):
+            Ticket["Number"] = await NextNumber(self.client.db, guild.id, P.get("name"))
+            await self.client.db["Tickets"].update_one({"_id": objectID}, {"$set": {"Number": Ticket["Number"]}})
+        name = OpenName(P, Ticket, author)
 
         try:
             channel = await category.create_text_channel(

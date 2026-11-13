@@ -620,6 +620,22 @@ class SingelPanelCustomisation(discord.ui.View):
 
         await interaction.response.edit_message(view=self)
 
+    @discord.ui.button(label="Nombres (número)", style=discord.ButtonStyle.blurple, emoji="🔢")
+    async def TicketNames(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user.id != self.author.id:
+            return await interaction.response.send_message(embed=NotYourPanel(), ephemeral=True)
+        custom = await interaction.client.db["Panels"].find_one(
+            {"guild": interaction.guild.id, "type": "single", "name": self.name}
+        )
+        if not custom:
+            return await interaction.response.send_message(
+                content=f"{Emojis.no} **{interaction.user.display_name},** this panel does not exist.", ephemeral=True
+            )
+        from core.ticket_names import PeekNext
+
+        Next = await PeekNext(interaction.client.db, interaction.guild.id, self.name)
+        await interaction.response.send_modal(TicketNamesModal(self.name, custom.get("TicketNames") or {}, Next))
+
     @discord.ui.button(
         label="Finish",
         style=discord.ButtonStyle.green,
@@ -1450,3 +1466,45 @@ class LogChannel(discord.ui.ChannelSelect):
             )
         except:
             pass
+
+
+class TicketNamesModal(discord.ui.Modal, title="Nombre de los canales"):
+    """Per panel: the open and claimed channel names, with {number}, and where the count goes."""
+
+    def __init__(self, panel: str, names: dict, next_number: int):
+        from core.ticket_names import DEFAULT_CLAIMED, DEFAULT_OPEN
+
+        super().__init__()
+        self.panel = panel
+        self.open = discord.ui.TextInput(
+            label="Al abrir (usa {number})", default=names.get("Open") or DEFAULT_OPEN, max_length=90,
+            placeholder="reporte-{number}",
+        )
+        self.claimed = discord.ui.TextInput(
+            label="Al reclamar", default=names.get("Claimed") or DEFAULT_CLAIMED, max_length=90,
+            placeholder="reporte-staff-{number}",
+        )
+        self.next = discord.ui.TextInput(label="Número del próximo ticket", default=str(next_number), max_length=6)
+        for Item in (self.open, self.claimed, self.next):
+            self.add_item(Item)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        from core.ticket_names import VARIABLES, Render, SetNext
+
+        Open, Claimed = self.open.value.strip(), self.claimed.value.strip()
+        if not self.next.value.strip().isdigit() or int(self.next.value) < 1:
+            return await interaction.response.send_message(f"{Emojis.no} El próximo número tiene que ser 1 o más.", ephemeral=True)
+        Next = int(self.next.value)
+        await interaction.client.db["Panels"].update_one(
+            {"guild": interaction.guild.id, "type": "single", "name": self.panel},
+            {"$set": {"TicketNames": {"Open": Open, "Claimed": Claimed}}},
+        )
+        await SetNext(interaction.client.db, interaction.guild.id, self.panel, Next)
+        Warn = "" if "{number}" in Open + Claimed else "\n⚠️ No pusiste `{number}`: los canales no llevarán número."
+        await interaction.response.send_message(
+            f"{Emojis.tick} Guardado para **{self.panel}**. Así se verán:\n"
+            f"> Al abrir: `#{Render(Open, Open, Next, self.panel, interaction.user)}`\n"
+            f"> Al reclamar: `#{Render(Claimed, Claimed, Next, self.panel, interaction.user, interaction.user)}`\n"
+            f"-# Variables: {VARIABLES}{Warn}",
+            ephemeral=True,
+        )
