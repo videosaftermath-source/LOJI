@@ -551,12 +551,6 @@ def Options(Config: dict = None):
             emoji=f"{Emojis.suggestion}",
         ),
         discord.SelectOption(
-            label="Staff Feedback",
-            description="",
-            value="Feedback",
-            emoji=f"{Emojis.staff_feedback}",
-        ),
-        discord.SelectOption(
             label="Staff Panel",
             description="",
             value="Staff Database",

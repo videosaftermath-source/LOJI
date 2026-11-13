@@ -213,7 +213,6 @@ class Client(commands.AutoShardedBot):
             "cogs.Events.ConnectionRoles",
             "cogs.Events.on_promotion",
             "cogs.Events.on_infraction_edit",
-            "cogs.Events.on_feedback",
             "cogs.Events.on_suggestion",
             "cogs.Events.on_suggest_update",
             "cogs.Events.on_infraction_approval",

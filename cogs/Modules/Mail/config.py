@@ -15,12 +15,14 @@ HELP = {
     "offices.tenno.role": "¿Cuál es el rol del **Tenno**?",
     "offices.consejo.role": "¿Cuál es el rol del **Consejo Supremo**?",
     "offices.director.role": "¿Cuál es el rol del **Director de Moderación**?",
+    "feedback_channel": "¿Dónde se publica el **feedback del staff** (las valoraciones de `/feedback` y de los tickets)?",
     "profile_roles": "¿Qué **roles del staff** tienen perfil? Elige todos los que cuenten (puedes elegir varios). El cargo de cada uno será el más alto que tenga.",
 }
 GENERAL = {
     "staff_role": ("Rol de staff (quién puede usar /mail)", "role"),
     "suggestions_channel": ("Canal de sugerencias", "channel"),
     "debate_channel": ("Canal «Cosas por debatir» (Consejo Supremo)", "channel"),
+    "feedback_channel": ("Canal de feedback del staff", "channel"),
     **{f"offices.{O}.role": (f"Rol de {Name}", "role") for O, Name in OFFICES.items()},
     "profile_roles": ("Roles con perfil de staff", "roles"),
 }
@@ -79,6 +81,7 @@ def PanelEmbed(guild: discord.Guild, config: dict) -> discord.Embed:
             f"> **Staff:** {Role(guild, config['staff_role'])}\n"
             f"> **Sugerencias:** {Channel(guild, config['suggestions_channel'])}\n"
             f"> **Cosas por debatir:** {Channel(guild, config['debate_channel'])}\n"
+            f"> **Feedback del staff:** {Channel(guild, config.get('feedback_channel'))}\n"
             f"> **Roles con perfil:** {Roles(guild, config.get('profile_roles') or [])}\n"
             f"> **Tickets privados al reclamar:** {'🔒 sí' if config.get('ticket_private_claim', True) else '🔓 no'}"
         ),

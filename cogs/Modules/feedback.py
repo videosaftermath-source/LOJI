@@ -1,316 +1,206 @@
-from datetime import datetime
+"""
+/feedback (LOJI): rate a staff member 1-10 with an optional comment, see someone's ratings, remove one.
+Also the "⭐ Dejar feedback" button in the DM sent when a ticket closes.
 
-from core.bot.Checks import EnsureConfig
-from core.bot.Module import ModuleIsEnabled
-from core.bot.permissions import *
-from core.format import PaginatorButtons
+Replaces Birb's feedback module. Staff = the Mando Central's staff role, profile roles or high offices.
+Ratings go to the staff profile (/perfil) and, if set, to the feedback channel (/config → Mando Central).
+"""
 
-MONGO_URL = os.getenv("MONGO_URL")
-ENVIRONMENT = os.getenv("ENVIRONMENT")
+import logging
+from datetime import datetime, timezone
 
-from core.bot.HelpEmbeds import (
-    NoPermissionChannel,
-    ChannelNotFound,
-    NoChannelSet,
-    Support,
-)
+import discord
+from bson import ObjectId
+from discord import app_commands
+from discord.ext import commands
+
+from core.mail.config import Mail
+from core.staff.feedback import COMMENT_MAX, LABELS, Feedback, FeedbackError, IsStaff, Stars, Summary
+
+logger = logging.getLogger(__name__)
+GOLD = discord.Color.from_rgb(241, 196, 15)
+_store: Feedback | None = None
 
 
-class Feedback(commands.Cog):
+def Store() -> Feedback:
+    global _store
+    if _store is None:
+        from core.db import db
+
+        _store = Feedback(db)
+    return _store
+
+
+async def FeedbackChannel(client, guild: discord.Guild):
+    """The Mando Central's feedback channel, or Birb's old one if that's all there is."""
+    Config = await Mail().Get(guild.id)
+    ChannelId = Config.get("feedback_channel")
+    if not ChannelId:
+        Old = await client.config.find_one({"_id": guild.id}) or {}
+        ChannelId = (Old.get("Feedback") or {}).get("channel")
+    try:
+        return guild.get_channel(int(ChannelId or 0))
+    except (TypeError, ValueError):
+        return None
+
+
+async def Post(client, guild: discord.Guild, doc: dict):
+    Channel = await FeedbackChannel(client, guild)
+    if not Channel:
+        return
+    Staff = guild.get_member(doc["staff"])
+    embed = discord.Embed(title="⭐ Nuevo feedback", color=GOLD, timestamp=datetime.fromtimestamp(doc["date"], timezone.utc))
+    embed.add_field(name="Staff", value=f"<@{doc['staff']}>", inline=True)
+    embed.add_field(name="Nota", value=f"{Stars(doc['rating'])} **{doc['rating']}/10**", inline=True)
+    embed.add_field(name="De", value=f"<@{doc['author']}>", inline=True)
+    if doc.get("ticket_name"):
+        embed.add_field(name="Ticket", value=f"`#{doc['ticket_name']}`", inline=True)
+    embed.description = f"> {doc['feedback']}" if doc.get("feedback") else "*Sin comentario.*"
+    if Staff:
+        embed.set_thumbnail(url=Staff.display_avatar.url)
+    embed.set_footer(text=f"Feedback #{doc['feedbackid']}")
+    try:
+        await Channel.send(content=f"<@{doc['staff']}>", embed=embed, allowed_mentions=discord.AllowedMentions(users=True))
+    except discord.HTTPException as e:
+        logger.warning(f"[Feedback] Couldn't post: {e}")
+
+
+async def Save(interaction: discord.Interaction, guild: discord.Guild, staff_id: int, rating: int, comment: str, ticket: dict | None = None):
+    try:
+        Doc = await Store().Add(
+            guild.id, interaction.user.id, staff_id, rating, comment,
+            ticket=str(ticket["_id"]) if ticket else None, ticket_name=(ticket or {}).get("name"),
+        )
+    except FeedbackError as e:
+        return await interaction.response.send_message(f"❌ {e}", ephemeral=True)
+    await Post(interaction.client, guild, Doc)
+    await interaction.response.send_message(
+        f"✅ ¡Gracias! Valoraste a <@{staff_id}> con **{rating}/10** {Stars(rating)}. Tu opinión llega a su perfil de staff.",
+        ephemeral=True,
+    )
+
+
+# ---------------- choosing the rating ----------------
+
+
+class CommentModal(discord.ui.Modal, title="Tu feedback"):
+    def __init__(self, guild: discord.Guild, staff_id: int, rating: int, ticket: dict | None):
+        super().__init__()
+        self.guild, self.staff_id, self.rating, self.ticket = guild, staff_id, rating, ticket
+        self.comment = discord.ui.TextInput(
+            label=f"Comentario (nota {rating}/10)", style=discord.TextStyle.paragraph, required=False, max_length=COMMENT_MAX,
+            placeholder="¿Qué hizo bien? ¿Qué podría mejorar? (opcional)",
+        )
+        self.add_item(self.comment)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        await Save(interaction, self.guild, self.staff_id, self.rating, self.comment.value, self.ticket)
+
+
+class RatingView(discord.ui.View):
+    def __init__(self, guild: discord.Guild, staff_id: int, ticket: dict | None = None):
+        super().__init__(timeout=600)
+        self.guild, self.staff_id, self.ticket = guild, staff_id, ticket
+        Pick = discord.ui.Select(
+            placeholder="¿Qué nota le das? (1-10)",
+            options=[discord.SelectOption(label=f"{N}/10 · {LABELS[N]}", value=str(N), emoji="⭐" if N >= 7 else "🔸" if N >= 4 else "🔻") for N in range(10, 0, -1)],
+        )
+        Pick.callback = self.Picked
+        self.add_item(Pick)
+
+    async def Picked(self, interaction: discord.Interaction):
+        await interaction.response.send_modal(CommentModal(self.guild, self.staff_id, int(interaction.data["values"][0]), self.ticket))
+
+
+class TicketFeedbackButton(discord.ui.DynamicItem[discord.ui.Button], template=r"fbt:(?P<ticket>[0-9a-f]{24})"):
+    """In the ticket-closed DM. Persistent, so it works after restarts."""
+
+    def __init__(self, ticket_id: str):
+        super().__init__(discord.ui.Button(label="Dejar feedback", emoji="⭐", style=discord.ButtonStyle.green, custom_id=f"fbt:{ticket_id}"))
+        self.ticket_id = ticket_id
+
+    @classmethod
+    async def from_custom_id(cls, interaction: discord.Interaction, item: discord.ui.Button, match):
+        return cls(match["ticket"])
+
+    async def callback(self, interaction: discord.Interaction):
+        Ticket = await interaction.client.db["Tickets"].find_one({"_id": ObjectId(self.ticket_id)})
+        if not Ticket or Ticket.get("UserID") != interaction.user.id:
+            return await interaction.response.send_message("❌ Este ticket ya no existe.", ephemeral=True)
+        Guild = interaction.client.get_guild(Ticket.get("GuildID"))
+        Staff = TicketStaff(Ticket)
+        if not Guild or not Staff:
+            return await interaction.response.send_message("❌ No encuentro a quién te atendió.", ephemeral=True)
+        try:
+            await Store().Check(Guild.id, interaction.user.id, Staff, str(Ticket["_id"]))
+        except FeedbackError as e:
+            return await interaction.response.send_message(f"❌ {e}", ephemeral=True)
+        await interaction.response.send_message(
+            f"¿Qué tal te atendió <@{Staff}>?", view=RatingView(Guild, Staff, Ticket), ephemeral=True,
+        )
+
+
+def TicketStaff(ticket: dict) -> int | None:
+    """Who gets the ticket's feedback: who claimed it, or else who closed it (if it wasn't the user)."""
+    Claimer = (ticket.get("claimed") or {}).get("claimer")
+    if Claimer and Claimer != ticket.get("UserID"):
+        return Claimer
+    Closer = (ticket.get("closed") or {}).get("closer") if isinstance(ticket.get("closed"), dict) else None
+    return Closer if Closer and Closer != ticket.get("UserID") else None
+
+
+# ---------------- /feedback ----------------
+
+
+class FeedbackCog(commands.Cog):
+    feedback = app_commands.Group(name="feedback", description="Valora al staff", guild_only=True)
+
     def __init__(self, client: commands.Bot):
         self.client = client
 
-    @commands.hybrid_group(name="feedback", description="Staff Feedback")
-    async def FeedbackGroup(self, ctx: commands.Context):
-        pass
+    async def cog_load(self):
+        self.client.add_dynamic_items(TicketFeedbackButton)
 
-    @FeedbackGroup.command(description="Remove feedback from a staff member")
-    @app_commands.describe(id="The ID of the feedback you want to remove.")
-    @Permissions("Admin")
-    @ModuleIsEnabled("Feedback")
-    async def remove(self, ctx: commands.Context, id: int):
-        result = await self.client.db["feedback"].find_one(
-            {"feedbackid": id, "guild_id": ctx.guild.id}
-        )
-        if result is None:
-            await ctx.send(
-                f"{Emojis.no} **{ctx.author.display_name}**, I couldn't find any feedback with that ID."
-            )
-            return
+    @feedback.command(name="dar", description="Valora a un miembro del staff del 1 al 10")
+    @app_commands.describe(staff="A quién valoras", nota="Del 1 (muy mal) al 10 (excelente)", comentario="Qué hizo bien o qué puede mejorar")
+    async def dar(self, interaction: discord.Interaction, staff: discord.Member, nota: app_commands.Range[int, 1, 10], comentario: str | None = None):
+        Config = await Mail().Get(interaction.guild.id)
+        if staff.bot or not IsStaff(staff, Config):
+            return await interaction.response.send_message(f"❌ {staff.mention} no es del staff.", ephemeral=True)
+        await Save(interaction, interaction.guild, staff.id, nota, (comentario or "")[:COMMENT_MAX])
 
-        await self.client.db["feedback"].delete_one(
-            {"feedbackid": id, "guild_id": ctx.guild.id}
-        )
-        await ctx.send(
-            f"{Emojis.tick} **{ctx.author.display_name}**, I have removed the feedback.",
-        )
-
-    @FeedbackGroup.command(description="Rate a staff member", name="give")
-    @app_commands.describe(
-        staff="The staff member you want to rate.",
-        rating="The rating you want to give (1-10).",
-        feedback="The feedback you want to give.",
-    )
-    @ModuleIsEnabled("Feedback")
-    async def feedback(
-        self,
-        ctx: commands.Context,
-        staff: discord.User,
-        rating: Literal[
-            "1/10",
-            "2/10",
-            "3/10",
-            "4/10",
-            "5/10",
-            "6/10",
-            "7/10",
-            "8/10",
-            "9/10",
-            "10/10",
-        ],
-        *,
-        feedback: commands.Range[str, 1, 2000],
-    ):
-        await ctx.defer(ephemeral=True)
-        if not await ctx.guild.fetch_member(ctx.author.id):
-            return await ctx.send(
-                f"{Emojis.no} {ctx.author.display_name}, that user isn't in the server."
-            )
-        existing_feedback = await self.client.db["feedback"].find_one(
-            {"guild_id": ctx.guild.id, "staff": staff.id, "author": ctx.author.id}
-        )
-        Config = await EnsureConfig(ctx, "Feedback")
-        if staff is None:
-            await ctx.send(
-                f"{Emojis.no} **{ctx.author.display_name}**, please provide a staff member.",
-            )
-            return
-        if staff == ctx.author:
-            await ctx.send(
-                f"{Emojis.no} **{ctx.author.display_name}**, you cannot rate yourself.",
-            )
-            return
-
-        if not RequireStaff(Config, staff):
-            await ctx.send(
-                f"{Emojis.no} **{ctx.author.display_name}**, you can only rate staff members.",
-            )
-            return
-
-        if Config.get("Module Options"):
-            if (
-                Config.get("Module Options", {}).get("multiplefeedback", False) is False
-                and existing_feedback
-            ):
-                await ctx.send(
-                    f"{Emojis.no} **{ctx.author.display_name},** you have already rated this staff member.",
-                )
-                return
+    @feedback.command(name="ver", description="Mira las valoraciones de un miembro del staff")
+    async def ver(self, interaction: discord.Interaction, staff: discord.Member):
+        Docs = await Store().Of(interaction.guild.id, staff.id)
+        Average, Count = Summary(Docs)
+        Admin = interaction.user.guild_permissions.manage_guild
+        embed = discord.Embed(title=f"⭐ Feedback de {staff.display_name}", color=GOLD)
+        embed.set_thumbnail(url=staff.display_avatar.url)
+        if Average is None:
+            embed.description = "Todavía no tiene valoraciones."
         else:
-            if existing_feedback:
-                await ctx.send(
-                    f"{Emojis.no} **{ctx.author.display_name},** you have already rated this staff member.",
-                )
-                return
-        feedbackid = await self.client.db["feedback"].count_documents({}) + 1
-        msg = await ctx.send(
-            f"{Emojis.loading}  **{ctx.author.display_name}**, submitting feedback..."
-        )
+            embed.description = f"{Stars(round(Average))} **{Average:.1f}/10** · {Count} valoraci{'ón' if Count == 1 else 'ones'}".replace(".", ",", 1)
+            Lines = []
+            for D in Docs[:8]:
+                From = f" · de <@{D['author']}>" if Admin else ""
+                Ticket = f" · 🎫 `{D['ticket_name']}`" if D.get("ticket_name") else ""
+                Text = f"\n> {D['feedback'][:150]}" if D.get("feedback") else ""
+                Lines.append(f"**{D.get('rating')}/10** · <t:{int(D.get('date') or 0)}:d>{Ticket}{From} · `#{D.get('feedbackid')}`{Text}")
+            embed.add_field(name="Últimas", value="\n".join(Lines)[:1024], inline=False)
+        if Admin:
+            embed.set_footer(text="Borrar una: /feedback borrar id")
+        await interaction.response.send_message(embed=embed, ephemeral=True)
 
-        try:
-            channel = await ctx.guild.fetch_channel(
-                int(Config.get("Feedback", {}).get("channel", 0))
-            )
-        except (discord.NotFound, discord.HTTPException):
-            return await ctx.send(
-                embed=ChannelNotFound(),
-            )
-        if not channel:
-            return await ctx.send(
-                embed=NoChannelSet(),
-            )
-        if not channel.permissions_for(ctx.guild.me).send_messages:
-            return await ctx.send(
-                embed=NoPermissionChannel(channel),
-            )
-
-        try:
-            Rating = rating.split("/")[0]
-            feedbackdata = {
-                "guild_id": ctx.guild.id,
-                "rating": Rating,
-                "staff": staff.id,
-                "author": ctx.author.id,
-                "feedback": feedback,
-                "date": datetime.now().timestamp(),
-                "feedbackid": feedbackid,
-            }
-            insert = await self.client.db["feedback"].insert_one(feedbackdata)
-            self.client.dispatch("feedback", insert.inserted_id, Config)
-            await msg.edit(
-                content=f"{Emojis.tick} You've rated **@{staff.display_name}** {rating}!",
-            )
-        except discord.Forbidden:
-            await ctx.send(
-                embed=NoPermissionChannel(channel),
-                view=Support(),
-            )
-            return
-
-    @FeedbackGroup.command(description="View a staff members rating")
-    @app_commands.describe(
-        staff="The staff to view rating for", scope="The scope of the rating to view"
-    )
-    @ModuleIsEnabled("Feedback")
-    async def ratings(
-        self,
-        ctx: commands.Context,
-        staff: discord.Member,
-        scope: Literal["global", "server"],
-    ):
-
-        if scope == "global":
-            staff_ratings = (
-                await self.client.db["feedback"]
-                .find({"staff": staff.id})
-                .to_list(length=None)
-            )
-            total_ratings = await self.client.db["feedback"].count_documents(
-                {"staff": staff.id}
-            )
-        elif scope == "server":
-            staff_ratings = (
-                await self.client.db["feedback"]
-                .find({"guild_id": ctx.guild.id, "staff": staff.id})
-                .to_list(length=None)
-            )
-            total_ratings = await self.client.db["feedback"].count_documents(
-                {"guild_id": ctx.guild.id, "staff": staff.id}
-            )
-        else:
-            await ctx.send(
-                f"{Emojis.no} Invalid scope. Please use 'global' or 'server'."
-            )
-            return
-
-        if total_ratings == 0:
-            await ctx.send(
-                f"{Emojis.no} **{ctx.author.display_name}**, I couldn't find any rating for this user.\n{Emojis.arrow} To rate someone use </feedback give:1194418154617700382>!",
-            )
-            return
-        sum_ratings = sum(
-            int(rating["rating"].split("/")[0]) for rating in staff_ratings
-        )
-        average_rating = int(sum_ratings / total_ratings)
-
-        if total_ratings > 0:
-            last_rating = staff_ratings[-1]["rating"]
-        else:
-            last_rating = "N/A"
-
-        rating_text = get_rating_text(average_rating)
-
-        embed = discord.Embed(
-            color=discord.Color.dark_embed(),
-        )
-        embed.add_field(
-            name="Ratings",
-            value=f"> **Average Rating**: {average_rating}/10\n> **Last Rating**: {last_rating}/10\n> **Overall**: {rating_text}",
-        )
-        value = f"> **Author:** <@{staff_ratings[-1]['author']}>\n> **Feedback:** {staff_ratings[-1]['feedback']}"
-        if len(value) > 1021:
-            value = value[:1021] + "..."
-        embed.add_field(
-            name="Last Rating",
-            value=value,
-        )
-        embed.set_author(name=f"@{staff.display_name}", icon_url=staff.display_avatar)
-        embed.set_footer(text=f"{scope.capitalize()} Ratings")
-        view = ViewRatings(staff_ratings, staff, ctx, scope, ctx.author)
-        await ctx.send(embed=embed, view=view)
-
-
-class ViewRatings(discord.ui.View):
-    def __init__(self, ratings, staff, ctx, scope, author):
-        super().__init__(timeout=120)
-        self.ratings = ratings
-        self.staff = staff
-        self.ctx = ctx
-        self.scope = scope
-        self.author = author
-
-    @discord.ui.button(
-        label="View Ratings",
-        style=discord.ButtonStyle.grey,
-        emoji=f"{Emojis.staff_feedback}",
-    )
-    async def Ratings(
-        self, interaction: discord.Interaction, button: discord.ui.Button
-    ):
-        if interaction.user.id != self.author.id:
-            embed = discord.Embed(
-                description=f"**{interaction.user.display_name},** this is not your view",
-                color=discord.Colour.dark_embed(),
-            )
-            return await interaction.response.send_message(embed=embed, ephemeral=True)
-        msg = await self.ctx.send(
-            embed=discord.Embed(
-                description=f"{Emojis.loading_alt}",
-                color=discord.Color.dark_embed(),
-            )
-        )
-        if self.scope == "global":
-            staff_ratings = (
-                await interaction.client.db["feedback"]
-                .find({"staff": self.staff.id})
-                .to_list(length=None)
-            )
-        elif self.scope == "server":
-            staff_ratings = (
-                await interaction.client.db["feedback"]
-                .find({"guild_id": interaction.guild.id, "staff": self.staff.id})
-                .to_list(length=None)
-            )
-        embeds = []
-        for idx, rating in enumerate(staff_ratings):
-            if idx % 9 == 0:
-                embed = discord.Embed(
-                    title="Staff Ratings", color=discord.Color.dark_theme()
-                )
-                embed.set_thumbnail(url=self.staff.display_avatar)
-                embed.set_author(
-                    name=self.staff.display_name, icon_url=self.staff.display_avatar
-                )
-            date = rating.get("date", 0)
-            Id = rating.get("feedbackid", "N/A")
-            feedback = rating.get("feedback", "Non Given")
-            value = f"> **Date:** <t:{int(date)}>\n> **Feedback ID:** {Id}\n> **Feedback:** {feedback}"
-            if len(value) > 1021:
-                value = value[:1021] + "..."
-
-            embed.add_field(
-                name=f"{Emojis.star} {rating.get('rating', 0)}/10",
-                value=value,
-                inline=False,
-            )
-
-            if (idx + 1) % 9 == 0 or idx == len(staff_ratings) - 1:
-                embeds.append(embed)
-
-        pag = await PaginatorButtons()
-        button.disabled = True
-        await pag.start(self.ctx, embeds, msg=msg)
-        await interaction.response.edit_message(view=self)
-
-
-def get_rating_text(average_rating):
-    if average_rating >= 8:
-        return "Great"
-    elif average_rating >= 5:
-        return "Moderate"
-    else:
-        return "Critical"
+    @feedback.command(name="borrar", description="(Admin) Borra una valoración por su número")
+    @app_commands.default_permissions(manage_guild=True)
+    async def borrar(self, interaction: discord.Interaction, id: int):
+        if not interaction.user.guild_permissions.manage_guild:
+            return await interaction.response.send_message("❌ Solo administración.", ephemeral=True)
+        Doc = await Store().Remove(interaction.guild.id, id)
+        if not Doc:
+            return await interaction.response.send_message(f"❌ No hay feedback #{id}.", ephemeral=True)
+        await interaction.response.send_message(f"🗑️ Borrado el feedback #{id} ({Doc.get('rating')}/10 a <@{Doc['staff']}>).", ephemeral=True)
 
 
 async def setup(client: commands.Bot) -> None:
-    await client.add_cog(Feedback(client))
+    await client.add_cog(FeedbackCog(client))

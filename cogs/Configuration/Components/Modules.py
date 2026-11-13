@@ -130,17 +130,6 @@ async def ModuleOptions(Config, data=None):
             ),
         ),
         discord.SelectOption(
-            label="Staff Feedback",
-            description="",
-            value="Feedback",
-            emoji=f"{Emojis.staff_feedback}",
-            default=(
-                Config.get("Modules", {}).get("Feedback", False) or False
-                if not data
-                else False
-            ),
-        ),
-        discord.SelectOption(
             label="Staff Panel",
             description="",
             value="Staff Database",

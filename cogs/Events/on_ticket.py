@@ -12,6 +12,54 @@ from core.integrations.r2 import upload_file_to_r2
 from core.ticket_names import ClaimedName, NextNumber, OpenName
 
 
+class CloseReasonModal(discord.ui.Modal, title="Cerrar ticket"):
+    def __init__(self, ticket_id):
+        super().__init__()
+        self.ticket_id = ticket_id
+        self.reason = discord.ui.TextInput(
+            label="¿Cómo se solucionó?", style=discord.TextStyle.paragraph, max_length=1000,
+            placeholder="Se le enviará al usuario por MD junto con la invitación a dejar feedback.",
+        )
+        self.add_item(self.reason)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        await interaction.response.send_message(f"{Emojis.loading} Cerrando el ticket...", ephemeral=True)
+        interaction.client.dispatch("pticket_close", self.ticket_id, self.reason.value.strip(), interaction.user)
+
+
+async def ClosedDM(user, guild, ticket: dict, reason: str, closer):
+    """Tells the user their ticket was closed, why, and invites them to leave feedback."""
+    from cogs.Modules.feedback import TicketFeedbackButton, TicketStaff
+
+    Reason = reason if reason and reason != "No reason provided" else "Sin motivo indicado."
+    embed = discord.Embed(
+        title="🎫 Tu ticket se ha cerrado",
+        description=f"Tu ticket **#{ticket.get('name') or 'ticket'}** en **{guild.name}** fue cerrado.",
+        color=discord.Color.from_rgb(150, 12, 18),
+        timestamp=discord.utils.utcnow(),
+    )
+    embed.add_field(name="✅ Solución", value=Reason[:1024], inline=False)
+    Staff = TicketStaff(ticket)
+    if Staff:
+        embed.add_field(name="👤 Te atendió", value=f"<@{Staff}>", inline=True)
+    embed.add_field(name="🔒 Cerrado por", value=closer.mention, inline=True)
+    if guild.icon:
+        embed.set_thumbnail(url=guild.icon.url)
+    View = None
+    if Staff:
+        embed.add_field(
+            name="⭐ ¿Qué tal te atendieron?",
+            value="Deja tu **feedback** con el botón de abajo: son 10 segundos y nos ayuda a mejorar.",
+            inline=False,
+        )
+        View = discord.ui.View(timeout=None)
+        View.add_item(TicketFeedbackButton(str(ticket["_id"])))
+    try:
+        await user.send(embed=embed, view=View) if View else await user.send(embed=embed)
+    except discord.HTTPException:
+        pass  # DMs closed
+
+
 async def Opener(client, guild, user_id):
     """Who opened the ticket, for {user.name} in the channel name."""
     Member = guild.get_member(user_id) if guild else None
@@ -67,10 +115,8 @@ class PTicketControl(discord.ui.View):
         emoji="🔒",
     )
     async def close(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.defer()
-
         if not await TicketPermissions(interaction):
-            return await interaction.followup.send(
+            return await interaction.response.send_message(
                 f"{Emojis.no} **{interaction.user.display_name}** you don't have permission to close this ticket.",
                 ephemeral=True,
             )
@@ -79,12 +125,11 @@ class PTicketControl(discord.ui.View):
             {"MessageID": int(interaction.message.id)}
         )
         if not Result:
-            return await interaction.followup.send(
+            return await interaction.response.send_message(
                 "This isn't a ticket channel.", ephemeral=True
             )
-        interaction.client.dispatch(
-            "pticket_close", Result.get("_id"), "No reason provided", interaction.user
-        )
+        # The solution goes to the user's DM along with the feedback button.
+        await interaction.response.send_modal(CloseReasonModal(Result.get("_id")))
 
     @discord.ui.button(
         label="Soltar",
@@ -697,6 +742,12 @@ class TicketsPublic(commands.Cog):
         except:
             pass
 
+        # Always marked closed (before, only when there was a transcript channel).
+        Closed = {"reason": reason, "closer": member.id, "closedAt": datetime.datetime.now()}
+        await self.client.db["Tickets"].update_one({"_id": ObjectID}, {"$set": {"closed": Closed, "name": Result.get("name") or Channel.name}})
+        if user:
+            await ClosedDM(user, Guild, {**Result, "closed": Closed, "name": Result.get("name") or Channel.name}, reason, member)
+
         if P.get("TranscriptChannel"):
             await msg.edit(
                 content=f"{Emojis.loading} Ticket closing... (Saving transcript this may take a second.)"
@@ -732,14 +783,7 @@ class TicketsPublic(commands.Cog):
                 {"_id": ObjectID},
                 {
                     "$push": {"transcript": {"messages": messages, "compact": compact}},
-                    "$set": {
-                        "closed": datetime.datetime.utcnow(),
-                        "closed": {
-                            "reason": reason,
-                            "closer": member.id,
-                            "closedAt": datetime.datetime.now(),
-                        },
-                    },
+                    "$set": {"closed": Closed},
                 },
             )
             TranscriptChannel = Guild.get_channel(P.get("TranscriptChannel"))
@@ -782,21 +826,7 @@ class TicketsPublic(commands.Cog):
                         style=discord.ButtonStyle.blurple,
                     )
                 )
-                ReviewerMsg = None
-                if user:
-                    if P.get("AllowReviews", False):
-                        view = discord.ui.View()
-                        view.add_item(Review())
-                        try:
-                            ReviewerMsg = await user.send(embed=embed, view=view)
-                        except:
-                            pass
-
-                    else:
-                        try:
-                            ReviewerMsg = await user.send(embed=embed)
-                        except:
-                            pass
+                ReviewerMsg = None  # the user now gets ClosedDM (reason + feedback button)
                 try:
                     if TranscriptChannel:
                         msg = await TranscriptChannel.send(embed=embed, view=ButtonLink)
