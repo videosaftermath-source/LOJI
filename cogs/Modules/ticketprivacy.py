@@ -30,6 +30,23 @@ def Restored(data: dict) -> discord.PermissionOverwrite:
     return discord.PermissionOverwrite.from_pair(discord.Permissions(data["allow"]), discord.Permissions(data["deny"]))
 
 
+async def CanAddPeople(interaction: discord.Interaction, ticket: dict) -> str | None:
+    """
+    Who can add/remove people in a ticket. Claimed: the claimer, admins and the high offices.
+    Not claimed: any ticket staff. Returns the reason it isn't allowed, or None.
+    """
+    from cogs.Events.on_ticket import TicketPermissions
+    from core.ticket_access import CanForceUnclaim
+
+    Config = await Mail().Get(interaction.guild.id)
+    if CanForceUnclaim(interaction.user, Config):
+        return None
+    Claimer = (ticket.get("claimed") or {}).get("claimer")
+    if Claimer:
+        return None if Claimer == interaction.user.id else f"Este ticket lo atiende <@{Claimer}>: solo esa persona o un admin pueden añadir gente."
+    return None if await TicketPermissions(interaction) else "Solo el staff puede añadir gente a un ticket."
+
+
 class TicketPrivacy(commands.Cog):
     admin = app_commands.Group(name="admin", description="Herramientas de administración", guild_only=True)
 
@@ -83,6 +100,31 @@ class TicketPrivacy(commands.Cog):
             except discord.HTTPException:
                 pass
         await interaction.response.send_message(f"✅ <#{ChannelId}> ya no está reclamado por <@{Claimer}>.", ephemeral=True)
+
+    @app_commands.command(name="add", description="Añade a alguien al ticket (quien lo reclamó o un admin)")
+    @app_commands.describe(usuario="A quién añades al ticket")
+    @app_commands.guild_only()
+    async def add_user(self, interaction: discord.Interaction, usuario: discord.Member):
+        Ticket = await self.client.db[TICKETS].find_one({"ChannelID": interaction.channel.id, "closed": None})
+        if not Ticket:
+            return await interaction.response.send_message("❌ Usa `/add` dentro del ticket.", ephemeral=True)
+        Problem = await CanAddPeople(interaction, Ticket)
+        if Problem:
+            return await interaction.response.send_message(f"❌ {Problem}", ephemeral=True)
+        if usuario.bot:
+            return await interaction.response.send_message("❌ No se pueden añadir bots.", ephemeral=True)
+        try:
+            await interaction.channel.set_permissions(
+                usuario, read_messages=True, send_messages=True, read_message_history=True, attach_files=True,
+                embed_links=True, add_reactions=True, reason=f"Añadido al ticket por {interaction.user}",
+            )
+        except discord.HTTPException:
+            return await interaction.response.send_message("❌ No tengo permiso para cambiar los permisos de este canal.", ephemeral=True)
+        await self.client.db[TICKETS].update_one({"_id": Ticket["_id"]}, {"$addToSet": {"added": usuario.id}})
+        await interaction.response.send_message(
+            f"➕ {interaction.user.mention} añadió a {usuario.mention} al ticket.",
+            allowed_mentions=discord.AllowedMentions(users=[usuario]),
+        )
 
     @force_unclaim.autocomplete("ticket")
     async def force_unclaim_ticket(self, interaction: discord.Interaction, current: str):

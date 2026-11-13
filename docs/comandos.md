@@ -22,7 +22,7 @@ Todo se **configura en `/config`** y todo se **explica en `/ayuda`**.
 | `/mail` | Escribir al Tenno (sugerencias, peticiones, dudas) |
 | `/tareas` | Lista de tareas; **➕ Nueva tarea** para Tenno y Consejo Supremo |
 | `/perfil ver · editar · panel` | Perfiles de staff y panel por departamento |
-| Tickets de Birb | Al reclamar o responder, sale la tarjeta "Te atiende"  · Canales numerados por panel (`reporte-001`): `/config` → Tickets → panel → 🔢 Nombres (número) · `/admin unclaim` quita la reclamación a la fuerza (admins y altos cargos) |
+| Tickets de Birb | Al reclamar o responder, sale la tarjeta "Te atiende"  · Canales numerados por panel (`reporte-001`): `/config` → Tickets → panel → 🔢 Nombres (número) · `/admin unclaim` quita la reclamación a la fuerza (admins y altos cargos) · `/add usuario` añade a alguien al ticket (quien lo reclamó o admins) |
 
 ## Administración
 | Comando | Para qué |

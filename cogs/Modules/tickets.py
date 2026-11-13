@@ -748,10 +748,12 @@ class TicketsPub(commands.Cog):
     @ModuleIsEnabled("Tickets")
     async def add(self, interaction: discord.Interaction, user: discord.Member):
         await interaction.response.defer()
-        if not await TicketPermissions(interaction):
-            return await interaction.followup.send(
-                content=f"{Emojis.no} You don't have permission to use this command."
-            )
+        from cogs.Modules.ticketprivacy import CanAddPeople
+
+        Ticket = await interaction.client.db["Tickets"].find_one({"ChannelID": interaction.channel.id})
+        Problem = await CanAddPeople(interaction, Ticket) if Ticket else "Este no es un canal de ticket."
+        if Problem:
+            return await interaction.followup.send(content=f"{Emojis.no} {Problem}")
         Result = await interaction.client.db["Tickets"].find_one(
             {"ChannelID": interaction.channel.id}
         )
@@ -778,10 +780,12 @@ class TicketsPub(commands.Cog):
     @tickets.command(description="Remove a user from a ticket.")
     async def remove(self, interaction: discord.Interaction, user: discord.Member):
         await interaction.response.defer()
-        if not await TicketPermissions(interaction):
-            return await interaction.followup.send(
-                content=f"{Emojis.no} You don't have permission to use this command."
-            )
+        from cogs.Modules.ticketprivacy import CanAddPeople
+
+        Ticket = await interaction.client.db["Tickets"].find_one({"ChannelID": interaction.channel.id})
+        Problem = await CanAddPeople(interaction, Ticket) if Ticket else "Este no es un canal de ticket."
+        if Problem:
+            return await interaction.followup.send(content=f"{Emojis.no} {Problem}")
         if not await ModuleCheck(interaction.guild.id, "Tickets"):
             return await interaction.followup.send(
                 embed=ModuleNotEnabled(),
