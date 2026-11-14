@@ -18,6 +18,20 @@ logger = logging.getLogger(__name__)
 FALLBACK = "🏅"
 
 
+LATIN = "A-Za-z0-9À-ÖØ-öø-ÿºª"
+
+
+def CleanName(name: str) -> str:
+    """'ᗜ· 🎀 : Orden de la Jarretera ,🏯·' -> 'Orden de la Jarretera'. Only for showing; the role isn't touched."""
+    Text = name.split(":", 1)[1] if ":" in name else name
+    if "," in Text:
+        Head, Tail = Text.rsplit(",", 1)
+        if not re.search(f"[{LATIN}]", Tail):  # the part after the comma is just decoration
+            Text = Head
+    Text = re.sub(f"^[^{LATIN}]+|[^{LATIN}.)!?]+$", "", Text).strip()
+    return Text if len(Text) >= 2 else name
+
+
 def MedalRoles(member, config: dict) -> list:
     """The medal roles the member has, most important (highest in Discord) first."""
     Chosen = set(config.get("medal_roles") or [])
@@ -122,8 +136,8 @@ class MedalEmojis:
         Parts = []
         for R in roles:
             Emoji = await self.Get(R)
-            Parts.append(f"{Emoji} {R.name}" if names else Emoji)
-        return (" · " if names else " ").join(Parts)
+            Parts.append(f"{Emoji} {CleanName(R.name)}" if names else Emoji)
+        return ("\n" if names else " ").join(Parts)
 
 
 _manager: MedalEmojis | None = None
@@ -156,7 +170,7 @@ async def CatalogEmbed(guild: discord.Guild, config: dict, viewer=None) -> disco
         Count = len(R.members)
         Have = " ✅" if R.id in Mine else ""
         How = Info.get(str(R.id)) or "*Sin descripción todavía.*"
-        Lines.append(f"{Emoji} **{R.name}**{Have} · {Count} la tiene{'n' if Count != 1 else ''}\n> {How}")
+        Lines.append(f"{Emoji} **{CleanName(R.name)}**{Have} · {Count} la tiene{'n' if Count != 1 else ''}\n> {How}")
     embed.description = "\n".join(Lines)[:4096]
     Got = len([R for R in Roles if R.id in Mine])
     embed.set_footer(text=f"Tienes {Got} de {len(Roles)}" if viewer and Mine else f"{len(Roles)} medallas")
@@ -175,7 +189,7 @@ async def MemberMedalsEmbed(member, config: dict) -> discord.Embed:
     M, Lines = Manager(), []
     for R in Mine:
         Emoji = await M.Get(R) if M else (getattr(R, "unicode_emoji", None) or FALLBACK)
-        Lines.append(f"{Emoji} **{R.name}**\n> {Info.get(str(R.id)) or '*Sin descripción.*'}")
+        Lines.append(f"{Emoji} **{CleanName(R.name)}**\n> {Info.get(str(R.id)) or '*Sin descripción.*'}")
     embed.description = "\n".join(Lines)[:4096]
     embed.set_footer(text=f"{len(Mine)} medalla{'s' if len(Mine) != 1 else ''}")
     return embed
@@ -195,7 +209,7 @@ AWARD_MAX = 1500
 
 def AwardText(template: str | None, member, role, giver, reason: str, description: str, emoji: str, server: str, date: str) -> str:
     Values = {
-        "{usuario}": member.mention, "{nombre}": member.display_name, "{medalla}": role.name, "{emoji}": emoji,
+        "{usuario}": member.mention, "{nombre}": member.display_name, "{medalla}": CleanName(role.name), "{emoji}": emoji,
         "{motivo}": reason or description or "sus méritos en el servicio", "{descripcion}": description or "—",
         "{otorga}": giver.mention, "{servidor}": f"**{server}**", "{fecha}": date,
     }

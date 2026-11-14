@@ -168,7 +168,7 @@ def Stars(rating: float | None, count: int) -> str:
 
 async def AddMedals(embed: discord.Embed, member: discord.Member, config: dict, compact: bool):
     """🏅 Medallas: icon + name in the profile, just the icons in the ticket card."""
-    from core.staff.medals import Manager, MedalRoles
+    from core.staff.medals import CleanName, Manager, MedalRoles
 
     Mine = MedalRoles(member, config)
     Total = len([R for R in config.get("medal_roles") or [] if member.guild.get_role(R)])
@@ -177,8 +177,19 @@ async def AddMedals(embed: discord.Embed, member: discord.Member, config: dict, 
     if not Mine:
         return embed.add_field(name=f"🏅 Medallas (0/{Total})", value="*Todavía ninguna.*", inline=False)
     M = Manager()
-    Text = await M.Line(Mine, names=not compact) if M else " · ".join(R.name for R in Mine)
-    embed.add_field(name=f"🏅 Medallas ({len(Mine)}/{Total})", value=Text[:1024], inline=False)
+    Title = f"🏅 Medallas ({len(Mine)}/{Total})"
+    def Plain(R):  # no emoji manager (shouldn't happen once the bot is running)
+        return getattr(R, "unicode_emoji", None) or "🏅"
+
+    if compact:
+        return embed.add_field(name=Title, value=(await M.Line(Mine, names=False) if M else " ".join(Plain(R) for R in Mine))[:1024], inline=False)
+    Lines = (await M.Line(Mine) if M else "\n".join(f"{Plain(R)} {CleanName(R.name)}" for R in Mine)).split("\n")
+    if len(Lines) <= 5:
+        return embed.add_field(name=Title, value="\n".join(Lines)[:1024], inline=False)
+    # Two columns, one medal per line.
+    Half = (len(Lines) + 1) // 2
+    embed.add_field(name=Title, value="\n".join(Lines[:Half])[:1024], inline=True)
+    embed.add_field(name="\u200b", value="\n".join(Lines[Half:])[:1024], inline=True)
 
 
 async def ProfileEmbed(member: discord.Member, profile: dict, config: dict, compact: bool = False) -> discord.Embed:
@@ -191,7 +202,9 @@ async def ProfileEmbed(member: discord.Member, profile: dict, config: dict, comp
     embed.set_thumbnail(url=member.display_avatar.url)
     Since = profile.get("since")
     Date = f" (desde {Since:%d/%m/%Y})" if Since and not compact else ""
-    embed.add_field(name="🏷️ Cargo", value=Role.mention if Role else "—", inline=True)
+    from core.staff.medals import CleanName
+
+    embed.add_field(name="🏷️ Cargo", value=(f"**{CleanName(Role.name)}**" if getattr(Role, "name", None) else Role.mention) if Role else "—", inline=True)
     embed.add_field(name="⏳ En el cargo", value=Duration(Since) + Date, inline=True)
     Places = Groups(member, config)
     if Places:

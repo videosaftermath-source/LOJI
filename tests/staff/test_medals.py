@@ -65,7 +65,7 @@ def test_named_like_the_role_renamed_and_replaced():
     roles = MedalRoles(N(roles=[silver, N(id=1, position=1), gold, plain]), {"medal_roles": [101, 102, 103]})
     assert [r.name for r in roles] == ["Medalla de Oro", "Sin icono", "Plata"]
     line = run(m.Line(roles))
-    assert line.startswith("<:Medalla_de_Oro:") and line.endswith(f"> Medalla de Oro · {FALLBACK} Sin icono · 🥈 Plata")
+    assert line.startswith("<:Medalla_de_Oro:") and line.endswith(f"> Medalla de Oro\n{FALLBACK} Sin icono\n🥈 Plata")
     run(m.Line(roles))
     assert log.count("fetch") == 1 and len([x for x in log if x[0] == "create"]) == 1
     gold.name = "Oro Supremo"  # renamed role: same emoji, new name
@@ -126,3 +126,12 @@ def test_award_text_variables():
     t = AwardText("{usuario} {nombre} {medalla} {emoji} {motivo} | {descripcion} {otorga} {servidor} {fecha}", member, role, giver, "", "100 tickets", "🥇", "LOJI", "14/11/2026")
     assert t == "<@5> Mercury Oro 🥇 100 tickets | 100 tickets <@7> **LOJI** 14/11/2026"
     assert "por ayudar" in AwardText(None, member, role, giver, "por ayudar", "x", "🥇", "LOJI", "hoy")
+
+
+def test_clean_names_drop_role_decoration():
+    from core.staff.medals import CleanName
+
+    assert CleanName("ᗜ· 🎀 : Orden de la Jarretera ,🏯·") == "Orden de la Jarretera"
+    assert CleanName("ᗜ· 🎖️ : Cruz de Hierro de 1ª Clase ,🤍·") == "Cruz de Hierro de 1ª Clase"
+    assert CleanName("ᗜ· 🎭 : Consejo Supremo ,˙ᵕ˙") == "Consejo Supremo"
+    assert CleanName("Medalla de Oro") == "Medalla de Oro" and CleanName("⭐ Héroe") == "Héroe"
