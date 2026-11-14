@@ -179,3 +179,47 @@ async def MemberMedalsEmbed(member, config: dict) -> discord.Embed:
     embed.description = "\n".join(Lines)[:4096]
     embed.set_footer(text=f"{len(Mine)} medalla{'s' if len(Mine) != 1 else ''}")
     return embed
+
+
+DEFAULT_AWARD = (
+    "En virtud de las facultades conferidas al **Tenno** de {servidor}, y en reconocimiento a la labor, "
+    "el compromiso y la dedicación demostrados en el servicio, por la presente se le otorga a {usuario} la condecoración\n\n"
+    "# {emoji} {medalla}\n\n"
+    "**Por:** {motivo}\n\n"
+    "Que esta distinción quede como testimonio de su entrega al servidor y como ejemplo para todo el staff. "
+    "Se le exhorta a seguir honrándola con su conducta."
+)
+AWARD_VARIABLES = "`{usuario}` `{nombre}` `{medalla}` `{emoji}` `{motivo}` `{descripcion}` `{otorga}` `{servidor}` `{fecha}`"
+AWARD_MAX = 1500
+
+
+def AwardText(template: str | None, member, role, giver, reason: str, description: str, emoji: str, server: str, date: str) -> str:
+    Values = {
+        "{usuario}": member.mention, "{nombre}": member.display_name, "{medalla}": role.name, "{emoji}": emoji,
+        "{motivo}": reason or description or "sus méritos en el servicio", "{descripcion}": description or "—",
+        "{otorga}": giver.mention, "{servidor}": f"**{server}**", "{fecha}": date,
+    }
+    Text = template or DEFAULT_AWARD
+    for K, V in Values.items():
+        Text = Text.replace(K, V)
+    return Text[:4096]
+
+
+async def AwardEmbed(guild, member, role, giver, reason: str, config: dict) -> discord.embeds.Embed:
+    from datetime import datetime, timezone
+
+    M = Manager()
+    Emoji = await M.Get(role) if M else (getattr(role, "unicode_emoji", None) or FALLBACK)
+    Description = (config.get("medal_info") or {}).get(str(role.id), "")
+    embed = discord.Embed(
+        title="🏅 Entrega de condecoración",
+        description=AwardText(config.get("medal_award_text"), member, role, giver, reason, Description, Emoji, guild.name,
+                              datetime.now(timezone.utc).strftime("%d/%m/%Y")),
+        color=role.color if role.color.value else discord.Color.gold(),
+        timestamp=discord.utils.utcnow(),
+    )
+    embed.set_author(name=guild.name, icon_url=guild.icon.url if guild.icon else None)
+    Icon = getattr(role, "display_icon", None)
+    embed.set_thumbnail(url=Icon.url if isinstance(Icon, discord.Asset) else member.display_avatar.url)
+    embed.set_footer(text="Otorgada por el Tenno · Mando Central")
+    return embed

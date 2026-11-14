@@ -115,3 +115,14 @@ def test_member_medals_detail():
     e = run(MemberMedalsEmbed(member, {"medal_roles": [1], "medal_info": {"1": "100 tickets"}}))
     assert e.description == "🥇 **Oro**\n> 100 tickets" and e.footer.text == "1 medalla"
     assert "ninguna" in run(MemberMedalsEmbed(N(roles=[], display_name="X", display_avatar=N(url="u")), {"medal_roles": [1]})).description
+
+
+def test_award_text_variables():
+    from core.staff.medals import AwardText
+
+    member = N(mention="<@5>", display_name="Mercury")
+    role = N(name="Oro")
+    giver = N(mention="<@7>")
+    t = AwardText("{usuario} {nombre} {medalla} {emoji} {motivo} | {descripcion} {otorga} {servidor} {fecha}", member, role, giver, "", "100 tickets", "🥇", "LOJI", "14/11/2026")
+    assert t == "<@5> Mercury Oro 🥇 100 tickets | 100 tickets <@7> **LOJI** 14/11/2026"
+    assert "por ayudar" in AwardText(None, member, role, giver, "por ayudar", "x", "🥇", "LOJI", "hoy")

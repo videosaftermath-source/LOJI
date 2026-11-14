@@ -8,7 +8,7 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
-from core.mail.config import DECIDE_SUGGESTIONS, CanConfigure, HasAny, Mail
+from core.mail.config import DECIDE_SUGGESTIONS, CanConfigure, CheckCredential, HasAny, Mail, MailError
 from core.staff.profiles import ADMIN_GROUP, DESCRIPTION_MAX, SPECIALTY_MAX, Aware, Duration, Groups, Profiles, Rank
 
 logger = logging.getLogger(__name__)
@@ -329,6 +329,40 @@ class MedalsButton(discord.ui.DynamicItem[discord.ui.Button], template=r"medals:
         await interaction.followup.send(embed=await MemberMedalsEmbed(Member, Config), ephemeral=True)
 
 
+class AwardModal(discord.ui.Modal, title="Entregar medalla"):
+    """Only the Tenno's credential can award medals (for now)."""
+
+    def __init__(self, member: discord.Member, role: discord.Role):
+        super().__init__()
+        self.member, self.role = member, role
+        self.credential = discord.ui.TextInput(label="Credencial del Tenno", placeholder="Ej. M-1808", max_length=7)
+        self.reason = discord.ui.TextInput(
+            label="Motivo (vacío = la descripción de la medalla)", style=discord.TextStyle.paragraph, required=False, max_length=500,
+        )
+        self.add_item(self.credential)
+        self.add_item(self.reason)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        from core.staff.medals import AwardEmbed
+
+        Config = await Mail().Get(interaction.guild.id)
+        try:
+            CheckCredential(interaction.guild.id, interaction.user.id, self.credential.value, ("tenno",), Config)
+        except MailError as e:
+            return await interaction.response.send_message(f"❌ {e}", ephemeral=True)
+        await interaction.response.defer(ephemeral=True, thinking=True)
+        try:
+            await self.member.add_roles(self.role, reason=f"Medalla entregada por {interaction.user} (credencial del Tenno)")
+        except discord.HTTPException as e:
+            return await interaction.followup.send(f"❌ No pude dar el rol: {e}", ephemeral=True)
+        embed = await AwardEmbed(interaction.guild, self.member, self.role, interaction.user, self.reason.value.strip(), Config)
+        try:
+            await interaction.channel.send(content=self.member.mention, embed=embed, allowed_mentions=discord.AllowedMentions(users=[self.member]))
+        except discord.HTTPException:
+            return await interaction.followup.send(embed=embed, content="⚠️ Di la medalla, pero no puedo escribir en este canal. Aquí tienes el acta:", ephemeral=True)
+        await interaction.followup.send(f"✅ **{self.role.name}** entregada a **{self.member.display_name}**.", ephemeral=True)
+
+
 class StaffProfiles(commands.Cog):
     def __init__(self, client: commands.Bot):
         self.client = client
@@ -393,6 +427,34 @@ class StaffProfiles(commands.Cog):
             await interaction.guild.chunk()  # so the counts are right
         Config = await Mail().Get(interaction.guild.id)
         await interaction.followup.send(embed=await CatalogEmbed(interaction.guild, Config, interaction.user), ephemeral=True)
+
+    @perfil.command(name="medalla", description="Entrega una medalla con su acta (necesita la credencial del Tenno)")
+    @app_commands.describe(usuario="A quién se le entrega", medalla="Qué medalla")
+    async def medalla(self, interaction: discord.Interaction, usuario: discord.Member, medalla: str):
+        Config = await Mail().Get(interaction.guild.id)
+        Role = interaction.guild.get_role(int(medalla)) if medalla.isdigit() else None
+        if not Role or Role.id not in (Config.get("medal_roles") or []):
+            return await interaction.response.send_message("❌ Elige una medalla de la lista.", ephemeral=True)
+        if not Config["offices"]["tenno"].get("credential"):
+            return await interaction.response.send_message(
+                "❌ Primero crea la credencial del Tenno en `/config` → Mando Central → 🔑 Credenciales.", ephemeral=True
+            )
+        if usuario.bot:
+            return await interaction.response.send_message("❌ Los bots no reciben medallas.", ephemeral=True)
+        if Role in usuario.roles:
+            return await interaction.response.send_message(f"**{usuario.display_name}** ya tiene **{Role.name}**.", ephemeral=True)
+        Me = interaction.guild.me
+        if not Me.guild_permissions.manage_roles or Role >= Me.top_role:
+            return await interaction.response.send_message(
+                f"❌ No puedo dar **{Role.name}**: necesito **Gestionar roles** y que mi rol esté por encima de esa medalla.", ephemeral=True
+            )
+        await interaction.response.send_modal(AwardModal(usuario, Role))
+
+    @medalla.autocomplete("medalla")
+    async def medalla_choices(self, interaction: discord.Interaction, current: str):
+        Config = await Mail().Get(interaction.guild.id)
+        Roles = sorted((R for R in (interaction.guild.get_role(I) for I in Config.get("medal_roles") or []) if R), key=lambda R: -R.position)
+        return [app_commands.Choice(name=R.name[:100], value=str(R.id)) for R in Roles if current.lower() in R.name.lower()][:25]
 
     @perfil.command(name="sincronizar", description="Crea o actualiza los perfiles de todo el staff según sus roles")
     async def sincronizar(self, interaction: discord.Interaction):

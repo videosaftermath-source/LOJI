@@ -51,3 +51,5 @@ Los administradores (permiso de Administrador de Discord) siempre ven todos los 
 - El bot sube cada icono de rol una sola vez como emoji propio, con el mismo nombre que el rol (por ejemplo `:Medalla_de_Oro:`). Si renombras el rol, el emoji se renombra. Si cambias el icono, crea uno nuevo y borra el viejo él solo.
 - **Catálogo:** `/perfil medallas`, o el botón **🏅 Medallas** de `/perfil panel`. Muestra todas las medallas con su icono, cómo se consiguen y cuántos la tienen; las tuyas salen marcadas con ✅.
 - La forma de conseguir cada una se escribe en `/config` → Mando Central → Roles de medalla → **📝 Describir medallas** (hasta 150 caracteres por medalla).
+- **Entregar una medalla:** `/perfil medalla usuario medalla`. Pide la **credencial del Tenno** y un motivo opcional; si lo dejas vacío, se usa la descripción de la medalla. El bot da el rol y publica el **acta de entrega** en el canal.
+- **Texto del acta:** `/config` → Mando Central → Roles de medalla → **✍️ Texto de entrega**. Variables: `{usuario}` `{nombre}` `{medalla}` `{emoji}` `{motivo}` `{descripcion}` `{otorga}` `{servidor}` `{fecha}`.

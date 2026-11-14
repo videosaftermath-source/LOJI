@@ -323,6 +323,9 @@ class RolesEditor(Panel):
             Describe = discord.ui.Button(label="Describir medallas", emoji="📝", style=discord.ButtonStyle.blurple, row=2)
             Describe.callback = self.Describe
             self.add_item(Describe)
+            Text = discord.ui.Button(label="Texto de entrega", emoji="✍️", style=discord.ButtonStyle.blurple, row=2)
+            Text.callback = self.AwardText
+            self.add_item(Text)
 
     @staticmethod
     def Text(guild: discord.Guild, path: str, current: list[int], note: str = "") -> str:
@@ -350,6 +353,10 @@ class RolesEditor(Panel):
         Gone = {int(V) for V in interaction.data["values"]}
         await self.Save(interaction, [R for R in self.current if R not in Gone], f"➖ Quitados {len(Gone)}.")
 
+    async def AwardText(self, interaction: discord.Interaction):
+        Config = await Mail().Get(interaction.guild.id)
+        await interaction.response.send_modal(AwardTextModal(Config.get("medal_award_text") or ""))
+
     async def Describe(self, interaction: discord.Interaction):
         await MedalDescriptions.Show(interaction, self.author, self.current, self.done)
 
@@ -362,6 +369,27 @@ class RolesEditor(Panel):
     @discord.ui.button(label="Vaciar", emoji="🧹", style=discord.ButtonStyle.grey, row=2)
     async def Clear(self, interaction: discord.Interaction, _):
         await self.Save(interaction, [], "🧹 Lista vaciada.")
+
+
+class AwardTextModal(discord.ui.Modal, title="Texto del acta de medalla"):
+    def __init__(self, current: str):
+        from core.staff.medals import AWARD_MAX, DEFAULT_AWARD
+
+        super().__init__()
+        self.text = discord.ui.TextInput(
+            label="Texto (vacío = el de por defecto)", style=discord.TextStyle.paragraph, required=False,
+            max_length=AWARD_MAX, default=current or DEFAULT_AWARD,
+        )
+        self.add_item(self.text)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        from core.staff.medals import AWARD_VARIABLES, DEFAULT_AWARD
+
+        Text = self.text.value.strip()
+        await Mail().Set(interaction.guild.id, {"medal_award_text": None if not Text or Text == DEFAULT_AWARD.strip() else Text})
+        await interaction.response.send_message(
+            "✅ Texto de entrega guardado. Se usa en `/perfil medalla`.\n-# Variables: " + AWARD_VARIABLES, ephemeral=True
+        )
 
 
 class MedalDescriptions(Panel):
