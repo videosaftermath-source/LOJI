@@ -488,7 +488,6 @@ class quota(commands.Cog):
         failedembed = discord.Embed(title="", color=discord.Color.dark_embed())
         failedembed.set_author(name="Failed Users")
         failedembed.set_footer(text="Select the infraction type to infract with.")
-        failedembed.set_image(url="https://www.astrobirb.dev/invisble.png")
         if failed:
             failedembed.description = "\n".join(failed)
         else:
@@ -604,20 +603,17 @@ class quota(commands.Cog):
             reverse=True,
         )
         passedembed = discord.Embed(title="Passed", color=discord.Color.brand_green())
-        passedembed.set_image(url="https://www.astrobirb.dev/invisble.png")
         if passed:
             passedembed.description = "\n".join(passed)
         else:
             passedembed.description = "> No users passed the quota."
         loaembed = discord.Embed(title="On LOA", color=discord.Color.purple())
-        loaembed.set_image(url="https://www.astrobirb.dev/invisble.png")
         if on_loa:
             loaembed.description = "\n".join(on_loa)
         else:
             loaembed.description = "> No users on LOA."
 
         failedembed = discord.Embed(title="Failed", color=discord.Color.brand_red())
-        failedembed.set_image(url="https://www.astrobirb.dev/invisble.png")
         if failed:
             failedembed.description = "\n".join(failed)
         else:

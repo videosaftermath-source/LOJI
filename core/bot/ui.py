@@ -88,13 +88,7 @@ class BasicPaginator(discord.ui.View):
 
 
 class PMButton(discord.ui.View):
+    """Linked to Birb's Patreon; kept empty so old callers still work."""
+
     def __init__(self):
         super().__init__()
-        self.add_item(
-            discord.ui.Button(
-                label="Premium",
-                emoji=f"{Emojis.sparkle}",
-                style=discord.ButtonStyle.link,
-                url="https://patreon.com/astrobirb",
-            )
-        )

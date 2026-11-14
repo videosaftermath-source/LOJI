@@ -47,4 +47,5 @@ Todo se **configura en `/config`** y todo se **explica en `/ayuda`**.
 
 ### Quitado
 - **Connection Roles**, **Forums** y **Daily Questions (QOTD)**: borrados por completo. Daily Questions se rehará más adelante.
-- `/support` e `/invite`: llevaban al servidor y al bot de Birb.
+- `/support`, `/invite`, `/premium`, `/membership` y `/birb`: eran del servidor, el bot y el Patreon de Birb.
+- Todas las funciones que Birb cobraba como "premium" (webhooks, jerarquía de sanciones, motivos predefinidos, perfil del bot...) quedan **desbloqueadas**.

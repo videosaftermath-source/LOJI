@@ -105,14 +105,7 @@ class Client(commands.AutoShardedBot):
         self.client = client
         self.cogslist = self._initialize_cogslist()
         self.Tasks = set()
-        if environment != "custom":
-            self.cogslist.extend(
-                [
-                    "core.api",
-                    "core.integrations.dokploy",
-                    "cogs.Tasks.CheckSubscription",
-                ]
-            )
+        # Birb's website API, hosting (Dokploy) and Patreon checks aren't loaded: LOJI is its own bot.
         if os.getenv("STAFF"):
             self.cogslist.append("cogs.Modules.Developer.admin")
 
@@ -204,14 +197,11 @@ class Client(commands.AutoShardedBot):
             # Utilities
             "cogs.Modules.Utilities.extras",
             "cogs.Modules.Utilities.info",
-            "cogs.Modules.Utilities.premium",
-            "cogs.Modules.Utilities.memberships",
             "cogs.Modules.Developer.astro",
             # Configuration
             "cogs.Configuration.Configuration",
             # Events
             "cogs.Events.Dev.on_guild",
-            "cogs.Events.Dev.welcome",
             "cogs.Events.on_counter",
             "cogs.Events.Dev.topgg",
             "cogs.Events.Dev.analytics",

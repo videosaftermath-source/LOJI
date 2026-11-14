@@ -750,15 +750,7 @@ class Infractions(commands.Cog):
                     )
                 )
 
-        paginator = await PaginatorButtons(
-            extra=[
-                discord.ui.Button(
-                    label="View Online",
-                    style=discord.ButtonStyle.link,
-                    url=f"https://astrobirb.dev/admin/{ctx.guild.id}",
-                ),
-            ]
-        )
+        paginator = await PaginatorButtons()
 
         await paginator.start(ctx, pages=embeds[:45], msg=msg)
 
@@ -969,13 +961,6 @@ class ManageInfraction(discord.ui.View):
         super().__init__()
         self.infraction = infraction
         self.author = author
-        self.add_item(
-            discord.ui.Button(
-                label="View Online",
-                style=discord.ButtonStyle.link,
-                url=f"https://astrobirb.dev/admin/{infraction.get('guild_id')}/infraction/{str(infraction.get('_id'))}",
-            )
-        )
 
     @discord.ui.button(
         label="Edit",

@@ -112,6 +112,8 @@ PREMIUM_GUILDS = {
 
 
 async def premium(id):
+    """Birb sold these features through its Patreon. LOJI is its own bot: everything is unlocked."""
+    return True
     if str(id) in PREMIUM_GUILDS:
         return True
     R1 = await Configuration.find_one({"_id": id, "Features": {"$in": ["PREMIUM"]}})
@@ -236,7 +238,7 @@ async def has_admin_role(
     blacklists = await blacklist.find_one({"user": author.id})
     if blacklists:
         await send(
-            f"{Emojis.no} **{author.display_name}**, you are blacklisted from using **Birb.**",
+            f"{Emojis.no} **{author.display_name}**, tienes prohibido usar este bot.",
             ephemeral=ephemeral,
         )
         return False

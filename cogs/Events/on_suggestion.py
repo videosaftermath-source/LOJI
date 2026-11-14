@@ -56,9 +56,6 @@ class On_suggestions(commands.Cog):
                 color=discord.Color.yellow(),
             )
             embed.set_thumbnail(url=author.display_avatar)
-            embed.set_image(
-                url="https://cdn.discordapp.com/attachments/1143363161609736192/1152281646414958672/invisible.png"
-            )
             if back.get("image"):
                 embed.set_image(url=back.get("image"))
             embed.add_field(

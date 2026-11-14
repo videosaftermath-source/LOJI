@@ -92,7 +92,7 @@ class GuildJoins(commands.Cog):
                 if inviter:
                     try:
                         await inviter.send(
-                            f"🎉 Thank you for adding **Birb** to your server. To get started run </config:1140463441136586784>!\n{Emojis.dropdown} Guild `#{len(self.client.guilds)}`"
+                            f"🎉 ¡Gracias por añadir **{self.client.user.display_name}** a **{guild.name}**! Para empezar, usa `/config` en el servidor."
                         )
                     except discord.Forbidden:
                         logger.warning(

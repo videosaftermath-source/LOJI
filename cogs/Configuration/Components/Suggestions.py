@@ -209,9 +209,6 @@ async def CustomiseEmbed(interaction: discord.Interaction, option):
                 color=discord.Color.yellow(),
             )
             embed.set_thumbnail(url=interaction.user.display_avatar)
-            embed.set_image(
-                url="https://cdn.discordapp.com/attachments/1143363161609736192/1152281646414958672/invisible.png"
-            )
 
             embed.add_field(name=f"{Emojis.pin} Suggestion", value="{suggestion}")
             embed.set_author(

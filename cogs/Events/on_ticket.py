@@ -709,7 +709,6 @@ class TicketsPublic(commands.Cog):
         ResponseEmbed = None
         if Ticket.get("responses"):
             ResponseEmbed = discord.Embed(color=discord.Color.dark_embed())
-            ResponseEmbed.set_image(url="https://www.astrobirb.dev/invisble.png")
             responses = Ticket.get("responses")
             for question, answer in responses.items():
                 ResponseEmbed.add_field(

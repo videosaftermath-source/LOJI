@@ -190,13 +190,11 @@ class activityauto(commands.Cog):
                 passedembed = discord.Embed(
                     title="Passed", color=discord.Color.brand_green()
                 )
-                passedembed.set_image(url="https://www.astrobirb.dev/invisble.png")
                 passedembed.description = (
                     "\n".join(passed) if passed else "> No users passed the quota."
                 )
 
                 loaembed = discord.Embed(title="On LOA", color=discord.Color.purple())
-                loaembed.set_image(url="https://www.astrobirb.dev/invisble.png")
                 loaembed.description = (
                     "\n".join(OnLOA) if OnLOA else "> No users on LOA."
                 )
@@ -204,7 +202,6 @@ class activityauto(commands.Cog):
                 failedembed = discord.Embed(
                     title="Failed", color=discord.Color.brand_red()
                 )
-                failedembed.set_image(url="https://www.astrobirb.dev/invisble.png")
                 failedembed.description = (
                     "\n".join(failed) if failed else "> No users failed the quota."
                 )
