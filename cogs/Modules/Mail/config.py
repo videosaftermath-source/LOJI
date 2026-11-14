@@ -149,6 +149,9 @@ class MainPanel(Panel):
     async def PickGeneral(self, interaction: discord.Interaction):
         Path = interaction.data["values"][0]
         Label, Kind = GENERAL[Path]
+        if Kind == "roles":
+            Config = await Mail().Get(interaction.guild.id)
+            return await RolesEditor.Show(interaction, self.author, Path, Config.get(Path) or [], done=None)
         await interaction.response.edit_message(content=f"**{Label}**", embed=None, view=PickTarget(self.author, Path, Kind))
 
     async def PickDepartment(self, interaction: discord.Interaction):
@@ -209,11 +212,23 @@ class WizardStep(Panel):
         if Kind == "role":
             Picker = discord.ui.RoleSelect(placeholder="Elige el rol", row=0)
         elif Kind == "roles":
-            Picker = discord.ui.RoleSelect(placeholder="Elige los roles (varios)", min_values=1, max_values=25, row=0)
+            Picker = discord.ui.Button(label="Elegir roles", emoji="🎭", style=discord.ButtonStyle.blurple, row=0)
+            Picker.callback = self.OpenRoles
+            self.add_item(Picker)
+            return
         else:
             Picker = discord.ui.ChannelSelect(placeholder="Elige el canal", channel_types=[discord.ChannelType.text], row=0)
         Picker.callback = self.Pick
         self.add_item(Picker)
+
+    async def OpenRoles(self, interaction: discord.Interaction):
+        Path = self.steps[self.index][0]
+        Config = await Mail().Get(interaction.guild.id)
+
+        async def Next(i: discord.Interaction):
+            await ShowStep(i, self.author, self.steps, self.index + 1)
+
+        await RolesEditor.Show(interaction, self.author, Path, Config.get(Path) or [], done=Next)
 
     async def Pick(self, interaction: discord.Interaction):
         Path, Kind, _ = self.steps[self.index]
@@ -266,6 +281,67 @@ class PickTarget(Panel):
     @discord.ui.button(label="Volver", emoji="⬅️", style=discord.ButtonStyle.grey, row=1)
     async def Back(self, interaction: discord.Interaction, _):
         await ShowMain(interaction, self.author)
+
+
+class RolesEditor(Panel):
+    """
+    A list of roles you add to and remove from, without losing what's there
+    (Discord's role menu replaces everything and closes itself after a few picks).
+    """
+
+    def __init__(self, author, path: str, current: list[int], guild: discord.Guild, done=None):
+        super().__init__(author)
+        self.path, self.done = path, done
+        self.current = [R for R in current if guild.get_role(R)]
+        Add = discord.ui.RoleSelect(placeholder="➕ Añadir roles (se suman a los que ya hay)", min_values=1, max_values=25, row=0)
+        Add.callback = self.Add
+        self.add_item(Add)
+        if self.current:
+            Roles_ = sorted((guild.get_role(R) for R in self.current), key=lambda R: -R.position)[:25]
+            Remove = discord.ui.Select(
+                placeholder="➖ Quitar roles de la lista", min_values=1, max_values=len(Roles_), row=1,
+                options=[discord.SelectOption(label=R.name[:100], value=str(R.id)) for R in Roles_],
+            )
+            Remove.callback = self.Remove
+            self.add_item(Remove)
+        if done:
+            self.Finish.label = "Siguiente"
+
+    @staticmethod
+    def Text(guild: discord.Guild, path: str, current: list[int], note: str = "") -> str:
+        Found = sorted((R for R in (guild.get_role(I) for I in current) if R), key=lambda R: -R.position)
+        Lines = "\n".join(f"> {R.mention}" for R in Found) or "> *ninguno todavía*"
+        return (f"{note}\n" if note else "") + f"**{GENERAL[path][0]}** · {len(Found)} elegidos\n{Lines}\n-# Añade con el primer menú (puedes volver a abrirlo las veces que quieras) y quita con el segundo."
+
+    @classmethod
+    async def Show(cls, interaction: discord.Interaction, author, path: str, current: list[int], done=None, note: str = ""):
+        View = cls(author, path, current, interaction.guild, done)
+        await interaction.response.edit_message(
+            content=cls.Text(interaction.guild, path, View.current, note)[:2000], embed=None, view=View,
+            allowed_mentions=discord.AllowedMentions.none(),
+        )
+
+    async def Save(self, interaction: discord.Interaction, roles: list[int], note: str):
+        await Mail().Set(interaction.guild.id, {self.path: roles})
+        await RolesEditor.Show(interaction, self.author, self.path, roles, self.done, note)
+
+    async def Add(self, interaction: discord.Interaction):
+        New = [int(V) for V in interaction.data["values"] if int(V) not in self.current]
+        await self.Save(interaction, self.current + New, f"✅ Añadidos {len(New)}." if New else "Ya estaban todos.")
+
+    async def Remove(self, interaction: discord.Interaction):
+        Gone = {int(V) for V in interaction.data["values"]}
+        await self.Save(interaction, [R for R in self.current if R not in Gone], f"➖ Quitados {len(Gone)}.")
+
+    @discord.ui.button(label="Listo", emoji="✅", style=discord.ButtonStyle.green, row=2)
+    async def Finish(self, interaction: discord.Interaction, _):
+        if self.done:
+            return await self.done(interaction)
+        await ShowMain(interaction, self.author, "✅ Guardado.")
+
+    @discord.ui.button(label="Vaciar", emoji="🧹", style=discord.ButtonStyle.grey, row=2)
+    async def Clear(self, interaction: discord.Interaction, _):
+        await self.Save(interaction, [], "🧹 Lista vaciada.")
 
 
 def DepartmentEmbed(guild: discord.Guild, department: dict) -> discord.Embed:
