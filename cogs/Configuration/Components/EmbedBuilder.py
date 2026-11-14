@@ -89,14 +89,6 @@ class NoEmbed(discord.ui.View):
         self.author = author
         self.typed = type
         self.data = data
-        self.add_item(
-            discord.ui.Button(
-                label="Documentation",
-                style=discord.ButtonStyle.link,
-                url="https://docs.astrobirb.dev",
-                row=3,
-            )
-        )
 
     @discord.ui.button(
         label="Add Embed",
@@ -301,15 +293,6 @@ class Embed(discord.ui.View):
         self.typed = type
         self.finalfunc = finalfunc
         self.data = data
-
-        self.add_item(
-            discord.ui.Button(
-                label="Documentation",
-                style=discord.ButtonStyle.link,
-                url="https://docs.astrobirb.dev",
-                row=2,
-            )
-        )
 
     @discord.ui.button(
         label="Remove Embed",

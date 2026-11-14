@@ -23,7 +23,7 @@ async def Reset(i: discord.Interaction, *F):
 class ConfigMenu(discord.ui.Select):
     def __init__(self, options: list, author: discord.Member) -> None:
         self.author = author
-        super().__init__(placeholder="Config Menu", options=options)
+        super().__init__(placeholder="¿Qué quieres configurar?", options=options)
 
     async def callback(self, interaction: discord.Interaction):
         await interaction.response.defer()
@@ -98,7 +98,12 @@ class ConfigMenu(discord.ui.Select):
                 name=f"{interaction.guild.name}", icon_url=interaction.guild.icon
             )
             embed.set_thumbnail(url=interaction.guild.icon)
-            embed.description = "> This is where you can toggle your server's modules! If you wanna know more about what these modules do head to the [documentation](https:/docs.astrobirb.dev)"
+            embed.title = "🧩 Módulos"
+            embed.description = (
+                "> Marca los sistemas que quieres **activados** y desmarca los que no uses.\n"
+                "> Los activados aparecen en el menú **¿Qué quieres configurar?** para prepararlos.\n"
+                "-# Mando Central, Economía y Vanity no dependen de esto: se configuran siempre desde su opción."
+            )
 
             view.add_item(
                 ModuleToggle(
@@ -249,13 +254,6 @@ class ConfigMenu(discord.ui.Select):
                 import traceback
 
                 logger.error(traceback.format_exc(e))
-        elif selection == "Forums":
-            from cogs.Configuration.Components.Forums import ForumsOptions, ForumsEmbed
-
-            embed = await ForumsEmbed(interaction, embed)
-
-            view = discord.ui.View()
-            view.add_item(ForumsOptions(interaction.user))
         elif selection == "suspensions":
             from cogs.Configuration.Components.Suspensions import (
                 SuspensionEmbed,
@@ -265,62 +263,6 @@ class ConfigMenu(discord.ui.Select):
             embed = await SuspensionEmbed(interaction, Config, embed)
             view = discord.ui.View()
             view.add_item(SuspensionOptions(interaction.user))
-        elif selection == "QOTD":
-            from cogs.Configuration.Components.QOTD import (
-                QOTDEMbed,
-                QOTDOptions,
-            )
-
-            daily = await interaction.client.db["qotd"].find_one(
-                {"guild_id": interaction.guild.id}
-            )
-
-            if daily and daily.get("nextdate", None):
-                options = [
-                    discord.SelectOption(
-                        label="Stop QOTD",
-                        emoji=f"{Emojis.stop}",
-                        description="End the daily questions.",
-                    ),
-                    discord.SelectOption(label="Channel", emoji=f"{Emojis.tags}"),
-                    discord.SelectOption(
-                        label="Webhook",
-                        description="Premium Required. Send it as a webhook.",
-                        emoji=f"{Emojis.webhook}",
-                    ),
-                    discord.SelectOption(label="Ping", emoji=f"{Emojis.ping}"),
-                    discord.SelectOption(
-                        label="Custom Questions",
-                        emoji=f"{Emojis.message_icon}",
-                        description="Premium Required.",
-                    ),
-                    discord.SelectOption(label="Preferences", emoji=f"{Emojis.leaf}"),
-                ]
-            else:
-                options = [
-                    discord.SelectOption(
-                        label="Start QOTD",
-                        emoji=f"{Emojis.start}",
-                        description="Start the daily questions. (Pressing this while its already started will restart it.)",
-                    ),
-                    discord.SelectOption(label="Channel", emoji=f"{Emojis.tags}"),
-                    discord.SelectOption(
-                        label="Webhook",
-                        description="Premium Required. Send it as a webhook. ",
-                        emoji=f"{Emojis.webhook}",
-                    ),
-                    discord.SelectOption(label="Ping", emoji=f"{Emojis.ping}"),
-                    discord.SelectOption(
-                        label="Custom Questions",
-                        emoji=f"{Emojis.message_icon}",
-                        description="Premium Required.",
-                    ),
-                    discord.SelectOption(label="Preferences", emoji=f"{Emojis.leaf}"),
-                ]
-
-            embed = await QOTDEMbed(interaction, embed)
-            view = discord.ui.View()
-            view.add_item(QOTDOptions(interaction.user, options))
         elif selection == "Subscriptions":
             from cogs.Configuration.Components.Subscriptions import (
                 SubscriptionsEmbed,
@@ -409,163 +351,73 @@ async def LojiSection(interaction: discord.Interaction, selection: str):
 
 def DefaultEmbed(guild: discord.Guild):
     embed = discord.Embed(
-        title="Configuration",
-        description=f"{Emojis.options} Select **an option** to manage your server's configuration.",
-        color=discord.Color.dark_embed(),
+        title="⚙️ Configuración de LOJI",
+        description="Elige **qué quieres configurar** en el menú de abajo.",
+        color=discord.Color.from_rgb(150, 12, 18),
     )
     embed.add_field(
-        name=f"{Emojis.partnerships} Support Server",
-        value="> If you ever have issues with the bot or require assistance come and talk to someone in [#get-support](https://discord.gg/23TD4vQXJA).",
+        name="🧭 Por dónde empezar",
+        value=(
+            "> **📮 Mando Central:** el staff (cargos, departamentos, perfiles, medallas, feedback y tickets).\n"
+            "> **🪙 Economía** y **🏷️ Vanity y tag:** los sistemas de la comunidad.\n"
+            "> **Módulos:** enciende o apaga el resto; los que actives aparecen aquí debajo."
+        ),
         inline=False,
     )
-    embed.add_field(
-        name=f"{Emojis.help} Documentation",
-        value="> The best way to learn how to use **Birb** is through the [**documentation**](https://astrobirb.dev)!",
-        inline=False,
-    )
+    embed.add_field(name="📖 Ayuda", value="> Todos los comandos, explicados: `/ayuda`.", inline=False)
     embed.set_thumbnail(url=guild.icon)
     embed.set_author(name=guild.name, icon_url=guild.icon)
+    embed.set_footer(text="Solo tú puedes usar este panel")
     return embed
 
 
 def Options(Config: dict = None):
+    """The /config menu. `value` is what the code checks, so labels can be in Spanish."""
     if not Config:
         Config = {"Modules": {}}
     Modules = Config.get("Modules", {})
     options = [
-        discord.SelectOption(
-            label="Permissions",
-            description="Manage your server's permissions.",
-            emoji=f"{Emojis.settings_page}",
-        ),
-        discord.SelectOption(
-            label="Modules",
-            description="Manage your server's modules",
-            emoji=f"{Emojis.modules}",
-        ),
-        discord.SelectOption(
-            label="Edit Profile",
-            description="Edit the bots avatar & nickname.",
-            emoji=f"{Emojis.pen}",
-        ),
-        discord.SelectOption(
-            label="Subscriptions",
-            description="Manage your server's subscriptions",
-            emoji=f"{Emojis.subscription}",
-        ),
-        discord.SelectOption(
-            label="Integrations",
-            description="Use External APIs.",
-            emoji=f"{Emojis.link}",
-        ),
-        discord.SelectOption(
-            label="Hierarchy",
-            description="Hierarchies for both promotions & infractions.",
-            emoji=f"{Emojis.hierarchy}",
-        ),
-        discord.SelectOption(
-            label="Mando Central (LOJI)",
-            value="LOJI_MAIL",
-            description="Buzón, tareas, departamentos, cargos y perfiles de staff",
-            emoji="📮",
-        ),
-        discord.SelectOption(
-            label="Vanity y tag (LOJI)",
-            value="LOJI_VANITY",
-            description="Roles, beneficios y anuncio para quien lleva la vanity o el tag",
-            emoji="🏷️",
-        ),
-        discord.SelectOption(
-            label="Economía (LOJI)",
-            value="LOJI_ECO",
-            description="Ganancias, chat, mascotas, gacha, casino, Marcha, inflación...",
-            emoji="🪙",
-        ),
+        discord.SelectOption(label="Mando Central", value="LOJI_MAIL", emoji="📮",
+                             description="Buzón, tareas, departamentos, cargos, perfiles, medallas y tickets"),
+        discord.SelectOption(label="Economía", value="LOJI_ECO", emoji="🪙",
+                             description="Ganancias, chat, mascotas, gacha, casino, Marcha, inflación..."),
+        discord.SelectOption(label="Vanity y tag", value="LOJI_VANITY", emoji="🏷️",
+                             description="Roles, beneficios y anuncio para quien lleva la vanity o el tag"),
+        discord.SelectOption(label="Módulos", value="Modules", emoji=f"{Emojis.modules}",
+                             description="Activa o desactiva cada sistema del bot"),
+        discord.SelectOption(label="Permisos", value="Permissions", emoji=f"{Emojis.settings_page}",
+                             description="Qué roles son staff y administración para el bot"),
+        discord.SelectOption(label="Jerarquía", value="Hierarchy", emoji=f"{Emojis.hierarchy}",
+                             description="El orden de rangos para ascensos y sanciones"),
+        discord.SelectOption(label="Perfil del bot", value="Edit Profile", emoji=f"{Emojis.pen}",
+                             description="Avatar y apodo del bot en este servidor"),
     ]
 
     ModuleAddons = [
-        discord.SelectOption(
-            label="Infractions",
-            description="",
-            emoji=f"{Emojis.infractions}",
-            value="infractions",
-        ),
-        discord.SelectOption(
-            label="Promotions",
-            description="",
-            emoji=f"{Emojis.promotions}",
-            value="promotions",
-        ),
-        discord.SelectOption(
-            label="Message Quota",
-            description="",
-            value="Quota",
-            emoji=f"{Emojis.message_quota}",
-        ),
-        discord.SelectOption(
-            label="Leave Of Absence",
-            description="",
-            value="LOA",
-            emoji=f"{Emojis.loa}",
-        ),
-        discord.SelectOption(
-            label="Tickets",
-            value="Tickets",
-            emoji=f"{Emojis.tickets}",
-            description="",
-        ),
-        discord.SelectOption(
-            label="Custom Commands",
-            description="",
-            value="customcommands",
-            emoji=f"{Emojis.command}",
-        ),
-        discord.SelectOption(
-            label="Staff List",
-            description="",
-            value="Staff List",
-            emoji=f"{Emojis.staff_list}",
-        ),
-        discord.SelectOption(
-            label="Forums",
-            description="",
-            value="Forums",
-            emoji=f"{Emojis.forum}",
-        ),
-        discord.SelectOption(
-            label="Suspensions",
-            description="",
-            value="suspensions",
-            emoji=f"{Emojis.suspensions}",
-        ),
-        discord.SelectOption(
-            label="Daily Questions",
-            emoji=f"{Emojis.qotd}",
-            description="",
-            value="QOTD",
-        ),
-        discord.SelectOption(
-            label="Suggestions",
-            description="",
-            value="suggestions",
-            emoji=f"{Emojis.suggestion}",
-        ),
-        discord.SelectOption(
-            label="Staff Panel",
-            description="",
-            value="Staff Database",
-            emoji=f"{Emojis.staff_db}",
-        ),
-        discord.SelectOption(
-            label="Auto Response",
-            value="Auto Responder",
-            emoji=f"{Emojis.auto_response}",
-        ),
-        discord.SelectOption(
-            label="Gestión del Staff",
-            value="StaffManagement",
-            emoji="🧑‍🏫",
-        ),
+        discord.SelectOption(label="Sanciones", value="infractions", emoji=f"{Emojis.infractions}",
+                             description="Tipos de sanción, canal y aprobaciones"),
+        discord.SelectOption(label="Ascensos", value="promotions", emoji=f"{Emojis.promotions}",
+                             description="Canal y formato de los ascensos"),
+        discord.SelectOption(label="Cuota de mensajes", value="Quota", emoji=f"{Emojis.message_quota}",
+                             description="Mínimo semanal del staff y reporte automático"),
+        discord.SelectOption(label="Ausencias (LOA)", value="LOA", emoji=f"{Emojis.loa}",
+                             description="Solicitudes de ausencia del staff"),
+        discord.SelectOption(label="Tickets", value="Tickets", emoji=f"{Emojis.tickets}",
+                             description="Paneles, categorías, preguntas y nombres de canal"),
+        discord.SelectOption(label="Comandos personalizados", value="customcommands", emoji=f"{Emojis.command}",
+                             description="Comandos propios del servidor"),
+        discord.SelectOption(label="Lista de staff", value="Staff List", emoji=f"{Emojis.staff_list}",
+                             description="La lista automática del equipo por roles"),
+        discord.SelectOption(label="Suspensiones", value="suspensions", emoji=f"{Emojis.suspensions}",
+                             description="Suspensiones temporales del staff"),
+        discord.SelectOption(label="Sugerencias", value="suggestions", emoji=f"{Emojis.suggestion}",
+                             description="Canal y votación de sugerencias públicas"),
+        discord.SelectOption(label="Panel del staff (Birb)", value="Staff Database", emoji=f"{Emojis.staff_db}",
+                             description="Panel antiguo de Birb; el nuevo es /perfil panel"),
+        discord.SelectOption(label="Respuestas automáticas", value="Auto Responder", emoji=f"{Emojis.auto_response}",
+                             description="El bot responde a palabras clave"),
+        discord.SelectOption(label="Gestión del Staff", value="StaffManagement", emoji="🧑‍🏫",
+                             description="Solicitudes de ascenso y seguimiento del staff"),
     ]
 
     for module in ModuleAddons:
@@ -579,7 +431,7 @@ class ConfigCog(commands.Cog):
     def __init__(self, client: commands.Bot) -> None:
         self.client = client
 
-    @commands.hybrid_command(description="Configure the bot for your servers needs")
+    @commands.hybrid_command(description="Configura LOJI: staff, economía, tickets y demás sistemas")
     @commands.has_guild_permissions(manage_guild=True)
     async def config(self, ctx: commands.Context):
         Config = await self.client.db["Config"].find_one({"_id": ctx.guild.id})
@@ -619,7 +471,7 @@ class ConfigCog(commands.Cog):
     async def PermsHandler(self, ctx: commands.Context, error):
         if isinstance(error, commands.MissingPermissions):
             await ctx.send(
-                f"{Emojis.no} **{ctx.author.display_name},** you are missing the `Manage Server` permission."
+                f"{Emojis.no} **{ctx.author.display_name}**, necesitas el permiso **Gestionar servidor** para usar `/config`."
             )
 
 

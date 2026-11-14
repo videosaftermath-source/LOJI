@@ -44,3 +44,7 @@ Todo se **configura en `/config`** y todo se **explica en `/ayuda`**.
 - **Anti-AFK:** se activa y desactiva en `/config` → Mando Central → **⏰ Anti-AFK tickets**. Viene activado.
   - Si el staff contestó y el usuario no responde, el bot le avisa cada 6 horas.
   - Si el usuario escribe y nadie del staff le responde, el moderador que reclamó el ticket recibe un aviso a los 30 minutos y otro a los 60. Con el segundo, el ticket se libera para el resto del equipo y se avisa en el canal de feedback del staff.
+
+### Quitado
+- **Connection Roles**, **Forums** y **Daily Questions (QOTD)**: borrados por completo. Daily Questions se rehará más adelante.
+- `/support` e `/invite`: llevaban al servidor y al bot de Birb.

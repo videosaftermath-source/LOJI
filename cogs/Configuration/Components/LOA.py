@@ -380,16 +380,16 @@ async def LOAEmbed(
         config = {"LOA": {}}
     Channel = (
         interaction.guild.get_channel(config.get("LOA", {}).get("channel"))
-        or "Not Configured"
+        or "Sin configurar"
     )
     LogChannel = (
         interaction.guild.get_channel(config.get("LOA", {}).get("LogChannel"))
-        or "Not Configured"
+        or "Sin configurar"
     )
 
     Role = (
         interaction.guild.get_role(config.get("LOA", {}).get("role"))
-        or "Not Configured"
+        or "Sin configurar"
     )
     if isinstance(Role, discord.Role):
         Role = Role.mention
@@ -401,10 +401,10 @@ async def LOAEmbed(
 
     embed.set_author(name=f"{interaction.guild.name}", icon_url=interaction.guild.icon)
     embed.set_thumbnail(url=interaction.guild.icon)
-    embed.description = "> This is where you can manage your server's LOA settings! LOA is a way for staff members to take a break from their duties. You can find out more at [the documentation](https://docs.astrobirb.dev)."
+    embed.description = "> Las **ausencias (LOA)** permiten al staff tomarse un descanso sin perder su puesto. Cada día de ausencia aprobada descuenta 1/7 de la cuota semanal."
     embed.add_field(
-        name=f"{Emojis.settings_gear} LOA",
-        value=f"{Emojis.replytop} `LOA Channel:` {Channel}\n{Emojis.replymiddle} `LOA Audit Channel`: {LogChannel}\n{Emojis.replybottom} `LOA Role:` {Role}\n\nIf you need help either go to the [support server](https://discord.gg/36xwMFWKeC) or read the [documentation](https://docs.astrobirb.dev)",
+        name=f"{Emojis.settings_gear} Ausencias",
+        value=f"{Emojis.replytop} `Canal de solicitudes:` {Channel}\n{Emojis.replymiddle} `Canal de registro:` {LogChannel}\n{Emojis.replybottom} `Rol durante la ausencia:` {Role}",
         inline=False,
     )
     return embed

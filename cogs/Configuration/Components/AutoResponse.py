@@ -205,5 +205,5 @@ class DeleteByTrigger2(discord.ui.Modal):
 async def AutoResponseEmbed(interaction: discord.Interaction, embed: discord.Embed):
     embed.set_author(name=f"{interaction.guild.name}", icon_url=interaction.guild.icon)
     embed.set_thumbnail(url=interaction.guild.icon)
-    embed.description = "> Autoresponses are automatic messages sent when a message matches a trigger. You can set the similarity of the trigger, so it only responds when the message is similar enough.\n\nYou can find out more at [the documentation](https://docs.astrobirb.dev)."
+    embed.description = "> Las **respuestas automáticas** se envían cuando un mensaje coincide con una palabra clave. Puedes ajustar cuánto se tiene que parecer para que responda."
     return embed

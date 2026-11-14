@@ -71,13 +71,11 @@ class DataManage(discord.ui.Select):
         from cogs.Configuration.Components.Infractions import InfractionEmbed
         from cogs.Configuration.Components.Promotions import PromotionEmbed
         from cogs.Configuration.Components.LOA import LOAEmbed
-        from cogs.Configuration.Components.Forums import ForumsEmbed
         from cogs.Configuration.Components.Modmail import ModmailEmbed
         from cogs.Configuration.Components.Permissions import PermissionsEmbed
         from cogs.Configuration.Components.MessageQuota import MessageQuotaEmbed
         from cogs.Configuration.Components.CustomCommands import CustomCommandsEmbed
         from cogs.Configuration.Components.StaffFeedback import StaffFeedbackEmbed
-        from cogs.Configuration.Components.QOTD import QOTDEMbed
         from cogs.Configuration.Components.StaffPanel import StaffPanelEmbed
         from cogs.Configuration.Components.Suggestions import SuggestionsEmbed
         from cogs.Configuration.Components.Suspensions import SuspensionEmbed
@@ -93,12 +91,10 @@ class DataManage(discord.ui.Select):
         view.remove_item(view.clear_promotions)
         view.remove_item(view.clear_custom_commands)
         view.remove_item(view.clear_loa)
-        view.remove_item(view.clear_forums)
         view.remove_item(view.clear_staffdb)
         view.remove_item(view.clear_feedback)
         view.remove_item(view.clear_responders)
         view.remove_item(view.clear_suspensions)
-        view.remove_item(view.clear_connectionroles)
         if selection == "infractions":
             embed = await InfractionEmbed(interaction, config, embed)
             view.add_item(view.clear_infractions)
@@ -109,13 +105,6 @@ class DataManage(discord.ui.Select):
         elif selection == "LOA":
             embed = await LOAEmbed(interaction, config, embed)
             view.add_item(view.clear_loa)
-            view.remove_item(view.callback)
-        elif selection == "QOTD":
-            embed = await QOTDEMbed(interaction, embed)
-
-        elif selection == "Forums":
-            embed = await ForumsEmbed(interaction, embed)
-            view.add_item(view.clear_forums)
             view.remove_item(view.callback)
         elif selection == "Modmail":
             embed = await ModmailEmbed(interaction, config, embed)
@@ -129,8 +118,6 @@ class DataManage(discord.ui.Select):
         elif selection == "Feedback":
             embed = await StaffFeedbackEmbed(interaction, config, embed)
             view.add_item(view.clear_feedback)
-        elif selection == "QOTD":
-            embed = await QOTDEMbed(interaction, embed)
         elif selection == "Staff Database":
             embed = await StaffPanelEmbed(interaction, embed)
             view.add_item(view.clear_staffdb)
@@ -145,10 +132,6 @@ class DataManage(discord.ui.Select):
             embed = await AutoResponseEmbed(interaction, embed)
             view.remove_item(view.callback)
             view.add_item(view.clear_responders)
-        elif selection == "connectionroles":
-            embed = None
-            view.add_item(view.clear_connectionroles)
-            view.remove_item(view.callback)
         view.add_item(DataManage(interaction.user, self.options))
         await interaction.response.edit_message(embed=embed, view=view)
 
@@ -176,7 +159,6 @@ class ClearData(discord.ui.View):
         from cogs.Configuration.Components.MessageQuota import MessageQuotaEmbed
         from cogs.Configuration.Components.CustomCommands import CustomCommandsEmbed
         from cogs.Configuration.Components.StaffFeedback import StaffFeedbackEmbed
-        from cogs.Configuration.Components.QOTD import QOTDEMbed
         from cogs.Configuration.Components.StaffPanel import StaffPanelEmbed
         from cogs.Configuration.Components.Suggestions import SuggestionsEmbed
         from cogs.Configuration.Components.Suspensions import SuspensionEmbed
@@ -259,15 +241,6 @@ class ClearData(discord.ui.View):
                 {"_id": interaction.guild.id}
             )
             embed = await StaffFeedbackEmbed(interaction, config, Embed)
-
-        elif self.Type == "qotd":
-            await interaction.client.config.update_one(
-                {"_id": interaction.guild.id}, {"$unset": {"QOTD": 1}}
-            )
-            config = await interaction.client.config.find_one(
-                {"_id": interaction.guild.id}
-            )
-            embed = await QOTDEMbed(interaction, Embed)
 
         elif self.Type == "staffdb":
             await interaction.client.config.update_one(
@@ -369,25 +342,6 @@ class ClearData(discord.ui.View):
             f"{Emojis.tick} Successfully cleared all LOA.", ephemeral=True
         )
 
-    @discord.ui.button(
-        label="Erase Forums (Configuration)", style=discord.ButtonStyle.danger
-    )
-    async def clear_forums(
-        self, interaction: discord.Interaction, button: discord.ui.Button
-    ):
-        if interaction.user.id != self.author.id:
-
-            return await interaction.response.send_message(
-                embed=NotYourPanel(), ephemeral=True
-            )
-        await interaction.client.db["Forum Configuration"].delete_many(
-            {"guild_id": interaction.guild.id}
-        )
-        await interaction.response.send_message(
-            f"{Emojis.tick} Successfully cleared all forum configurations.",
-            ephemeral=True,
-        )
-
     @discord.ui.button(label="Erase Staff Database", style=discord.ButtonStyle.danger)
     async def clear_staffdb(
         self, interaction: discord.Interaction, button: discord.ui.Button
@@ -450,22 +404,6 @@ class ClearData(discord.ui.View):
         )
         await interaction.response.send_message(
             f"{Emojis.tick} Successfully cleared all suspensions.", ephemeral=True
-        )
-
-    @discord.ui.button(label="Erase Connection Roles", style=discord.ButtonStyle.danger)
-    async def clear_connectionroles(
-        self, interaction: discord.Interaction, button: discord.ui.Button
-    ):
-        if interaction.user.id != self.author.id:
-
-            return await interaction.response.send_message(
-                embed=NotYourPanel(), ephemeral=True
-            )
-        await interaction.client.db["connectionroles"].delete_many(
-            {"guild_id": interaction.guild.id}
-        )
-        await interaction.response.send_message(
-            f"{Emojis.tick} Successfully cleared all connection roles.", ephemeral=True
         )
 
 

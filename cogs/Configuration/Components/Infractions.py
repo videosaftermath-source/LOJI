@@ -1457,8 +1457,8 @@ async def WebhookEmbed(interaction: discord.Interaction, Config: dict):
     )
     WebhookSettings = Config.get("Infraction", {}).get("Webhook", {})
     enabled = WebhookSettings.get("Enabled", False)
-    username = WebhookSettings.get("Username", None) or "Not Set"
-    avatar = WebhookSettings.get("Avatar", None) or "Not Set"
+    username = WebhookSettings.get("Username", None) or "Sin configurar"
+    avatar = WebhookSettings.get("Avatar", None) or "Sin configurar"
     embed.add_field(
         name=f"{Emojis.webhook} Webhook Settings",
         value=f"> {Emojis.replytop} **Enabled:** {'True' if enabled else 'False'}\n> {Emojis.replymiddle} **Username:** {username}\n> {Emojis.replybottom} **Avatar:** {avatar}",
@@ -1475,21 +1475,21 @@ async def InfractionEmbed(
 
     Channel = (
         interaction.guild.get_channel(Config.get("Infraction", {}).get("channel"))
-        or "Not Configured"
+        or "Sin configurar"
     )
     if isinstance(Channel, discord.TextChannel):
         Channel = Channel.mention
 
     Audit = (
         interaction.guild.get_channel(Config.get("Infraction", {}).get("LogChannel"))
-        or "Not Configured"
+        or "Sin configurar"
     )
     if isinstance(Channel, discord.TextChannel):
         Audit = Audit.mention
 
     embed.set_author(name=f"{interaction.guild.name}", icon_url=interaction.guild.icon)
     embed.set_thumbnail(url=interaction.guild.icon)
-    embed.description = "> This is where you can manage your server's infraction settings! Infractions are a way to punish staff members. You can find out more at [the documentation](https://docs.astrobirb.dev/infractions-bot)."
+    embed.description = "> Las **sanciones** del staff: dónde se publican, qué tipos hay y motivos predefinidos."
     Types = Config.get("Infraction", {}).get(
         "types",
         [
@@ -1502,12 +1502,12 @@ async def InfractionEmbed(
         ],
     )
     Reasons = Config.get("Infraction", {}).get("reasons", [])
-    value = f"{Emojis.replytop} `Infraction Channel:` {Channel}\n{Emojis.replymiddle} `Audit Log Channel`:  {Audit}\n{Emojis.replymiddle} `Types:` {', '.join(Types)}\n{Emojis.replybottom} `Reasons:` {', '.join(Reasons) if Reasons else 'Not Configured'}\n\nIf you need help either go to the [support server](https://discord.gg/36xwMFWKeC) or read the [documentation](https://docs.astrobirb.dev/infractions-bot)"[
+    value = f"{Emojis.replytop} `Canal de sanciones:` {Channel}\n{Emojis.replymiddle} `Canal de registro:`  {Audit}\n{Emojis.replymiddle} `Tipos:` {', '.join(Types)}\n{Emojis.replybottom} `Motivos:` {', '.join(Reasons) if Reasons else 'Sin configurar'}"[
         :1024
     ]
 
     embed.add_field(
-        name=f"{Emojis.settings_gear} Infractions",
+        name=f"{Emojis.settings_gear} Sanciones",
         value=value[:1021] + "..." if len(value) > 1024 else value,
         inline=False,
     )

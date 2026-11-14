@@ -3,155 +3,95 @@ from sentry_sdk import metrics
 
 from core.bot.emojis import Emojis
 
+HOW = f"{Emojis.help} Cómo arreglarlo"
+
 
 class Support(discord.ui.View):
+    """Used to link Birb's support server. Kept (empty) because many messages still pass it."""
+
     def __init__(self):
         super().__init__()
-        url1 = "https://discord.gg/DhWdgfh3hN"
-        self.add_item(
-            discord.ui.Button(
-                label="Support Server",
-                url=url1,
-                style=discord.ButtonStyle.blurple,
-                emoji=f"{Emojis.link}",
-            )
-        )
-        self.add_item(
-            discord.ui.Button(
-                label="Documentation",
-                url="https://docs.astrobirb.dev",
-                style=discord.ButtonStyle.blurple,
-                emoji="📚",
-            )
-        )
+
+
+def Problem(text: str, fix: str | None = None, color=None) -> discord.Embed:
+    embed = discord.Embed(description=f"```\n{text}\n```", color=color or discord.Color.brand_red())
+    if fix:
+        embed.add_field(name=HOW, value=fix)
+    return embed
 
 
 def NotRobloxLinked():
-    return discord.Embed(
-        description="```\nYour Roblox account is not linked.\n```",
-        color=discord.Color.brand_red(),
-    ).add_field(
-        name=f"{Emojis.help} How To Fix",
-        value="> 1. Use the `/integrations link` command to link your Roblox account.",
-    )
+    return Problem("Tu cuenta de Roblox no está vinculada.", "> 1. Vincúlala con `/integrations link`.")
 
 
 def NoPermission(permission: str):
-    return discord.Embed(
-        description=f"```\nThis command requires {permission.lower()} permissions.\n```",
-        color=discord.Color.brand_red(),
-    ).add_field(
-        name=f"{Emojis.help} How To Fix",
-        value=f"> 1. Make sure you have permissions configured in </config:1140463441136586784> `>` Permissions.\n> 2. Make sure you have the role that fits in the category `{permission.lower()}.`",
+    return Problem(
+        f"Este comando necesita permisos de {permission.lower()}.",
+        f"> 1. Revisa `/config` → **Permisos**.\n> 2. Comprueba que tienes el rol de la categoría `{permission.lower()}`.",
     )
 
 
 def NoSetupPermissions():
-    return discord.Embed(
-        description=f"```\nPermissiosn are not setup.\n```",
-        color=discord.Color.brand_red(),
-    ).add_field(
-        name=f"{Emojis.help} How To Fix",
-        value=f"> 1. Make sure you have permissions configured in </config:1140463441136586784> `>` Permissions.\n> 2. Make sure you have the role that this command requires.`",
+    return Problem(
+        "Los permisos todavía no están configurados.",
+        "> 1. Configúralos en `/config` → **Permisos**.\n> 2. Comprueba que tienes el rol que pide este comando.",
     )
 
 
 def NoAdvancedPermission():
-    return discord.Embed(
-        description=f"```\nThis command requires advanced permissions.\n```",
-        color=discord.Color.brand_red(),
-    ).add_field(
-        name=f"{Emojis.help} How To Fix",
-        value=f"> 1. Make sure you have permissions configured in </config:1140463441136586784> `>` Permissions.\n> 2. Make sure you have the role that this command requires..`",
+    return Problem(
+        "Este comando necesita permisos avanzados.",
+        "> 1. Revisa `/config` → **Permisos**.\n> 2. Comprueba que tienes el rol que pide este comando.",
     )
 
 
 def ChannelNotFound():
-    return discord.Embed(
-        description="```\nI couldn't find the channel for this.\n```",
-        color=discord.Color.brand_red(),
-    ).add_field(
-        name=f"{Emojis.help} How To Fix",
-        value="> 1. Head to </config:1140463441136586784> and make sure to go to the module and set the channel.\n> 2. Ensure I have permission to access that channel (`View Channel, Read Messages, Send Messages`).",
+    return Problem(
+        "No encuentro el canal de esto.",
+        "> 1. En `/config`, entra en el módulo y elige el canal.\n> 2. Comprueba que puedo **ver el canal**, **leer** y **enviar mensajes** ahí.",
     )
 
 
 def CustomError(error: str):
-    return discord.Embed(
-        description=f"```\n{error}\n```", color=discord.Color.brand_red()
-    )
+    return Problem(error)
 
 
 def NoPermissionChannel(channel: discord.TextChannel):
-    return discord.Embed(
-        description=f"```\nI don't have permission to send messages in <#{channel.id}>.\n```",
-        color=discord.Color.brand_red(),
-    ).add_field(
-        name=f"{Emojis.help} How To Fix",
-        value="> 1. Ensure I have permission to send messages in that channel.\n> 2. Check that I have the required permissions (`View Channel, Read Messages, Send Messages`).",
+    return Problem(
+        f"No puedo enviar mensajes en #{getattr(channel, 'name', channel)}.",
+        "> 1. Dame permiso para **ver el canal** y **enviar mensajes** ahí.",
     )
 
 
 def NoPremium():
     metrics.count("Popup:Premium", 1)
-    return discord.Embed(
-        description="```\nThis feature is only available for premium servers.\n```",
-        color=discord.Color.blurple(),
-    ).add_field(
-        name=f"{Emojis.premium} Premium",
-        value="> If you already have premium go to /config → Subscriptions and activate your server.\n-# If you have premium and your subscription isn't showing up run /patreon.",
-    )
+    return Problem("Esta función no está disponible en este servidor.", color=discord.Color.blurple())
 
 
 def NotYourPanel():
-    return discord.Embed(
-        description="```\nThis is not your panel.\n```",
-        color=discord.Color.brand_red(),
-    )
+    return Problem("Este panel no es tuyo: ábrelo tú con el comando.")
 
 
 def GlobalMaintenance(reason: str):
     return discord.Embed(
-        description=f"```\nBirb is currently undergoing maintenance.\n```",
-        color=discord.Color.brand_red(),
-    ).add_field(name="Reason", value=f"> {reason}")
+        description="```\nEl bot está en mantenimiento.\n```", color=discord.Color.brand_red()
+    ).add_field(name="Motivo", value=f"> {reason}")
 
 
 def NoChannelSet():
-    return discord.Embed(
-        description="```\nNo channel has been set for this module.\n```",
-        color=discord.Color.brand_red(),
-    ).add_field(
-        name=f"{Emojis.help} How To Fix",
-        value="> 1. Head to </config:1140463441136586784> and make sure to go to the module and set the channel.",
-    )
+    return Problem("Este módulo no tiene canal configurado.", "> 1. En `/config`, entra en el módulo y elige el canal.")
 
 
 def ModuleNotEnabled():
-    return discord.Embed(
-        description="```\nThis module hasn't been enabled yet.\n```",
-        color=discord.Color.brand_red(),
-    ).add_field(
-        name=f"{Emojis.help} How To Fix",
-        value="> 1. Head to </config:1140463441136586784> and go to the Modules section to find the module.\n> 2. Select the module, and then go back to the config menu.\n> 3. You should be able to see it, and now you can configure it to suit your needs.",
+    return Problem(
+        "Este módulo no está activado.",
+        "> 1. Ve a `/config` → **Módulos** y márcalo.\n> 2. Vuelve al menú de `/config`: ya te saldrá para configurarlo.",
     )
 
 
 def BotNotConfigured():
-    return discord.Embed(
-        description="```\nI haven't been configured yet.\n```",
-        color=discord.Color.brand_red(),
-    ).add_field(
-        name=f"{Emojis.help} How To Fix",
-        value="> 1. Run the `/config` command to configure me.",
-    )
+    return Problem("Todavía no estoy configurado.", "> 1. Usa `/config` para configurarme.")
 
 
 def ModuleNotSetup():
-    return discord.Embed(
-        description="```\nThis module hasn't been set up yet.\n```",
-        color=discord.Color.brand_red(),
-    ).add_field(
-        name=f"{Emojis.help} How To Fix",
-        value="> 1. Run the `/config` command to set up the module.",
-    )
+    return Problem("Este módulo todavía no está configurado.", "> 1. Usa `/config` y prepara el módulo.")

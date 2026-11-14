@@ -689,12 +689,12 @@ async def MessageQuotaEmbed(
             f"<#{int(Channel)}>"
             for Channel in Config.get("Message Quota", {}).get("Ignored Channels") or []
         )
-        or "Not Configured"
+        or "Sin configurar"
     )
-    embed.description = "> This is where you can manage your server's message quota! You can find out more at [the documentation](https://docs.astrobirb.dev).\n"
+    embed.description = "> La **cuota de mensajes**: el mínimo semanal del staff. El reporte llega solo el día que elijas en Auto Activity.\n"
     embed.add_field(
-        name=f"{Emojis.settings_gear} Message Quota",
-        value=f"{Emojis.replytop} `Quota:` {Config.get('Message Quota', {}).get('quota', 'Not Configured')}\n{Emojis.replybottom} `Ignored Channels:` {IgnoredChannels}\n\nIf you need help either go to the [support server](https://discord.gg/36xwMFWKeC) or read the [documentation](https://docs.astrobirb.dev)",
+        name=f"{Emojis.settings_gear} Cuota de mensajes",
+        value=f"{Emojis.replytop} `Cuota:` {Config.get('Message Quota', {}).get('quota', 'Sin configurar')}\n{Emojis.replybottom} `Canales que no cuentan:` {IgnoredChannels}",
         inline=False,
     )
     return embed

@@ -312,7 +312,7 @@ async def StaffFeedbackEmbed(
         config = {"Feedback": {}}
     Channel = (
         interaction.guild.get_channel(config.get("Feedback", {}).get("channel"))
-        or "Not Configured"
+        or "Sin configurar"
     )
 
     if isinstance(Channel, discord.TextChannel):
@@ -320,10 +320,10 @@ async def StaffFeedbackEmbed(
 
     embed.set_author(name=f"{interaction.guild.name}", icon_url=interaction.guild.icon)
     embed.set_thumbnail(url=interaction.guild.icon)
-    embed.description = "> This is where you can manage your server's staff feedback settings! Staff feedback is a way for members to give feedback to staff. You can find out more at [the documentation](https://docs.astrobirb.dev)."
+    embed.description = "> This is where you can manage your server's staff feedback settings! Staff feedback is a way for members to give feedback to staff."
     embed.add_field(
         name=f"{Emojis.settings_gear} Staff Feedback",
-        value=f"> `Feedback Channel:` {Channel}\n\nIf you need help either go to the [support server](https://discord.gg/36xwMFWKeC) or read the [documentation](https://docs.astrobirb.dev).",
+        value=f"> `Feedback Channel:` {Channel}",
         inline=False,
     )
     return embed

@@ -237,16 +237,9 @@ class On_error(commands.Cog):
                 }
             )
             view = discord.ui.View()
-            view.add_item(
-                discord.ui.Button(
-                    label="Contact Support",
-                    style=discord.ButtonStyle.link,
-                    url="https://discord.gg/DhWdgfh3hN",
-                )
-            )
             embed = discord.Embed(
-                title=f"{Emojis.x21} Command Error",
-                description=f"Error ID: `{error_id}`\n-# We can't fix bugs without you, please report this to our support services.",
+                title=f"{Emojis.x21} Algo falló con este comando",
+                description=f"Código del error: `{error_id}`\n-# Pásale este código a un administrador para que lo revise.",
                 color=discord.Color.brand_red(),
             )
 

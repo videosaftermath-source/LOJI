@@ -663,8 +663,8 @@ async def WebhookEmbed(interaction: discord.Interaction, Config: dict):
     )
     WebhookSettings = Config.get("Promo", {}).get("Webhook", {})
     enabled = WebhookSettings.get("Enabled", False)
-    username = WebhookSettings.get("Username", None) or "Not Set"
-    avatar = WebhookSettings.get("Avatar", None) or "Not Set"
+    username = WebhookSettings.get("Username", None) or "Sin configurar"
+    avatar = WebhookSettings.get("Avatar", None) or "Sin configurar"
     embed.add_field(
         name=f"{Emojis.webhook} Webhook Settings",
         value=f"> {Emojis.replytop} **Enabled:** {'True' if enabled else 'False'}\n> {Emojis.replymiddle} **Username:** {username}\n> {Emojis.replybottom} **Avatar:** {avatar}",
@@ -680,20 +680,20 @@ async def PromotionEmbed(
         Config = {"Promo": {}, "_id": interaction.guild.id}
     Channel = (
         interaction.guild.get_channel(Config.get("Promo", {}).get("channel"))
-        or "Not Configured"
+        or "Sin configurar"
     )
     Promo = Config.get("Promo", {})
     Cooldown = Promo.get("Cooldown")
-    Days = f"{Cooldown} Days" if Cooldown is not None else "Not Set"
+    Days = f"{Cooldown} días" if Cooldown is not None else "Sin configurar"
     if isinstance(Channel, discord.TextChannel):
         Channel = Channel.mention
 
     embed.set_author(name=f"{interaction.guild.name}", icon_url=interaction.guild.icon)
     embed.set_thumbnail(url=interaction.guild.icon)
-    embed.description = "> This is where you can manage your server's promotion settings! Promotions are a way to give staff members more power. You can find out more at [the documentation](https://docs.astrobirb.dev)."
+    embed.description = "> Dónde se anuncian los **ascensos** del staff y cada cuánto puede ascender alguien."
     embed.add_field(
-        name=f"{Emojis.settings_gear} Promotions",
-        value=f"> {Emojis.replytop} `Promotion Channel:` {Channel}\n> {Emojis.replybottom} `Cooldown:` {Days}\n\nIf you need help either go to the [support server](https://discord.gg/36xwMFWKeC) or read the [documentation](https://docs.astrobirb.dev).",
+        name=f"{Emojis.settings_gear} Ascensos",
+        value=f"> {Emojis.replytop} `Canal de ascensos:` {Channel}\n> {Emojis.replybottom} `Espera entre ascensos:` {Days}",
         inline=False,
     )
     return embed

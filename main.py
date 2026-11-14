@@ -16,7 +16,15 @@ from cogs.Tasks.activityauto import ResetLeaderboard
 from cogs.Modules.staff import Staffview
 from cogs.Events.on_infraction_approval import CaseApproval
 from cogs.Events.on_ticket import PTicketControl
-from cogs.Tasks.qotd import *
+import os
+import datetime
+import random
+
+import aiohttp
+import discord
+from discord.ext import commands, tasks
+
+from core.bot.emojis import *
 from cogs.Events.on_error import Tree
 from cogs.Modules.tickets import ButtonHandler
 from cogs.Modules.staffmanagement import PromotionRequestView
@@ -40,9 +48,10 @@ STATUS = os.getenv("STATUS")
 MONGO_URL = os.getenv("MONGO_URL")
 SHARDS = os.getenv("SHARDS")
 ENVIRONMENT = os.getenv("ENVIRONMENT")
+environment = ENVIRONMENT  # used to come from a star import of the removed QOTD module
+guildid = os.getenv("CUSTOM_GUILD")
 
 prefixes = db["prefixes"]
-qotdd = db["qotd"]
 Config = db["Config"]
 Views = db["Views"]
 SupportVariables = db["Support Variables"]
@@ -166,7 +175,6 @@ class Client(commands.AutoShardedBot):
             "cogs.Modules.leaves",
             "cogs.Modules.suspension",
             "cogs.Modules.feedback",
-            "cogs.Modules.connection-roles",
             "cogs.Modules.staff",
             "cogs.Modules.promotions",
             "cogs.Modules.infractions",
@@ -205,13 +213,11 @@ class Client(commands.AutoShardedBot):
             "cogs.Events.Dev.on_guild",
             "cogs.Events.Dev.welcome",
             "cogs.Events.on_counter",
-            "cogs.Events.on_thread_create",
             "cogs.Events.Dev.topgg",
             "cogs.Events.Dev.analytics",
             "cogs.Events.on_error",
             "cogs.Events.autoresponse",
             "cogs.Events.on_infraction",
-            "cogs.Events.ConnectionRoles",
             "cogs.Events.on_promotion",
             "cogs.Events.on_infraction_edit",
             "cogs.Events.on_suggestion",
@@ -232,7 +238,6 @@ class Client(commands.AutoShardedBot):
             "cogs.Tasks.suspension",
             "cogs.Tasks.activityauto",
             "cogs.Tasks.UpdateChannel",
-            "cogs.Tasks.qotd",
         ]
 
     async def load_jishaku(self):

@@ -113,8 +113,7 @@ async def integrationsEmbed(interaction: discord.Interaction, embed: discord.Emb
     embed.set_author(name=f"{interaction.guild.name}", icon_url=interaction.guild.icon)
     embed.set_thumbnail(url=interaction.guild.icon)
     embed.description = (
-        "> Integrations are an easy way to connect external providers to the bot. "
-        "You can find out more at [the documentation](https://docs.astrobirb.dev/)."
+        "> Conexiones con servicios externos (Roblox y similares)."
     )
     config = await interaction.client.config.find_one({"_id": interaction.guild.id})
 

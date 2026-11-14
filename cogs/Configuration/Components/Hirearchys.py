@@ -555,21 +555,21 @@ async def HiEmbed(interaction: discord.Interaction, Config: dict, embed: discord
     System = Promo.get("System", {}).get("type", "Default")
     embed.set_author(name=f"{interaction.guild.name}", icon_url=interaction.guild.icon)
     embed.set_thumbnail(url=interaction.guild.icon)
-    embed.description = "> This is where you can manage your server's Hierarchy settings! Hierarchy are a way to automate your role updates. You can find out more at [the documentation](https://docs.astrobirb.dev)."
+    embed.description = "> La jerarquía automatiza los roles al **ascender** o **sancionar** a alguien del staff."
     embed.add_field(
-        name=f"{Emojis.settings_gear} Hierarchy",
-        value=f"> `System:` {System}\n\nIf you need help either go to the [support server](https://discord.gg/36xwMFWKeC) or read the [documentation](https://docs.astrobirb.dev).",
+        name=f"{Emojis.settings_gear} Jerarquía",
+        value=f"> `Sistema:` {System}",
         inline=False,
     )
 
     embed.add_field(
         inline=False,
-        name=f"{Emojis.promotions} Promotions",
-        value="> `OG System:` Members get only the role you pick. Simple one-time role assignment.\n> `Single Hierarchy:` Members move up one role at a time when promoted. They follow a ranked ladder (like level 1 → level 2 → level 3).\n> `Multiple Hierarchies:` Like Single, but you can create separate departments. Each department has its own role ladder (e.g., Moderators ladder, Support ladder).",
+        name=f"{Emojis.promotions} Ascensos",
+        value="> `Original:` se da solo el rol que eliges.\n> `Una jerarquía:` al ascender se sube un rol cada vez, como una escalera (nivel 1 → 2 → 3).\n> `Varias jerarquías:` igual, pero con escaleras separadas por departamento (moderación, soporte...).",
     )
     embed.add_field(
         inline=False,
-        name=f"{Emojis.infractions} Infractions",
-        value=f"> `✨` **Infractions is locked behind Premium**, if you want to use this feature [join here](https://patreon.com/AstroBirb).\n\n> `OG System:` This will basically disable this system entirely, there's nothing tied to it.\n> `Single Hierarchy:` Members move down one role at a time when given infractions. They follow a ranked ladder in reverse (like level 3 → level 2 → level 1).\n> `Multiple Hierarchies:` Like Single, but you can create separate departments. Each department has its own role ladder that members move down through (e.g., Moderators ladder, Support ladder).\n> `🔔` **To allow this feature to work** you will need to edit a infraction type, and enable `Use Hierarchy`",
+        name=f"{Emojis.infractions} Sanciones",
+        value=f"> `Original:` las sanciones no tocan los roles.\n> `Una jerarquía:` cada sanción baja un rol en la escalera (nivel 3 → 2 → 1).\n> `Varias jerarquías:` igual, con escaleras separadas por departamento.\n> `🔔` **Para que funcione**, edita un tipo de sanción y activa `Use Hierarchy`.",
     )
     return embed

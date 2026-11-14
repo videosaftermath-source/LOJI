@@ -259,17 +259,17 @@ async def SuspensionEmbed(
 
     Channel = (
         interaction.guild.get_channel(Config.get("Suspension", {}).get("channel"))
-        or "Not Configured"
+        or "Sin configurar"
     )
     if isinstance(Channel, discord.TextChannel):
         Channel = Channel.mention
 
     embed.set_author(name=f"{interaction.guild.name}", icon_url=interaction.guild.icon)
     embed.set_thumbnail(url=interaction.guild.icon)
-    embed.description = "> This is where you can manage your server's suspensions settings! Suspension are a way to punish staff members for a period of time. You can find out more at [the documentation](https://docs.astrobirb.dev/)."
+    embed.description = "> Las **suspensiones** apartan a alguien del staff durante un tiempo, quitándole sus roles hasta que termina."
     embed.add_field(
-        name=f"{Emojis.settings_gear} Suspension",
-        value=f"> `Suspension Channel:` {Channel}\n\nIf you need help either go to the [support server](https://discord.gg/36xwMFWKeC) or read the [documentation](https://docs.astrobirb.dev)",
+        name=f"{Emojis.settings_gear} Suspensiones",
+        value=f"> `Canal de suspensiones:` {Channel}",
         inline=False,
     )
     return embed

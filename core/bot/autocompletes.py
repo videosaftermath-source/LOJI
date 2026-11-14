@@ -84,28 +84,6 @@ async def Snippets(
     return choices
 
 
-async def ConnectionRoles(
-    interaction: discord.Interaction, current: str
-) -> typing.List[app_commands.Choice[str]]:
-    try:
-        filter = {"guild": interaction.guild_id}
-
-        tag_names = await interaction.client.db["connectionroles"].distinct(
-            "name", filter
-        )
-
-        filtered_names = [name for name in tag_names if current.lower() in name.lower()]
-        filtered_names = filtered_names[:25]
-
-        choices = [
-            app_commands.Choice(name=name, value=name) for name in filtered_names
-        ]
-
-        return choices
-    except Exception as e:
-        logger.error(e)
-
-
 async def infractiontypes(interaction: discord.Interaction, current: str):
     try:
         Config = await interaction.client.config.find_one({"_id": interaction.guild.id})

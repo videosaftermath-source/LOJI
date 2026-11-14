@@ -1006,9 +1006,8 @@ async def TicketsEmbed(interaction: discord.Interaction, embed: discord.Embed):
     embed.set_author(name=f"{interaction.guild.name}", icon_url=interaction.guild.icon)
     embed.set_thumbnail(url=interaction.guild.icon)
     embed.description = (
-        "> The Tickets Panel allows users to create and manage tickets for support, "
-        "inquiries, or reports. You can customize ticket categories, forms, and permissions. "
-        "Learn more at [the documentation](https://docs.astrobirb.dev)."
+        "> Los **tickets**: cada panel es un tipo (reportes, soporte...). Elige uno para cambiar su categoría, quién lo atiende, "
+        "la pregunta previa y el nombre de los canales. Privacidad y anti-AFK: `/config` → Mando Central."
     )
     return embed
 

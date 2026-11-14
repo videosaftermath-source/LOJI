@@ -179,7 +179,7 @@ class ModmailOptions(discord.ui.Select):
                     transcript = (
                         interaction.guild.get_channel(category.get("transcript"))
                         if isinstance(category.get("transcript"), int)
-                        else "Not Configured"
+                        else "Sin configurar"
                     )
                     if isinstance(transcript, discord.TextChannel):
                         transcript = transcript.mention
@@ -189,12 +189,12 @@ class ModmailOptions(discord.ui.Select):
                         pingroles = [f"<@&{roleid}>" for roleid in ping]
                         pingroles = ", ".join(pingroles)
                     else:
-                        pingroles = "Not Configured"
+                        pingroles = "Sin configurar"
 
                     categorychannel = (
                         interaction.guild.get_channel(category.get("category"))
                         if isinstance(category.get("category"), int)
-                        else "Not Configured"
+                        else "Sin configurar"
                     )
                     if isinstance(categorychannel, discord.CategoryChannel):
                         categorychannel = categorychannel.mention
@@ -202,7 +202,7 @@ class ModmailOptions(discord.ui.Select):
                     threads = (
                         interaction.guild.get_channel(category.get("threads"))
                         if isinstance(category.get("threads"), int)
-                        else "Not Configured"
+                        else "Sin configurar"
                     )
                     if isinstance(threads, discord.TextChannel):
                         threads = threads.mention
@@ -960,41 +960,41 @@ async def ModmailEmbed(
         config = {"Modmail": {}, "_id": interaction.guild.id}
     Category = (
         interaction.guild.get_channel(config.get("Modmail", {}).get("category"))
-        or "Not Configured"
+        or "Sin configurar"
     )
     if isinstance(Category, discord.TextChannel):
         Category = Category.mention
 
     Transcripts = (
         interaction.guild.get_channel(config.get("Modmail", {}).get("transcripts"))
-        or "Not Configured"
+        or "Sin configurar"
     )
 
     Role = (
         config.get("Modmail", {}).get("ping", [])[0]
         if config.get("Modmail", {}).get("ping")
-        else "Not Configured"
+        else "Sin configurar"
     )
     if not isinstance(Role, list):
         Role = config.get("Modmail", {}).get("ping", [])
 
     if isinstance(Role, list):
         ModmailRoles = [f"<@&{int(roleid)}>" for roleid in Role]
-        ModmailRoles = ", ".join(ModmailRoles) if ModmailRoles else "Not Configured"
+        ModmailRoles = ", ".join(ModmailRoles) if ModmailRoles else "Sin configurar"
     else:
         try:
             ModmailRoles = f"<@&{int(Role)}>"
         except TypeError:
-            ModmailRoles = "Not Configured"
+            ModmailRoles = "Sin configurar"
 
     embed.set_author(name=f"{interaction.guild.name}", icon_url=interaction.guild.icon)
     embed.set_thumbnail(url=interaction.guild.icon)
-    embed.description = "> This is where you can manage your server's modmail settings! Modmail is a way for users to contact staff. You can find out more at [the documentation](https://docs.astrobirb.dev)."
+    embed.description = "> This is where you can manage your server's modmail settings! Modmail is a way for users to contact staff."
     if config.get("Module Options", {}).get("ModmailType", "channel") == "channel":
-        value = f"{Emojis.replytop} `Category:` {Category}\n{Emojis.replymiddle} `Transcripts:` {Transcripts}\n{Emojis.replybottom} `Roles:` {ModmailRoles}\n\nIf you need help either go to the [support server](https://discord.gg/36xwMFWKeC) or read the [documentation](https://docs.astrobirb.dev)."
+        value = f"{Emojis.replytop} `Category:` {Category}\n{Emojis.replymiddle} `Transcripts:` {Transcripts}\n{Emojis.replybottom} `Roles:` {ModmailRoles}"
 
     else:
-        value = f"{Emojis.replytop} `Threads Channel:` <#{config.get('Modmail', {}).get('threads', 'Not Configured')}>\n{Emojis.replybottom} `Roles:` {ModmailRoles}\n\nIf you need help either go to the [support server](https://discord.gg/36xwMFWKeC) or read the [documentation](https://docs.astrobirb.dev)."
+        value = f"{Emojis.replytop} `Threads Channel:` <#{config.get('Modmail', {}).get('threads', 'Sin configurar')}>\n{Emojis.replybottom} `Roles:` {ModmailRoles}"
 
     embed.add_field(
         name=f"{Emojis.settings_gear} Modmail",

@@ -347,5 +347,5 @@ async def FinalFunc(interaction: discord.Interaction, datad: dict):
 async def CustomCommandsEmbed(interaction: discord.Interaction, embed: discord.Embed):
     embed.set_author(name=f"{interaction.guild.name}", icon_url=interaction.guild.icon)
     embed.set_thumbnail(url=interaction.guild.icon)
-    embed.description = "> Custom Commands are a way to create your own commands that can be used by people in the server. You can find out more at [the documentation](https://docs.astrobirb.dev/)."
+    embed.description = "> Los **comandos personalizados** son comandos propios del servidor que responde el bot."
     return embed

@@ -365,7 +365,7 @@ async def SuggestionsEmbed(
         config = {"Suggestions": {}}
     Channel = (
         interaction.guild.get_channel(config.get("Suggestions", {}).get("channel"))
-        or "Not Configured"
+        or "Sin configurar"
     )
 
     if isinstance(Channel, discord.TextChannel):
@@ -373,10 +373,10 @@ async def SuggestionsEmbed(
 
     embed.set_author(name=f"{interaction.guild.name}", icon_url=interaction.guild.icon)
     embed.set_thumbnail(url=interaction.guild.icon)
-    embed.description = "> This is where you can manage your server's suggestions settings! Suggestions is a way for members to give suggestions to the server. You can find out more at [the documentation](https://docs.astrobirb.dev)."
+    embed.description = "> Las **sugerencias públicas** de la comunidad, con votos a favor y en contra. (Las del staff van por `/mail`.)"
     embed.add_field(
-        name=f"{Emojis.settings_gear} Suggestions",
-        value=f"> `Suggestions Channel:` {Channel}\n\nIf you need help either go to the [support server](https://discord.gg/36xwMFWKeC) or read the [documentation](https://docs.astrobirb.dev).",
+        name=f"{Emojis.settings_gear} Sugerencias",
+        value=f"> `Canal de sugerencias:` {Channel}",
         inline=False,
     )
     return embed

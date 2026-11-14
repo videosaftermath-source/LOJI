@@ -163,8 +163,7 @@ async def StaffPanelEmbed(interaction: discord.Interaction, embed: discord.Embed
     embed.set_author(name=f"{interaction.guild.name}", icon_url=interaction.guild.icon)
     embed.set_thumbnail(url=interaction.guild.icon)
     embed.description = (
-        "> The Staff Panel provides an overview of all staff members, including their roles, "
-        "joining dates, and introductions. Select a staff member to view detailed information. "
-        "Learn more in [the documentation](https://docs.astrobirb.dev)."
+        "> El **panel del staff de Birb** (el antiguo). El de LOJI, con perfiles, medallas y departamentos, "
+        "es `/perfil panel`."
     )
     return embed

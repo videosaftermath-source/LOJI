@@ -9,7 +9,7 @@ async def ModuleOptions(Config, data=None):
         Config = {"Modules": {}}
     return [
         discord.SelectOption(
-            label="Infractions",
+            label="Sanciones",
             description="",
             emoji=f"{Emojis.infractions}",
             value="infractions",
@@ -20,7 +20,7 @@ async def ModuleOptions(Config, data=None):
             ),
         ),
         discord.SelectOption(
-            label="Promotions",
+            label="Ascensos",
             description="",
             emoji=f"{Emojis.promotions}",
             value="promotions",
@@ -31,7 +31,7 @@ async def ModuleOptions(Config, data=None):
             ),
         ),
         discord.SelectOption(
-            label="Message Quota",
+            label="Cuota de mensajes",
             description="",
             value="Quota",
             emoji=f"{Emojis.message_quota}",
@@ -42,29 +42,7 @@ async def ModuleOptions(Config, data=None):
             ),
         ),
         discord.SelectOption(
-            label="Forums",
-            description="",
-            value="Forums",
-            emoji=f"{Emojis.forum}",
-            default=(
-                Config.get("Modules", {}).get("Forums", False) or False
-                if not data
-                else False
-            ),
-        ),
-        discord.SelectOption(
-            label="Daily Questions",
-            emoji=f"{Emojis.qotd}",
-            description="",
-            value="QOTD",
-            default=(
-                Config.get("Modules", {}).get("QOTD", False) or False
-                if not data
-                else False
-            ),
-        ),
-        discord.SelectOption(
-            label="Leave Of Absence",
+            label="Ausencias (LOA)",
             description="",
             value="LOA",
             emoji=f"{Emojis.loa}",
@@ -75,7 +53,7 @@ async def ModuleOptions(Config, data=None):
             ),
         ),
         discord.SelectOption(
-            label="Suspensions",
+            label="Suspensiones",
             description="",
             value="suspensions",
             emoji=f"{Emojis.suspensions}",
@@ -86,7 +64,7 @@ async def ModuleOptions(Config, data=None):
             ),
         ),
         discord.SelectOption(
-            label="Suggestions",
+            label="Sugerencias",
             description="",
             value="suggestions",
             emoji=f"{Emojis.suggestion}",
@@ -108,7 +86,7 @@ async def ModuleOptions(Config, data=None):
             ),
         ),
         discord.SelectOption(
-            label="Custom Commands",
+            label="Comandos personalizados",
             description="",
             value="customcommands",
             emoji=f"{Emojis.command}",
@@ -119,7 +97,7 @@ async def ModuleOptions(Config, data=None):
             ),
         ),
         discord.SelectOption(
-            label="Staff List",
+            label="Lista de staff",
             description="",
             value="Staff List",
             emoji=f"{Emojis.staff_list}",
@@ -130,7 +108,7 @@ async def ModuleOptions(Config, data=None):
             ),
         ),
         discord.SelectOption(
-            label="Staff Panel",
+            label="Panel del staff (Birb)",
             description="",
             value="Staff Database",
             emoji=f"{Emojis.staff_db}",
@@ -141,7 +119,7 @@ async def ModuleOptions(Config, data=None):
             ),
         ),
         discord.SelectOption(
-            label="Auto Response",
+            label="Respuestas automáticas",
             value="Auto Responder",
             emoji=f"{Emojis.auto_response}",
             default=(
@@ -170,16 +148,6 @@ async def ModuleOptions(Config, data=None):
                 else False
             ),
         ),
-        discord.SelectOption(
-            label="Connection Roles",
-            value="connectionroles",
-            emoji=f"{Emojis.link}",
-            default=(
-                Config.get("Modules", {}).get("connectionroles", False) or False
-                if not data
-                else False
-            ),
-        ),
     ]
 
 
@@ -187,7 +155,7 @@ class ModuleToggle(discord.ui.Select):
     def __init__(self, author, options: list):
         self.author = author
         super().__init__(
-            placeholder="Modules",
+            placeholder="Elige los módulos que quieres activados",
             options=options,
             min_values=0,
             required=False,
@@ -243,11 +211,9 @@ class ModuleToggle(discord.ui.Select):
         await interaction.edit_original_response(view=view)
         await interaction.followup.send(
             embed=discord.Embed(
-                description="-# Select **Config Menu** and set up that module!",
+                title="✅ Módulos guardados",
+                description="Los módulos activados ya aparecen en el menú **¿Qué quieres configurar?**. Elige uno para prepararlo.",
                 color=discord.Color.brand_green(),
-            ).set_author(
-                name="Modules Saved",
-                icon_url="https://cdn.discordapp.com/emojis/1296530049381568522.webp?size=96&quality=lossless",
             ),
             ephemeral=True,
         )
