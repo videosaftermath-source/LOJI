@@ -86,7 +86,8 @@ def PanelEmbed(guild: discord.Guild, config: dict) -> discord.Embed:
             f"> **Feedback del staff:** {Channel(guild, config.get('feedback_channel'))}\n"
             f"> **Roles con perfil:** {Roles(guild, config.get('profile_roles') or [])}\n"
             f"> **Medallas:** {len([R for R in config.get('medal_roles') or [] if guild.get_role(R)])} roles\n"
-            f"> **Tickets privados al reclamar:** {'🔒 sí' if config.get('ticket_private_claim', True) else '🔓 no'}"
+            f"> **Tickets privados al reclamar:** {'🔒 sí' if config.get('ticket_private_claim', True) else '🔓 no'}\n"
+            f"> **Anti-AFK en tickets:** {'⏰ sí' if config.get('ticket_afk', True) else 'no'}"
         ),
         inline=False,
     )
@@ -168,6 +169,18 @@ class MainPanel(Panel):
         On = not Config.get("ticket_private_claim", True)
         await Mail().Set(interaction.guild.id, {"ticket_private_claim": On})
         await ShowMain(interaction, self.author, "🔒 Al reclamar un ticket, el resto del equipo deja de verlo." if On else "🔓 Los tickets reclamados siguen visibles para todo el equipo.")
+
+    @discord.ui.button(label="Anti-AFK tickets", emoji="⏰", style=discord.ButtonStyle.grey, row=2)
+    async def TicketAfk(self, interaction: discord.Interaction, _):
+        """Reminds idle users every 6 h; warns an idle claimer at 30 and 60 min and then frees the ticket."""
+        Config = await Mail().Get(interaction.guild.id)
+        On = not Config.get("ticket_afk", True)
+        await Mail().Set(interaction.guild.id, {"ticket_afk": On})
+        await ShowMain(
+            interaction, self.author,
+            "⏰ Anti-AFK activado: aviso al usuario cada 6 h; al moderador a los 30 y 60 min, y luego se libera el ticket." if On
+            else "Anti-AFK desactivado: los tickets no mandan avisos.",
+        )
 
     @discord.ui.button(label="Asistente", emoji="🧭", style=discord.ButtonStyle.red, row=2)
     async def Wizard(self, interaction: discord.Interaction, _):

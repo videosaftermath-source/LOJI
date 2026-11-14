@@ -38,3 +38,9 @@ Todo se **configura en `/config`** y todo se **explica en `/ayuda`**.
 - `/eco-ayuda` → `/ayuda` (el prefijo `eco-ayuda` sigue funcionando).
 - Modmail → reemplazado por `/mail`.
 - `/staff add · remove · edit · view · introduction · panel` (Birb) → `/perfil`. `/staff list` (lista automática por roles) sigue activo.
+
+### Tickets: pregunta previa y anti-AFK
+- **Pregunta previa:** `/config` → Tickets → elige el panel → **📝 Pregunta previa**. Por ejemplo, «Describe tu caso brevemente». El usuario la responde antes de que se abra el ticket, y la respuesta sale arriba en el ticket. Si la dejas vacía, el panel no pregunta nada.
+- **Anti-AFK:** se activa y desactiva en `/config` → Mando Central → **⏰ Anti-AFK tickets**. Viene activado.
+  - Si el staff contestó y el usuario no responde, el bot le avisa cada 6 horas.
+  - Si el usuario escribe y nadie del staff le responde, el moderador que reclamó el ticket recibe un aviso a los 30 minutos y otro a los 60. Con el segundo, el ticket se libera para el resto del equipo y se avisa en el canal de feedback del staff.

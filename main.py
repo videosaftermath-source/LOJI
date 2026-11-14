@@ -175,6 +175,7 @@ class Client(commands.AutoShardedBot):
             "cogs.Modules.integrations",
             "cogs.Modules.tickets",
             "cogs.Modules.ticketprivacy",
+            "cogs.Modules.ticketafk",
             "cogs.Modules.staffmanagement",
             "cogs.Modules.embeds",
             "cogs.Modules.announce",

@@ -288,7 +288,7 @@ class PTicketControl(discord.ui.View):
 class TicketsPublic(commands.Cog):
     def __init__(self, client: commands.Bot):
         self.client = client
-        self.AutomAtions.start()
+        # Birb's inactivity reminder is replaced by cogs/Modules/ticketafk.py (anti-AFK).
 
     @tasks.loop(seconds=360)
     async def AutomAtions(self):

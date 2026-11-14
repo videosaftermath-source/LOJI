@@ -112,7 +112,7 @@ class RatingView(discord.ui.View):
         await interaction.response.send_modal(CommentModal(self.guild, self.staff_id, int(interaction.data["values"][0]), self.ticket))
 
 
-class TicketFeedbackButton(discord.ui.DynamicItem[discord.ui.Button], template=r"fbt:(?P<ticket>[0-9a-f]{24})"):
+class TicketFeedbackButton(discord.ui.DynamicItem[discord.ui.Button], template=r"fbt:(?P<ticket>[A-Za-z0-9]{1,64})"):
     """In the ticket-closed DM. Persistent, so it works after restarts."""
 
     def __init__(self, ticket_id: str):
@@ -124,7 +124,7 @@ class TicketFeedbackButton(discord.ui.DynamicItem[discord.ui.Button], template=r
         return cls(match["ticket"])
 
     async def callback(self, interaction: discord.Interaction):
-        Ticket = await interaction.client.db["Tickets"].find_one({"_id": ObjectId(self.ticket_id)})
+        Ticket = await FindTicket(interaction.client.db, self.ticket_id)
         if not Ticket or Ticket.get("UserID") != interaction.user.id:
             return await interaction.response.send_message("❌ Este ticket ya no existe.", ephemeral=True)
         Guild = interaction.client.get_guild(Ticket.get("GuildID"))
@@ -138,6 +138,14 @@ class TicketFeedbackButton(discord.ui.DynamicItem[discord.ui.Button], template=r
         await interaction.response.send_message(
             f"¿Qué tal te atendió <@{Staff}>?", view=RatingView(Guild, Staff, Ticket), ephemeral=True,
         )
+
+
+async def FindTicket(db, ticket_id: str) -> dict | None:
+    """Birb's ticket IDs are short strings; older ones may be ObjectIds."""
+    Doc = await db["Tickets"].find_one({"_id": ticket_id})
+    if not Doc and ObjectId.is_valid(ticket_id):
+        Doc = await db["Tickets"].find_one({"_id": ObjectId(ticket_id)})
+    return Doc
 
 
 def TicketStaff(ticket: dict) -> int | None:

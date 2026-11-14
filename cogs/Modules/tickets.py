@@ -65,7 +65,7 @@ class ButtonHandler(discord.ui.View):
 
 class TicketForm(discord.ui.Modal):
     def __init__(self, questions: list, data: dict):
-        super().__init__(timeout=None, title="Ticket Form")
+        super().__init__(timeout=None, title=(data.get("panel") or "Abrir ticket")[:45])
         self.questions = {}
         for question in questions:
             label = question.get("label")
@@ -76,6 +76,7 @@ class TicketForm(discord.ui.Modal):
                 label=label,
                 required=question.get("required", False),
                 default=question.get("default", None),
+                style=discord.TextStyle.paragraph if question.get("style") == "paragraph" else discord.TextStyle.short,
             )
             self.questions[label] = question.get("question", label)
             self.add_item(TextInput)

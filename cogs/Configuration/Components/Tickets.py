@@ -323,6 +323,8 @@ class SingelPanelCustomisation(discord.ui.View):
         super().__init__(timeout=3060)
         self.name = name
         self.author = author
+        # Birb's inactivity reminder is replaced by the anti-AFK (/config → Mando Central).
+        self.remove_item(self.Automations)
 
     @discord.ui.button(
         label="Customise Embeds",
@@ -619,6 +621,18 @@ class SingelPanelCustomisation(discord.ui.View):
         )
 
         await interaction.response.edit_message(view=self)
+
+    @discord.ui.button(label="Pregunta previa", style=discord.ButtonStyle.blurple, emoji="📝")
+    async def PreQuestion(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user.id != self.author.id:
+            return await interaction.response.send_message(embed=NotYourPanel(), ephemeral=True)
+        custom = await interaction.client.db["Panels"].find_one(
+            {"guild": interaction.guild.id, "type": "single", "name": self.name}
+        )
+        if not custom:
+            return await interaction.response.send_message(f"{Emojis.no} Este panel no existe.", ephemeral=True)
+        Current = (custom.get("Questions") or [{}])[0].get("question", "")
+        await interaction.response.send_modal(PreQuestionModal(self.name, Current))
 
     @discord.ui.button(label="Nombres (número)", style=discord.ButtonStyle.blurple, emoji="🔢")
     async def TicketNames(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -1506,5 +1520,32 @@ class TicketNamesModal(discord.ui.Modal, title="Nombre de los canales"):
             f"> Al abrir: `#{Render(Open, Open, Next, self.panel, interaction.user)}`\n"
             f"> Al reclamar: `#{Render(Claimed, Claimed, Next, self.panel, interaction.user, interaction.user)}`\n"
             f"-# Variables: {VARIABLES}{Warn}",
+            ephemeral=True,
+        )
+
+
+class PreQuestionModal(discord.ui.Modal, title="Pregunta antes de abrir el ticket"):
+    """One question the user answers before the ticket opens (empty = no question)."""
+
+    def __init__(self, panel: str, current: str):
+        super().__init__()
+        self.panel = panel
+        self.question = discord.ui.TextInput(
+            label="Pregunta (vacío = sin pregunta)", default=current or None, required=False, max_length=45,
+            placeholder="Describe tu caso brevemente",
+        )
+        self.add_item(self.question)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        Text = self.question.value.strip()
+        Questions = [{
+            "label": Text, "question": Text.replace(".", "").replace("$", ""), "required": True,  # Mongo keys "min": 5, "max": 1000, "style": "paragraph",
+            "placeholder": "Cuéntanos qué pasa para poder ayudarte rápido.",
+        }] if Text else []
+        await interaction.client.db["Panels"].update_one(
+            {"guild": interaction.guild.id, "type": "single", "name": self.panel}, {"$set": {"Questions": Questions}}
+        )
+        await interaction.response.send_message(
+            f"{Emojis.tick} **{self.panel}**: " + (f"antes de abrir se preguntará «{Text}». La respuesta sale arriba del ticket." if Text else "ya no hace ninguna pregunta."),
             ephemeral=True,
         )
