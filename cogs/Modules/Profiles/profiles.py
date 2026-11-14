@@ -2,14 +2,14 @@
 
 import logging
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import discord
 from discord import app_commands
 from discord.ext import commands
 
 from core.mail.config import DECIDE_SUGGESTIONS, CanConfigure, HasAny, Mail
-from core.staff.profiles import ADMIN_GROUP, DESCRIPTION_MAX, SPECIALTY_MAX, Duration, Groups, Profiles, Rank
+from core.staff.profiles import ADMIN_GROUP, DESCRIPTION_MAX, SPECIALTY_MAX, Aware, Duration, Groups, Profiles, Rank
 
 logger = logging.getLogger(__name__)
 LOJI_RED = discord.Color.from_rgb(150, 12, 18)
@@ -32,6 +32,127 @@ def Store() -> Profiles:
 def StaffRoles(guild: discord.Guild, config: dict) -> set[int]:
     """The roles the admins chose for staff profiles (only those that still exist)."""
     return {R for R in config.get("profile_roles") or [] if guild.get_role(R)}
+
+
+async def SyncPlan(guild: discord.Guild, staff: set[int]) -> dict:
+    """What a sync would do, without doing it: new profiles, rank changes and archived ones."""
+    Profiles_ = {P["staff"]: P for P in await Store().col.find({"guild_id": guild.id}).to_list(length=None)}
+    Plan = {"new": [], "changed": [], "archived": []}
+    Seen = set()
+    for Member in guild.members:
+        if Member.bot:
+            continue
+        R = Rank(Member, staff)
+        Old = Profiles_.get(Member.id)
+        if R is None:
+            continue
+        Seen.add(Member.id)
+        if not Old or not Old.get("active"):
+            Plan["new"].append((Member, R))
+        elif Old.get("rank") != R.id:
+            Plan["changed"].append((Member, guild.get_role(Old.get("rank") or 0), R))
+    Plan["archived"] = [P["staff"] for P in Profiles_.values() if P.get("active") and P["staff"] not in Seen]
+    return Plan
+
+
+def PlanEmbed(guild: discord.Guild, staff: set[int], plan: dict) -> discord.Embed:
+    Order = sorted((guild.get_role(R) for R in staff), key=lambda R: -R.position)
+    embed = discord.Embed(title="🔄 Revisa antes de sincronizar", color=discord.Color.orange())
+    embed.description = (
+        f"**{len(plan['changed'])}** cambian de rango · **{len(plan['new'])}** perfiles nuevos · **{len(plan['archived'])}** se archivan.\n"
+        "-# El rango es el rol **más alto en la lista de roles de Discord** de entre los elegidos. Si alguien sale con un rango que no es, "
+        "revisa que su rol real esté elegido en `/config` → Mando Central → Roles con perfil y que esté **por encima** en Discord."
+    )
+    embed.add_field(name="Orden de rangos (de mayor a menor)", value=" > ".join(R.mention for R in Order)[:1024] or "—", inline=False)
+    if plan["changed"]:
+        Lines = [f"{M.mention}: {Old.mention if Old else '¿?'} → **{New.mention}**" for M, Old, New in plan["changed"][:20]]
+        if len(plan["changed"]) > 20:
+            Lines.append(f"…y {len(plan['changed']) - 20} más")
+        embed.add_field(name="Cambios de rango", value="\n".join(Lines)[:1024], inline=False)
+    if plan["archived"]:
+        embed.add_field(name="Se archivan (ya no tienen ningún rol elegido)", value=" ".join(f"<@{U}>" for U in plan["archived"][:30])[:1024], inline=False)
+    embed.set_footer(text="Si algo no cuadra, cancela y corrige los roles. Si confirmas por error, /perfil reparar lo deshace.")
+    return embed
+
+
+async def ApplySync(guild: discord.Guild, staff: set[int]) -> tuple[int, int]:
+    Synced = Archived = 0
+    Seen = set()
+    for Member in guild.members:
+        if Member.bot:
+            continue
+        if await Store().Sync(guild.id, Member, Rank(Member, staff)):
+            Synced += 1
+            Seen.add(Member.id)
+    for P in await Store().Active(guild.id):
+        if P["staff"] not in Seen:
+            await Store().col.update_one({"_id": P["_id"]}, {"$set": {"active": False}})
+            Archived += 1
+    return Synced, Archived
+
+
+class ConfirmSync(discord.ui.View):
+    def __init__(self, author, staff: set[int]):
+        super().__init__(timeout=300)
+        self.author, self.staff = author, staff
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        return interaction.user.id == self.author.id
+
+    @discord.ui.button(label="Confirmar", emoji="✅", style=discord.ButtonStyle.green)
+    async def confirm(self, interaction: discord.Interaction, _):
+        await interaction.response.edit_message(content="⏳ Sincronizando...", embed=None, view=None)
+        Synced, Archived = await ApplySync(interaction.guild, self.staff)
+        await interaction.edit_original_response(
+            content=f"✅ **{Synced}** perfiles al día" + (f" · {Archived} archivados" if Archived else "") + "."
+        )
+
+    @discord.ui.button(label="Cancelar", emoji="✖️", style=discord.ButtonStyle.grey)
+    async def cancel(self, interaction: discord.Interaction, _):
+        await interaction.response.edit_message(content="Cancelado: no se cambió nada.", embed=None, view=None)
+
+
+async def RoleAddedDates(guild: discord.Guild, days: int = 45) -> dict:
+    """(user, role) -> when the role was last given, from the audit log (Discord keeps ~45 days)."""
+    Out = {}
+    try:
+        After = datetime.now(timezone.utc) - timedelta(days=days)
+        async for Entry in guild.audit_logs(limit=10_000, action=discord.AuditLogAction.member_role_update, after=After, oldest_first=False):
+            for R in getattr(Entry.after, "roles", None) or []:
+                Out.setdefault((getattr(Entry.target, "id", 0), R.id), Entry.created_at)
+    except discord.HTTPException as e:
+        logger.warning(f"[Profiles] Can't read the audit log: {e}")
+    return Out
+
+
+async def RepairDates(guild: discord.Guild, hours: int) -> tuple[list, list]:
+    """
+    Profiles whose date was reset in the last `hours`: their real date for the CURRENT rank, from
+    (1) the profile's own history, (2) Birb promotions, (3) the audit log. Returns (fixed, unknown).
+    """
+    from core.staff.profiles import RecentSince
+
+    Now_ = datetime.now(timezone.utc)
+    Cutoff = Now_ - timedelta(hours=hours)
+    Recent = [P for P in await Store().Active(guild.id) if P.get("since") and Aware(P["since"]) >= Cutoff and P.get("rank")]
+    if not Recent:
+        return [], []
+    Audit = await RoleAddedDates(guild)
+    Fixed, Unknown = [], []
+    for P in Recent:
+        Date, Source = RecentSince(P.get("history") or [], P["rank"], Now_ + timedelta(days=1)), "historial"
+        if not Date:
+            Promo = await Store().db["promotions"].find({"guild_id": guild.id, "staff": P["staff"], "new": P["rank"]}).sort("timestamp", -1).limit(1).to_list(length=1)
+            if Promo and isinstance(Promo[0].get("timestamp"), datetime):
+                Date, Source = Aware(Promo[0]["timestamp"]), "ascenso registrado"
+        if not Date and (P["staff"], P["rank"]) in Audit:
+            Date, Source = Audit[(P["staff"], P["rank"])], "registro de auditoría"
+        if Date and Date < Aware(P["since"]) - timedelta(minutes=1):
+            await Store().SetSince(guild.id, P["staff"], Date)
+            Fixed.append((P["staff"], Date, Source))
+        elif not Date:
+            Unknown.append(P["staff"])
+    return Fixed, Unknown
 
 
 def CanManage(member, config: dict) -> bool:
@@ -220,22 +341,29 @@ class StaffProfiles(commands.Cog):
         await interaction.response.defer(ephemeral=True)
         if not interaction.guild.chunked:
             await interaction.guild.chunk()  # the full member list, so nobody is missed
-        Synced = Archived = 0
-        Seen = set()
-        for Member in interaction.guild.members:
-            if Member.bot:
-                continue
-            if await Store().Sync(interaction.guild.id, Member, Rank(Member, Staff)):
-                Synced += 1
-                Seen.add(Member.id)
-        for P in await Store().Active(interaction.guild.id):
-            if P["staff"] not in Seen:
-                await Store().col.update_one({"_id": P["_id"]}, {"$set": {"active": False}})
-                Archived += 1
-        await interaction.followup.send(
-            f"✅ **{Synced}** perfiles al día" + (f" · {Archived} archivados (ya no son staff)" if Archived else "") + f".\n-# Roles de staff: {len(Staff)}",
-            ephemeral=True, allowed_mentions=discord.AllowedMentions.none(),
-        )
+        Plan = await SyncPlan(interaction.guild, Staff)
+        if not Plan["changed"] and not Plan["archived"]:
+            Synced, Archived = await ApplySync(interaction.guild, Staff)
+            return await interaction.followup.send(f"✅ **{Synced}** perfiles al día. Nadie cambia de rango.", ephemeral=True)
+        # Rank changes reset "since": show them first so a wrong role setup can't go through unseen.
+        await interaction.followup.send(embed=PlanEmbed(interaction.guild, Staff, Plan), view=ConfirmSync(interaction.user, Staff), ephemeral=True)
+
+    @perfil.command(name="reparar", description="Recupera la fecha de cargo de perfiles que se reiniciaron por error")
+    @app_commands.describe(horas="Arregla los perfiles cuya fecha se reinició en estas últimas horas (por defecto 72)")
+    async def reparar(self, interaction: discord.Interaction, horas: app_commands.Range[int, 1, 2160] = 72):
+        Config = await Mail().Get(interaction.guild.id)
+        if not CanManage(interaction.user, Config):
+            return await interaction.response.send_message("❌ Solo el Tenno, el Consejo Supremo o un administrador.", ephemeral=True)
+        await interaction.response.defer(ephemeral=True)
+        Fixed, Unknown = await RepairDates(interaction.guild, horas)
+        Lines = [f"✅ **{len(Fixed)}** fechas recuperadas."]
+        Lines += [f"> <@{U}> → {D:%d/%m/%Y} ({Source})" for U, D, Source in Fixed[:15]]
+        if len(Fixed) > 15:
+            Lines.append(f"> …y {len(Fixed) - 15} más")
+        if Unknown:
+            Lines.append(f"\n⚠️ **{len(Unknown)}** sin datos para recuperar (ponlas con `/perfil fecha`):")
+            Lines.append("> " + " ".join(f"<@{U}>" for U in Unknown[:40]))
+        await interaction.followup.send("\n".join(Lines)[:2000], ephemeral=True, allowed_mentions=discord.AllowedMentions.none())
 
     @perfil.command(name="fecha", description="Corrige desde cuándo alguien tiene su cargo")
     @app_commands.describe(usuario="De quién", fecha="Fecha en formato DD/MM/AAAA")

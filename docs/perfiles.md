@@ -37,3 +37,9 @@ Con la opción **🔒 Tickets privados** activada en `/config` → 📮 Mando Ce
 - Al **soltarlo** (`/tickets unclaim`), el equipo vuelve a verlo.
 
 Los administradores (permiso de Administrador de Discord) siempre ven todos los canales: eso no se puede cambiar.
+
+## Sincronizar sin sustos
+- `/perfil sincronizar` enseña primero quién **cambia de rango**, quién entra y quién se archiva, junto con el orden de rangos que usa el bot. No aplica nada hasta que pulsas ✅ Confirmar.
+- El rango de cada persona es el más alto de sus roles elegidos, según el orden de la lista de roles de Discord. Un rango bajo, como Helper, tiene que estar **por debajo** en Discord.
+- Cada cambio de rango queda guardado en el historial del perfil. Si alguien vuelve a un rango que tuvo en los últimos 30 días, recupera su fecha original.
+- `/perfil reparar horas` recupera las fechas que se reiniciaron por error. Las busca, por este orden, en el historial del perfil, en los ascensos registrados con `/promote` y en el registro de auditoría de Discord, que guarda unos 45 días. Las que no se puedan recuperar se ponen a mano con `/perfil fecha`.

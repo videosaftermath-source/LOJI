@@ -4,7 +4,7 @@ Staff profiles: created automatically for everyone who has one of the staff role
 the rating comes from /feedback (1-10). Shares the StaffProfiles documents with /gestion.
 """
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from core.mail.config import OFFICES, InDepartment, OfficesOf
 
@@ -13,6 +13,8 @@ FEEDBACK = "feedback"
 DESCRIPTION_MAX = 500
 SPECIALTY_MAX = 100
 ADMIN_GROUP = "Departamento Administrativo"
+HISTORY_MAX = 20
+UNDO_DAYS = 30  # going back to a rank held this recently restores its original date
 
 
 def Now() -> datetime:
@@ -23,6 +25,18 @@ def Rank(member, staff_roles: set[int]) -> object | None:
     """The highest of the chosen staff roles the member has (their cargo), or None if they aren't staff."""
     Roles = [R for R in getattr(member, "roles", []) if R.id in staff_roles]
     return max(Roles, key=lambda R: R.position, default=None)
+
+
+def Aware(dt: datetime | None) -> datetime | None:
+    return dt.replace(tzinfo=timezone.utc) if dt and dt.tzinfo is None else dt
+
+
+def RecentSince(history: list[dict], rank_id: int, now: datetime) -> datetime | None:
+    """If the member held `rank_id` until recently (a mistaken change being undone), its original date."""
+    for H in reversed(history):
+        if H.get("rank") == rank_id and H.get("since") and Aware(H.get("until")) and now - Aware(H["until"]) <= timedelta(days=UNDO_DAYS):
+            return Aware(H["since"])
+    return None
 
 
 def Groups(member, config: dict) -> list[tuple[str, str]]:
@@ -61,7 +75,9 @@ class Profiles:
 
     async def Sync(self, guild_id: int, member, rank) -> dict | None:
         """Creates or updates a profile from the member's current rank. The time in the role restarts
-        only when the rank changes. Returns the profile (None if they aren't staff: it's archived)."""
+        only when the rank changes. Returns the profile (None if they aren't staff: it's archived).
+        Every rank change is kept in `history`; going back to a rank held recently restores its date,
+        so a wrong sync can be undone without losing anyone's time in the role."""
         Key = {"guild_id": guild_id, "staff": member.id}
         Current = await self.col.find_one(Key) or {}
         if rank is None:
@@ -69,9 +85,13 @@ class Profiles:
                 await self.col.update_one(Key, {"$set": {"active": False}})
             return None
         Changes = {"active": True, "rank": rank.id, "name": getattr(member, "display_name", "")}
+        Update = {"$set": Changes, "$setOnInsert": {"sanctions": 0, "notes": []}}
         if Current.get("rank") != rank.id or not Current.get("since"):
-            Changes["since"] = Now()
-        await self.col.update_one(Key, {"$set": Changes, "$setOnInsert": {"sanctions": 0, "notes": []}}, upsert=True)
+            At = Now()
+            Changes["since"] = RecentSince(Current.get("history") or [], rank.id, At) or At
+            if Current.get("rank") and Current.get("since"):
+                Update["$push"] = {"history": {"$each": [{"rank": Current["rank"], "since": Current["since"], "until": At}], "$slice": -HISTORY_MAX}}
+        await self.col.update_one(Key, Update, upsert=True)
         return await self.col.find_one(Key)
 
     async def SetText(self, guild_id: int, user_id: int, description: str, specialty: str):

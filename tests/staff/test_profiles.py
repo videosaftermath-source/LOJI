@@ -105,3 +105,38 @@ def test_ticket_card_once_per_staff_member():
 
     run(scenario())
     assert len(sent) == 1 and sent[0]["embed"].title == "🎫 Te atiende Ana"
+
+
+def test_wrong_rank_change_is_undone_with_its_original_date():
+    store = Profiles(DB())
+    long_ago = datetime(2025, 1, 10, tzinfo=timezone.utc)
+    run(store.col.insert_one({"guild_id": G, "staff": 1, "rank": SENIOR.id, "since": long_ago, "active": True}))
+    m = member(1, HELPER, SENIOR)
+    run(store.Sync(G, m, HELPER))  # the mistake
+    p = run(store.Get(G, 1))
+    assert p["rank"] == HELPER.id and p["history"][-1]["rank"] == SENIOR.id
+    p = run(store.Sync(G, m, SENIOR))  # fixed: the date comes back
+    assert p["rank"] == SENIOR.id and p["since"].replace(tzinfo=timezone.utc) == long_ago
+
+
+def test_repair_uses_promotions_and_audit_log():
+    import cogs.Modules.Profiles.profiles as P
+    from unittest import mock
+
+    db = DB()
+    store = Profiles(db)
+    now = datetime.now(timezone.utc)
+    promoted = datetime(2026, 3, 1)
+    given = now - timedelta(days=10)
+    for uid, rank in ((1, SENIOR.id), (2, MOD.id), (3, MOD.id)):
+        run(db["StaffProfiles"].insert_one({"guild_id": G, "staff": uid, "rank": rank, "since": now, "active": True}))
+    run(db["promotions"].insert_one({"guild_id": G, "staff": 1, "new": SENIOR.id, "timestamp": promoted}))
+
+    async def audit(guild, days=45):
+        return {(2, MOD.id): given}
+
+    with mock.patch.object(P, "Store", lambda: store), mock.patch.object(P, "RoleAddedDates", audit):
+        fixed, unknown = run(P.RepairDates(N(id=G), 72))
+    assert {(u, s) for u, _, s in fixed} == {(1, "ascenso registrado"), (2, "registro de auditoría")}
+    assert unknown == [3]
+    assert run(store.Get(G, 1))["since"].replace(tzinfo=timezone.utc) == promoted.replace(tzinfo=timezone.utc)
