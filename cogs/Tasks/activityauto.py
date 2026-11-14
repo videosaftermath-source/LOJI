@@ -326,16 +326,6 @@ class ActionModal(discord.ui.Modal, title="Action"):
                 ephemeral=True,
             )
 
-        if Config.get("group", {}).get("id", None):
-            from core.integrations.roblox import GetValidToken
-            from core.bot.HelpEmbeds import NotRobloxLinked
-
-            Roblox = await GetValidToken(user=interaction.user)
-            if not Roblox:
-                return await interaction.followup.send(
-                    embed=NotRobloxLinked(),
-                    ephemeral=True,
-                )
         try:
             channel = await interaction.client.fetch_channel(
                 int(Config.get("Infraction", {}).get("channel", 0))

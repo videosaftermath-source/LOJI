@@ -1144,7 +1144,6 @@ class InfractionTypesAction(discord.ui.Select):
                 label="Staff Database Removal", emoji=f"{Emojis.staff_db}"
             ),
             discord.SelectOption(label="Escalate", emoji=f"{Emojis.escalate}"),
-            discord.SelectOption(label="Change Group Role", emoji=f"{Emojis.roblox}"),
         ]
         super().__init__(
             placeholder="Select Infraction Actions",
@@ -1164,7 +1163,6 @@ class InfractionTypesAction(discord.ui.Select):
                 ephemeral=True,
             )
         config = await interaction.client.config.find_one({"_id": interaction.guild.id})
-        from core.integrations.roblox import GroupRoles
 
         view = discord.ui.View()
 
@@ -1172,7 +1170,6 @@ class InfractionTypesAction(discord.ui.Select):
             "Send to channel": TypeChannel,
             "Give Roles": GiveRoles,
             "Remove Roles": RemoveRoles,
-            "Change Group Role": ChangeGroupRole,
             "Required Permissions": RequiredRoles,
         }
 
@@ -1202,37 +1199,6 @@ class InfractionTypesAction(discord.ui.Select):
             )
             view = UseHierarchyToggle(interaction.user, self.name)
             return await interaction.edit_original_response(embed=embed, view=view)
-
-        elif option == "Change Group Role":
-            await interaction.response.defer()
-            Roles = await GroupRoles(interaction)
-            if Roles == 0:
-                from core.bot.HelpEmbeds import NotRobloxLinked
-
-                return await interaction.followup.send(
-                    embed=NotRobloxLinked(), ephemeral=True
-                )
-            if Roles == 1:
-                return await interaction.followup.send(
-                    f"{Emojis.no} **{interaction.user.display_name},** you don't have access to the group's roles.",
-                    ephemeral=True,
-                )
-            if Roles == 2:
-                return await interaction.followup.send(
-                    f"{Emojis.no} **{interaction.user.display_name},** a group hasn't been linked.",
-                    ephemeral=True,
-                )
-
-            Roles = Roles.get("groupRoles")
-            options = [
-                discord.SelectOption(
-                    label=role.get("displayName"), value=role.get("path")
-                )
-                for role in Roles
-            ]
-            view.add_item(ChangeGroupRole(self.author, self.name, options))
-            await interaction.edit_original_response(view=view)
-            return
 
         else:
             await interaction.response.defer()
@@ -1407,36 +1373,6 @@ class GiveRoles(discord.ui.RoleSelect):
         await interaction.client.db["infractiontypeactions"].update_one(
             filter,
             {"$set": {"givenroles": [role.id for role in self.values]}},
-            upsert=True,
-        )
-        await interaction.edit_original_response(
-            content=f"{Emojis.tick} **{interaction.user.display_name},** successfully updated infraction type.",
-            view=None,
-        )
-
-
-class ChangeGroupRole(discord.ui.Select):
-    def __init__(self, author, name, options):
-        super().__init__(
-            options=options, placeholder="What should we change their role to?"
-        )
-        self.author, self.name = author, name
-
-    async def callback(self, interaction: discord.Interaction):
-        await interaction.response.defer()
-        if interaction.user.id != self.author.id:
-            return await interaction.followup.send(
-                embed=discord.Embed(
-                    description=f"{Emojis.tick} This is not your panel!",
-                    color=discord.Color.red(),
-                ),
-                ephemeral=True,
-            )
-
-        filter = {"guild_id": interaction.guild.id, "name": self.name}
-        await interaction.client.db["infractiontypeactions"].update_one(
-            filter,
-            {"$set": {"grouprole": self.values[0]}},
             upsert=True,
         )
         await interaction.edit_original_response(

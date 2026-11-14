@@ -20,10 +20,6 @@ def Problem(text: str, fix: str | None = None, color=None) -> discord.Embed:
     return embed
 
 
-def NotRobloxLinked():
-    return Problem("Tu cuenta de Roblox no está vinculada.", "> 1. Vincúlala con `/integrations link`.")
-
-
 def NoPermission(permission: str):
     return Problem(
         f"Este comando necesita permisos de {permission.lower()}.",

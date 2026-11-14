@@ -421,14 +421,6 @@ class Infractions(commands.Cog):
         random_string = "".join(
             random.choices(string.ascii_uppercase + string.digits, k=10)
         )
-        if Config.get("group", {}).get("id", None):
-            from core.integrations.roblox import GetValidToken
-            from core.bot.HelpEmbeds import NotRobloxLinked
-
-            Roblox = await GetValidToken(user=ctx.author)
-            if not Roblox:
-                return await msg.edit(embed=NotRobloxLinked())
-
         skipRole, Department, Type, Status = None, None, None, 200
         if TypeActions and TypeActions.get("DemoteRole", False):
             if not await premium(ctx.guild.id):
@@ -827,16 +819,6 @@ class InfractionMultiple(discord.ui.UserSelect):
             )
         if Config.get("Infraction", {}).get("channel") is None:
             return await interaction.followup.send(embed=NoChannelSet(), ephemeral=True)
-
-        if Config.get("group", {}).get("id", None):
-            from core.integrations.roblox import GetValidToken
-            from core.bot.HelpEmbeds import NotRobloxLinked
-
-            Roblox = await GetValidToken(user=interaction.user)
-            if not Roblox:
-                return await interaction.followup.send(
-                    embed=NotRobloxLinked(), ephemeral=True
-                )
 
         try:
             channel = await interaction.client.fetch_channel(

@@ -5,7 +5,6 @@ from discord.ext import commands
 from core.bot.HelpEmbeds import NoPremium, Support, NotYourPanel
 from core.bot.emojis import *
 from core.bot.permissions import premium
-from core.bot.ui import PMButton
 
 logger = logging.getLogger(__name__)
 
@@ -263,29 +262,6 @@ class ConfigMenu(discord.ui.Select):
             embed = await SuspensionEmbed(interaction, Config, embed)
             view = discord.ui.View()
             view.add_item(SuspensionOptions(interaction.user))
-        elif selection == "Subscriptions":
-            from cogs.Configuration.Components.Subscriptions import (
-                SubscriptionsEmbed,
-                PremiumButtons,
-            )
-
-            result = await interaction.client.db["Subscriptions"].find_one(
-                {"guilds": {"$in": [interaction.guild.id]}}
-            )
-            view = discord.ui.View()
-            user = await interaction.client.db["Subscriptions"].find_one(
-                {"user": interaction.user.id}
-            )
-            if not user and not result:
-                view = PMButton()
-            if user and not result:
-                view = PremiumButtons(interaction.user)
-                view.disable.disabled = True
-            if user and result:
-                view = PremiumButtons(interaction.user)
-                view.disable.disabled = False
-                view.enable.disabled = True
-            embed = await SubscriptionsEmbed(interaction)
         elif selection == "Auto Responder":
             if not await premium(interaction.guild.id):
                 return await interaction.followup.send(
@@ -304,15 +280,6 @@ class ConfigMenu(discord.ui.Select):
                     interaction.user,
                 )
             )
-        elif selection == "Integrations":
-            from cogs.Configuration.Components.integrations import (
-                integrationsEmbed,
-                Integrations,
-            )
-
-            view = discord.ui.View()
-            view.add_item(Integrations(interaction.user))
-            embed = await integrationsEmbed(interaction, embed=embed)
         elif selection == "Tickets":
             from cogs.Configuration.Components.Tickets import TicketsEmbed, Tickets
 

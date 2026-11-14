@@ -173,7 +173,6 @@ class Client(commands.AutoShardedBot):
             "cogs.Modules.infractions",
             "cogs.Modules.commands",
             "cogs.Modules.data",
-            "cogs.Modules.integrations",
             "cogs.Modules.tickets",
             "cogs.Modules.ticketprivacy",
             "cogs.Modules.ticketafk",

@@ -352,20 +352,6 @@ class on_infractions(commands.Cog):
                     manager=manager,
                 )
 
-            if data.get("changegrouprole") and data.get("grouprole"):
-                from core.integrations.roblox import UpdateMembership
-
-                try:
-                    await UpdateMembership(
-                        user=staff,
-                        role=data.get("grouprole"),
-                        author=manager,
-                        config=config,
-                    )
-                except Exception:
-                    pass
-                Actions["ChangedGroupRole"] = True
-
             if data.get("removedroles"):
                 roles = [
                     discord.utils.get(staff.guild.roles, id=role)

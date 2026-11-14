@@ -46,6 +46,6 @@ Todo se **configura en `/config`** y todo se **explica en `/ayuda`**.
   - Si el usuario escribe y nadie del staff le responde, el moderador que reclamó el ticket recibe un aviso a los 30 minutos y otro a los 60. Con el segundo, el ticket se libera para el resto del equipo y se avisa en el canal de feedback del staff.
 
 ### Quitado
-- **Connection Roles**, **Forums** y **Daily Questions (QOTD)**: borrados por completo. Daily Questions se rehará más adelante.
+- **Connection Roles**, **Forums**, **Daily Questions (QOTD)** e **Integraciones (Roblox)**: borrados por completo.
 - `/support`, `/invite`, `/premium`, `/membership` y `/birb`: eran del servidor, el bot y el Patreon de Birb.
 - Todas las funciones que Birb cobraba como "premium" (webhooks, jerarquía de sanciones, motivos predefinidos, perfil del bot...) quedan **desbloqueadas**.
