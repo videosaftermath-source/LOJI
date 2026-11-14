@@ -161,3 +161,21 @@ async def CatalogEmbed(guild: discord.Guild, config: dict, viewer=None) -> disco
     Got = len([R for R in Roles if R.id in Mine])
     embed.set_footer(text=f"Tienes {Got} de {len(Roles)}" if viewer and Mine else f"{len(Roles)} medallas")
     return embed
+
+
+async def MemberMedalsEmbed(member, config: dict) -> discord.Embed:
+    """A staff member's medals with how each one is earned (the "Detalle condecoraciones" button)."""
+    Info = config.get("medal_info") or {}
+    Mine = MedalRoles(member, config)
+    embed = discord.Embed(title=f"🏅 Condecoraciones de {member.display_name}", color=discord.Color.gold())
+    embed.set_thumbnail(url=member.display_avatar.url)
+    if not Mine:
+        embed.description = "Todavía no tiene ninguna medalla."
+        return embed
+    M, Lines = Manager(), []
+    for R in Mine:
+        Emoji = await M.Get(R) if M else (getattr(R, "unicode_emoji", None) or FALLBACK)
+        Lines.append(f"{Emoji} **{R.name}**\n> {Info.get(str(R.id)) or '*Sin descripción.*'}")
+    embed.description = "\n".join(Lines)[:4096]
+    embed.set_footer(text=f"{len(Mine)} medalla{'s' if len(Mine) != 1 else ''}")
+    return embed

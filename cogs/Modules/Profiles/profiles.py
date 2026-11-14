@@ -307,6 +307,28 @@ class StaffPanel(discord.ui.View):
 # ---------------- cog ----------------
 
 
+class MedalsButton(discord.ui.DynamicItem[discord.ui.Button], template=r"medals:(?P<user>\d+)"):
+    """Under the "Te atiende" card in tickets: shows that staff member's medals and how they're earned."""
+
+    def __init__(self, user_id: int):
+        super().__init__(discord.ui.Button(label="Detalle condecoraciones", emoji="🏅", style=discord.ButtonStyle.grey, custom_id=f"medals:{user_id}"))
+        self.user_id = user_id
+
+    @classmethod
+    async def from_custom_id(cls, interaction: discord.Interaction, item: discord.ui.Button, match):
+        return cls(int(match["user"]))
+
+    async def callback(self, interaction: discord.Interaction):
+        from core.staff.medals import MemberMedalsEmbed
+
+        Member = interaction.guild.get_member(self.user_id)
+        if not Member:
+            return await interaction.response.send_message("Esa persona ya no está en el servidor.", ephemeral=True)
+        await interaction.response.defer(ephemeral=True, thinking=True)
+        Config = await Mail().Get(interaction.guild.id)
+        await interaction.followup.send(embed=await MemberMedalsEmbed(Member, Config), ephemeral=True)
+
+
 class StaffProfiles(commands.Cog):
     def __init__(self, client: commands.Bot):
         self.client = client
@@ -314,6 +336,9 @@ class StaffProfiles(commands.Cog):
         from core.staff.medals import Setup
 
         Setup(client)
+
+    async def cog_load(self):
+        self.client.add_dynamic_items(MedalsButton)  # the button keeps working after restarts
 
     perfil = app_commands.Group(name="perfil", description="Perfiles del staff de LOJI", guild_only=True)
 
@@ -445,7 +470,15 @@ class StaffProfiles(commands.Cog):
         embed = await ProfileEmbed(member, Profile, config, compact=True)
         embed.title = f"🎫 Te atiende {member.display_name}"
         try:
-            await channel.send(embed=embed, allowed_mentions=discord.AllowedMentions.none())
+            from core.staff.medals import MedalRoles
+
+            View = None
+            if MedalRoles(member, config):
+                View = discord.ui.View(timeout=None)
+                View.add_item(MedalsButton(member.id))
+            await channel.send(embed=embed, view=View, allowed_mentions=discord.AllowedMentions.none()) if View else await channel.send(
+                embed=embed, allowed_mentions=discord.AllowedMentions.none()
+            )
         except discord.HTTPException as e:
             logger.warning(f"[Profiles] Couldn't post the profile in ticket {channel.id}: {e}")
 

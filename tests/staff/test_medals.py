@@ -105,3 +105,13 @@ def test_catalog_lists_every_medal_with_how_and_counts():
     assert lines[0] == "🥇 **Oro** · 2 la tienen" and lines[1] == "> Cerrar 100 tickets"
     assert lines[2].startswith("🏅 **Rara** ✅ · 1 la tiene") and "Sin descripción" in lines[3]
     assert e.footer.text == "Tienes 1 de 2"
+
+
+def test_member_medals_detail():
+    from core.staff.medals import MemberMedalsEmbed
+
+    gold = N(id=1, position=9, name="Oro", unicode_emoji="🥇", icon=None)
+    member = N(roles=[gold, N(id=5, position=1)], display_name="Mod", display_avatar=N(url="u"))
+    e = run(MemberMedalsEmbed(member, {"medal_roles": [1], "medal_info": {"1": "100 tickets"}}))
+    assert e.description == "🥇 **Oro**\n> 100 tickets" and e.footer.text == "1 medalla"
+    assert "ninguna" in run(MemberMedalsEmbed(N(roles=[], display_name="X", display_avatar=N(url="u")), {"medal_roles": [1]})).description
