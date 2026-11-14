@@ -16,6 +16,7 @@ HELP = {
     "offices.consejo.role": "¿Cuál es el rol del **Consejo Supremo**?",
     "offices.director.role": "¿Cuál es el rol del **Director de Moderación**?",
     "feedback_channel": "¿Dónde se publica el **feedback del staff** (las valoraciones de `/feedback` y de los tickets)?",
+    "medal_roles": "¿Qué roles son **medallas**? Salen en el perfil de staff con su icono (elige todas a la vez).",
     "profile_roles": "¿Qué **roles del staff** tienen perfil? Elige todos los que cuenten (puedes elegir varios). El cargo de cada uno será el más alto que tenga.",
 }
 GENERAL = {
@@ -25,6 +26,7 @@ GENERAL = {
     "feedback_channel": ("Canal de feedback del staff", "channel"),
     **{f"offices.{O}.role": (f"Rol de {Name}", "role") for O, Name in OFFICES.items()},
     "profile_roles": ("Roles con perfil de staff", "roles"),
+    "medal_roles": ("Roles de medalla (salen en el perfil)", "roles"),
 }
 
 
@@ -83,6 +85,7 @@ def PanelEmbed(guild: discord.Guild, config: dict) -> discord.Embed:
             f"> **Cosas por debatir:** {Channel(guild, config['debate_channel'])}\n"
             f"> **Feedback del staff:** {Channel(guild, config.get('feedback_channel'))}\n"
             f"> **Roles con perfil:** {Roles(guild, config.get('profile_roles') or [])}\n"
+            f"> **Medallas:** {len([R for R in config.get('medal_roles') or [] if guild.get_role(R)])} roles\n"
             f"> **Tickets privados al reclamar:** {'🔒 sí' if config.get('ticket_private_claim', True) else '🔓 no'}"
         ),
         inline=False,

@@ -43,3 +43,9 @@ Los administradores (permiso de Administrador de Discord) siempre ven todos los 
 - El rango de cada persona es el más alto de sus roles elegidos, según el orden de la lista de roles de Discord. Un rango bajo, como Helper, tiene que estar **por debajo** en Discord.
 - Cada cambio de rango queda guardado en el historial del perfil. Si alguien vuelve a un rango que tuvo en los últimos 30 días, recupera su fecha original.
 - `/perfil reparar horas` recupera las fechas que se reiniciaron por error. Las busca, por este orden, en el historial del perfil, en los ascensos registrados con `/promote` y en el registro de auditoría de Discord, que guarda unos 45 días. Las que no se puedan recuperar se ponen a mano con `/perfil fecha`.
+
+## Medallas
+- Se configuran en `/config` → Mando Central → **Roles de medalla**. Elige todas a la vez; caben hasta 25.
+- Se dan y se quitan con los roles de Discord, como siempre.
+- En `/perfil` sale **🏅 Medallas (3/13)** con el icono y el nombre de cada una, de mayor a menor según su posición en Discord. En la tarjeta de los tickets salen solo los iconos.
+- El bot sube cada icono de rol una sola vez como emoji propio. Si cambias el icono de un rol, crea uno nuevo y borra el viejo él solo.

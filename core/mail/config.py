@@ -159,6 +159,7 @@ def DefaultConfig(guild_id: int) -> dict:
         "debate_channel": None,
         "feedback_channel": None,
         "profile_roles": [],
+        "medal_roles": [],
         "ticket_private_claim": True,  # a claimed ticket is hidden from the rest of the ticket staff
         "offices": {O: {"role": None, "credential": None} for O in OFFICES},
         "departments": [NewDepartment(Name, Group) for Name, Group in DEFAULT_DEPARTMENTS],
@@ -191,6 +192,7 @@ class MailConfig:
             Doc["offices"].setdefault(Office, {"role": None, "credential": None})
         Doc.setdefault("ticket_private_claim", True)
         Doc.setdefault("feedback_channel", None)
+        Doc.setdefault("medal_roles", [])
         self._cache[guild_id] = (time.monotonic() + CACHE_SECONDS, Doc)
         return Doc
 

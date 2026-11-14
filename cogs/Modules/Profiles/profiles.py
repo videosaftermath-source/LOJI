@@ -166,6 +166,21 @@ def Stars(rating: float | None, count: int) -> str:
     return f"{'★' * Full}{'☆' * (5 - Full)} **{rating:.1f}/10**".replace(".", ",") + f" · {count} valoraci{'ón' if count == 1 else 'ones'}"
 
 
+async def AddMedals(embed: discord.Embed, member: discord.Member, config: dict, compact: bool):
+    """🏅 Medallas: icon + name in the profile, just the icons in the ticket card."""
+    from core.staff.medals import Manager, MedalRoles
+
+    Mine = MedalRoles(member, config)
+    Total = len([R for R in config.get("medal_roles") or [] if member.guild.get_role(R)])
+    if not Total or (compact and not Mine):
+        return
+    if not Mine:
+        return embed.add_field(name=f"🏅 Medallas (0/{Total})", value="*Todavía ninguna.*", inline=False)
+    M = Manager()
+    Text = await M.Line(Mine, names=not compact) if M else " · ".join(R.name for R in Mine)
+    embed.add_field(name=f"🏅 Medallas ({len(Mine)}/{Total})", value=Text[:1024], inline=False)
+
+
 async def ProfileEmbed(member: discord.Member, profile: dict, config: dict, compact: bool = False) -> discord.Embed:
     """The profile card. `compact` is the short version shown in tickets."""
     Rating, Count = await Store().Rating(member.guild.id, member.id)
@@ -190,6 +205,7 @@ async def ProfileEmbed(member: discord.Member, profile: dict, config: dict, comp
     if not compact or profile.get("description"):
         embed.add_field(name="📝 Descripción", value=(profile.get("description") or "*Todavía no escribió nada. Usa `/perfil editar`.*")[:1024], inline=False)
     embed.add_field(name="⭐ Calificación", value=Stars(Rating, Count), inline=False)
+    await AddMedals(embed, member, config, compact)
     embed.set_footer(text="Mando Central de LOJI · perfil de staff")
     return embed
 
@@ -285,6 +301,9 @@ class StaffProfiles(commands.Cog):
     def __init__(self, client: commands.Bot):
         self.client = client
         self.tickets: dict[int, tuple[float, dict | None]] = {}
+        from core.staff.medals import Setup
+
+        Setup(client)
 
     perfil = app_commands.Group(name="perfil", description="Perfiles del staff de LOJI", guild_only=True)
 
