@@ -102,14 +102,21 @@ async def ClosedDM(user, guild, ticket: dict, reason: str, closer):
     if guild.icon:
         embed.set_thumbnail(url=guild.icon.url)
     View = None
+    Command = f"`/feedback dar` en **{guild.name[:40]}**"
     if Staff:
         embed.add_field(
             name="⭐ ¿Qué tal te atendieron?",
-            value="Deja tu **feedback** con el botón de abajo: son 10 segundos y nos ayuda a mejorar.",
+            value=f"Deja tu **feedback** con el botón de abajo: son 10 segundos y nos ayuda a mejorar.\n-# También puedes usar {Command} eligiendo al staff que te atendió.",
             inline=False,
         )
         View = discord.ui.View(timeout=None)
         View.add_item(TicketFeedbackButton(str(ticket["_id"])))
+    else:
+        embed.add_field(
+            name="⭐ ¿Qué tal te atendieron?",
+            value=f"Si quieres calificar al staff que te atendió, usa {Command} y elige a esa persona. ¡Nos ayuda a mejorar!",
+            inline=False,
+        )
     try:
         await user.send(embed=embed, view=View) if View else await user.send(embed=embed)
     except discord.HTTPException:
