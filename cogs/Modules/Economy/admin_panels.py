@@ -5,6 +5,8 @@ from datetime import datetime, timedelta, timezone
 
 import discord
 
+from core.clock import Fmt
+
 from core.bot.HelpEmbeds import NotYourPanel
 from core.bot.emojis import Emojis
 from core.economy.config import EcoConfig
@@ -360,7 +362,7 @@ def CodeLine(code: dict, items: dict, config: dict) -> str:
     Prizes = [FormatAmount(code["credits"], config)] if code.get("credits") else []
     Prizes += [f"{R['qty']}x {items[R['item_id']]['name']}" for R in code.get("items", []) if R["item_id"] in items]
     Uses = f"{code['uses']}/{code['max_uses']}" if code.get("max_uses") else f"{code['uses']}/∞"
-    Expires = discord.utils.format_dt(Aware(code["expires_at"]), "R") if code.get("expires_at") else "nunca"
+    Expires = Fmt(Aware(code["expires_at"]), "R") if code.get("expires_at") else "nunca"
     return f"`{code['code']}` · {' + '.join(Prizes)}\n-# Usos: {Uses} · Caduca: {Expires}"
 
 
@@ -894,7 +896,7 @@ async def BannersEmbed(guild: discord.Guild) -> discord.Embed:
     embed = discord.Embed(title="🎰 Banners del gacha", color=discord.Color.gold())
     embed.description = "\n".join(
         f"{STATUS_LABEL[Status(B, Now_)]} **{B['name']}** · {len(B['pool'])} premios · "
-        f"{discord.utils.format_dt(Aware(B['start']), 'd')} → {discord.utils.format_dt(Aware(B['end']), 'd')}"
+        f"{Fmt(Aware(B['start']), 'd')} → {Fmt(Aware(B['end']), 'd')}"
         for B in Banners
     ) or "No hay banners. ¡Crea uno!"
     embed.set_footer(text="Un banner nuevo empieza pausado: añade premios de las 4 rarezas y actívalo.")
@@ -934,7 +936,7 @@ async def BannerCard(guild: discord.Guild, banner: dict) -> discord.Embed:
     embed.add_field(name="Precio", value=FormatAmount(banner["cost"], Config))
     embed.add_field(
         name="Fechas",
-        value=f"{discord.utils.format_dt(Aware(banner['start']), 'f')}\n→ {discord.utils.format_dt(Aware(banner['end']), 'f')}",
+        value=f"{Fmt(Aware(banner['start']), 'f')}\n→ {Fmt(Aware(banner['end']), 'f')}",
     )
     for Rarity in reversed(ORDER):
         Lines = [("🌟 " if P.get("featured") else "") + Names[P["key"]] for P in banner["pool"] if P["rarity"] == Rarity]

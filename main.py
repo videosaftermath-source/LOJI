@@ -252,6 +252,9 @@ class Client(commands.AutoShardedBot):
         return commands.when_mentioned_or(prefix)(self, message)
 
     async def setup_hook(self):
+        from core.clock import Install
+
+        Install(self)  # corrects shown times if the host clock is off
         await uploadAll(self)
         await self._load_views()
         await self._load_cogs()

@@ -1,3 +1,4 @@
+from core.clock import Stamp
 import logging
 import time
 from datetime import datetime, timedelta, timezone
@@ -42,7 +43,7 @@ def StreakText(guild: discord.Guild, streak: int, deadline: datetime, settings: 
     Next = Multiplier(streak + 1, settings)
     return (
         f"🔥 **¡Hey! Vas a perder tu racha de chat de {streak} día{'s' if streak != 1 else ''}** en **{guild.name}**.\n"
-        f"Escribe **{settings['streak_messages']} mensajes** en los canales del servidor antes de <t:{int(deadline.timestamp())}:R> "
+        f"Escribe **{settings['streak_messages']} mensajes** en los canales del servidor antes de {Stamp(deadline)} "
         f"para mantenerla y subir tu multiplicador a **x{Next:.2f}**."
     )
 

@@ -6,6 +6,7 @@ plus the time since `care_at` give the current ones (lazy decay). Every write
 saves the current values and resets `care_at`.
 """
 
+from core.clock import Stamp
 import math
 import time
 from dataclasses import dataclass
@@ -314,7 +315,7 @@ class Pets:
             Last = Aware((Pet.get("last_care") or {}).get(kind))
             if Last and (Now_ - Last).total_seconds() < Settings["care_cooldown"]:
                 Ready = int(Last.timestamp() + Settings["care_cooldown"])
-                raise PetError(f"Dale un respiro, vuelve <t:{Ready}:R>.")
+                raise PetError(f"Dale un respiro, vuelve {Stamp(Ready)}.")
             Current[Stat] = min(FULL, Current[Stat] + Amount)
             async with self.economy.Transaction() as Session:
                 if Price:
@@ -397,7 +398,7 @@ class Pets:
                 if PerHour <= 0:
                     raise PetError("Está tan descuidada que no genera nada 😿 Aliméntala y juega con ella.")
                 Ready = int(Since.timestamp() + 3600 / PerHour)
-                raise PetError(f"Todavía no generó nada. Vuelve <t:{Ready}:R>.")
+                raise PetError(f"Todavía no generó nada. Vuelve {Stamp(Ready)}.")
             async with self.economy.Transaction() as Session:
                 Claimed = await self.pets.update_one(
                     {"_id": Pet["_id"], "income_at": Pet["income_at"]}, {"$set": {"income_at": Now_}}, session=Session

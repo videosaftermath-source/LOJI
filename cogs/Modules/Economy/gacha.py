@@ -1,3 +1,4 @@
+from core.clock import Fmt
 import asyncio
 import io
 import logging
@@ -69,7 +70,7 @@ async def BannerEmbed(banner: dict, member: discord.Member, config: dict) -> dis
         name="💰 Precio",
         value=f"x1: {FormatAmount(Cost, config)}\nx10: {FormatAmount(Cost * 10, config)}",
     )
-    embed.add_field(name="⏳ Termina", value=discord.utils.format_dt(Aware(banner["end"]), "R"))
+    embed.add_field(name="⏳ Termina", value=Fmt(Aware(banner["end"]), "R"))
     Featured = [f"{RARITIES[P['rarity']]['stars']} {Names[P['key']]}" for P in banner["pool"] if P.get("featured")]
     if Featured:
         embed.add_field(name="🌟 Destacados", value="\n".join(Featured)[:1024], inline=False)
@@ -210,7 +211,7 @@ class GachaView(discord.ui.View):
         Pulls = await Eco().gacha.History(interaction.guild.id, interaction.user.id, HISTORY_SIZE)
         embed = discord.Embed(title="🕓 Tus últimas tiradas", color=discord.Color.dark_embed())
         embed.description = "\n".join(
-            f"{RARITIES[P['rarity']]['stars']} {'🌟 ' if P.get('featured') else ''}{P['name']} · {discord.utils.format_dt(Aware(P['ts']), 'R')}"
+            f"{RARITIES[P['rarity']]['stars']} {'🌟 ' if P.get('featured') else ''}{P['name']} · {Fmt(Aware(P['ts']), 'R')}"
             for P in Pulls
         ) or "Todavía no has tirado. ¡Anímate! 🎰"
         await interaction.response.send_message(embed=embed, ephemeral=True)

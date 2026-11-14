@@ -5,6 +5,7 @@ Documents live in "feedback" with Birb's fields (guild_id, staff, author, rating
 so the staff profile's average keeps working. Who counts as staff comes from the Mando Central config.
 """
 
+from core.clock import Stamp
 import time
 
 from pymongo import ReturnDocument
@@ -62,7 +63,7 @@ class Feedback:
         Last = await self.col.find_one({"guild_id": guild_id, "author": author_id, "staff": staff_id, "ticket": None, "date": {"$gt": Since}})
         if Last:
             Next = int(Last["date"] + COOLDOWN_DAYS * 86400)
-            raise FeedbackError(f"Ya valoraste a esta persona hace poco. Podrás volver a hacerlo <t:{Next}:R>.")
+            raise FeedbackError(f"Ya valoraste a esta persona hace poco. Podrás volver a hacerlo {Stamp(Next)}.")
 
     async def Add(self, guild_id: int, author_id: int, staff_id: int, rating: int, comment: str = "", ticket: str | None = None, ticket_name: str | None = None) -> dict:
         if not 1 <= int(rating) <= 10:

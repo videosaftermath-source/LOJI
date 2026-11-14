@@ -3,6 +3,8 @@ import time
 from datetime import datetime, timedelta, timezone
 
 import discord
+
+from core.clock import Fmt
 from discord import app_commands
 from discord.ext import commands
 
@@ -26,7 +28,7 @@ MEDALS = {1: "🥇", 2: "🥈", 3: "🥉"}
 
 
 def Relative(dt: datetime) -> str:
-    return discord.utils.format_dt(dt, "R")
+    return Fmt(dt, "R")
 
 
 class ConfirmPay(discord.ui.View):

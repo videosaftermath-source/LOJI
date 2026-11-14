@@ -1,3 +1,4 @@
+from core.clock import Fmt
 import asyncio
 import io
 import logging
@@ -221,7 +222,7 @@ async def StatsMessage(guild: discord.Guild) -> tuple[discord.Embed, discord.Fil
         if "previous" in State:
             Value += f" (antes x{State['previous']:.2f}, tiende a x{State['target']:.2f})"
         if Next:
-            Value += f"\nPróxima revisión {discord.utils.format_dt(Next + timedelta(hours=Settings['interval_hours']), 'R')}"
+            Value += f"\nPróxima revisión {Fmt(Next + timedelta(hours=Settings['interval_hours']), 'R')}"
         Value += f"\n-# Afecta a tienda, mascotas{' y gacha' if Settings['gacha'] else ''}"
     else:
         Value = "Desactivada (precios x1.00)"

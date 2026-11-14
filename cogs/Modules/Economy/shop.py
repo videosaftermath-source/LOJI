@@ -1,3 +1,4 @@
+from core.clock import Fmt
 import discord
 from discord import app_commands
 from discord.ext import commands
@@ -205,7 +206,7 @@ class EconomyShop(commands.Cog):
             embed.add_field(
                 name="⚡ Boosts activos",
                 value="\n".join(
-                    f"> +{E['value']:.0%} {BOOSTS[E['kind']]} · termina {discord.utils.format_dt(Aware(E['expires_at']), 'R')}"
+                    f"> +{E['value']:.0%} {BOOSTS[E['kind']]} · termina {Fmt(Aware(E['expires_at']), 'R')}"
                     for E in Active
                 ),
                 inline=False,
