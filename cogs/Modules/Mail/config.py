@@ -319,6 +319,10 @@ class RolesEditor(Panel):
             self.add_item(Remove)
         if done:
             self.Finish.label = "Siguiente"
+        if path == "medal_roles" and self.current:
+            Describe = discord.ui.Button(label="Describir medallas", emoji="📝", style=discord.ButtonStyle.blurple, row=2)
+            Describe.callback = self.Describe
+            self.add_item(Describe)
 
     @staticmethod
     def Text(guild: discord.Guild, path: str, current: list[int], note: str = "") -> str:
@@ -346,6 +350,9 @@ class RolesEditor(Panel):
         Gone = {int(V) for V in interaction.data["values"]}
         await self.Save(interaction, [R for R in self.current if R not in Gone], f"➖ Quitados {len(Gone)}.")
 
+    async def Describe(self, interaction: discord.Interaction):
+        await MedalDescriptions.Show(interaction, self.author, self.current, self.done)
+
     @discord.ui.button(label="Listo", emoji="✅", style=discord.ButtonStyle.green, row=2)
     async def Finish(self, interaction: discord.Interaction, _):
         if self.done:
@@ -355,6 +362,57 @@ class RolesEditor(Panel):
     @discord.ui.button(label="Vaciar", emoji="🧹", style=discord.ButtonStyle.grey, row=2)
     async def Clear(self, interaction: discord.Interaction, _):
         await self.Save(interaction, [], "🧹 Lista vaciada.")
+
+
+class MedalDescriptions(Panel):
+    """Pick a medal, write how it's earned (shown in /perfil medallas)."""
+
+    def __init__(self, author, guild: discord.Guild, medals: list[int], done=None):
+        super().__init__(author)
+        self.medals, self.done = medals, done
+        Roles_ = sorted((R for R in (guild.get_role(I) for I in medals) if R), key=lambda R: -R.position)[:25]
+        Pick = discord.ui.Select(placeholder="¿Qué medalla describes?", options=[discord.SelectOption(label=R.name[:100], value=str(R.id)) for R in Roles_], row=0)
+        Pick.callback = self.Pick
+        self.add_item(Pick)
+
+    @staticmethod
+    def Text(guild: discord.Guild, medals: list[int], info: dict, note: str = "") -> str:
+        Roles_ = sorted((R for R in (guild.get_role(I) for I in medals) if R), key=lambda R: -R.position)
+        Lines = [f"> **{R.name}**: {info.get(str(R.id)) or '*sin descripción*'}" for R in Roles_]
+        return ((f"{note}\n" if note else "") + "📝 **Cómo se consigue cada medalla** (sale en `/perfil medallas`)\n" + "\n".join(Lines))[:2000]
+
+    @classmethod
+    async def Show(cls, interaction: discord.Interaction, author, medals: list[int], done=None, note: str = ""):
+        Config = await Mail().Get(interaction.guild.id)
+        await interaction.response.edit_message(
+            content=cls.Text(interaction.guild, medals, Config.get("medal_info") or {}, note), embed=None,
+            view=cls(author, interaction.guild, medals, done), allowed_mentions=discord.AllowedMentions.none(),
+        )
+
+    async def Pick(self, interaction: discord.Interaction):
+        Role_ = interaction.guild.get_role(int(interaction.data["values"][0]))
+        Config = await Mail().Get(interaction.guild.id)
+        await interaction.response.send_modal(MedalDescriptionModal(self, Role_, (Config.get("medal_info") or {}).get(str(Role_.id), "")))
+
+    @discord.ui.button(label="Volver", emoji="⬅️", style=discord.ButtonStyle.grey, row=1)
+    async def Back(self, interaction: discord.Interaction, _):
+        Config = await Mail().Get(interaction.guild.id)
+        await RolesEditor.Show(interaction, self.author, "medal_roles", Config.get("medal_roles") or [], self.done)
+
+
+class MedalDescriptionModal(discord.ui.Modal):
+    def __init__(self, panel: "MedalDescriptions", role, current: str):
+        super().__init__(title=f"Medalla: {role.name}"[:45])
+        self.panel, self.role = panel, role
+        self.text = discord.ui.TextInput(
+            label="¿Cómo se consigue?", style=discord.TextStyle.paragraph, max_length=150, required=False,
+            default=current or None, placeholder="Ej. 100 tickets cerrados con buena valoración",
+        )
+        self.add_item(self.text)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        await Mail().Set(interaction.guild.id, {f"medal_info.{self.role.id}": self.text.value.strip()})
+        await MedalDescriptions.Show(interaction, self.panel.author, self.panel.medals, self.panel.done, f"✅ Guardado: **{self.role.name}**.")
 
 
 def DepartmentEmbed(guild: discord.Guild, department: dict) -> discord.Embed:

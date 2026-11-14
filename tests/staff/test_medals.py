@@ -91,3 +91,17 @@ def test_two_roles_with_the_same_name_get_different_emojis():
     a = N(id=1, position=2, name="Héroe", unicode_emoji=None, icon=Icon("aaaa1111"))
     b = N(id=2, position=1, name="Heroe", unicode_emoji=None, icon=Icon("bbbb2222"))
     assert run(m.Get(a)).startswith("<:Heroe:") and run(m.Get(b)).startswith("<:Heroe_2:")
+
+
+def test_catalog_lists_every_medal_with_how_and_counts():
+    from core.staff.medals import CatalogEmbed
+
+    gold = N(id=1, position=9, name="Oro", unicode_emoji="🥇", icon=None, members=[1, 2])
+    rare = N(id=2, position=3, name="Rara", unicode_emoji=None, icon=None, members=[1])
+    guild = N(get_role=lambda i: {1: gold, 2: rare}.get(i))
+    config = {"medal_roles": [2, 1], "medal_info": {"1": "Cerrar 100 tickets"}}
+    e = run(CatalogEmbed(guild, config, N(roles=[rare])))
+    lines = e.description.split("\n")
+    assert lines[0] == "🥇 **Oro** · 2 la tienen" and lines[1] == "> Cerrar 100 tickets"
+    assert lines[2].startswith("🏅 **Rara** ✅ · 1 la tiene") and "Sin descripción" in lines[3]
+    assert e.footer.text == "Tienes 1 de 2"

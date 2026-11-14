@@ -194,6 +194,7 @@ class MailConfig:
         Doc.setdefault("feedback_channel", None)
         Doc.setdefault("medal_roles", [])
         Doc.setdefault("ticket_afk", True)
+        Doc.setdefault("medal_info", {})
         self._cache[guild_id] = (time.monotonic() + CACHE_SECONDS, Doc)
         return Doc
 

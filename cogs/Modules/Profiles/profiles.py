@@ -268,6 +268,10 @@ class StaffPanel(discord.ui.View):
         )
         Pick.callback = self.PickCategory
         self.add_item(Pick)
+        if config.get("medal_roles"):
+            Medals = discord.ui.Button(label="Medallas", emoji="🏅", style=discord.ButtonStyle.grey, row=2)
+            Medals.callback = self.ShowMedals
+            self.add_item(Medals)
         Shown = sorted(self.categories[key][2], key=lambda M: M.display_name.lower())[:25]
         if Shown:
             Who = discord.ui.Select(placeholder="Ver el perfil de...", options=[discord.SelectOption(label=M.display_name[:100], value=str(M.id)) for M in Shown], row=1)
@@ -285,6 +289,12 @@ class StaffPanel(discord.ui.View):
     async def PickCategory(self, interaction: discord.Interaction):
         View = StaffPanel(self.author, self.guild, self.config, self.members, self.ranks, interaction.data["values"][0])
         await interaction.response.edit_message(embed=View.Embed(), view=View)
+
+    async def ShowMedals(self, interaction: discord.Interaction):
+        from core.staff.medals import CatalogEmbed
+
+        await interaction.response.defer(ephemeral=True, thinking=True)
+        await interaction.followup.send(embed=await CatalogEmbed(self.guild, self.config, interaction.user), ephemeral=True)
 
     async def PickMember(self, interaction: discord.Interaction):
         Member = self.guild.get_member(int(interaction.data["values"][0]))
@@ -348,6 +358,16 @@ class StaffProfiles(commands.Cog):
                 Ranks[M.id] = P.get("rank")
         View = StaffPanel(interaction.user, interaction.guild, Config, Members, Ranks)
         await interaction.followup.send(embed=View.Embed(), view=View, ephemeral=True, allowed_mentions=discord.AllowedMentions.none())
+
+    @perfil.command(name="medallas", description="Catálogo de medallas: cuáles hay, cómo se consiguen y quién las tiene")
+    async def medallas(self, interaction: discord.Interaction):
+        from core.staff.medals import CatalogEmbed
+
+        await interaction.response.defer(ephemeral=True, thinking=True)
+        if not interaction.guild.chunked:
+            await interaction.guild.chunk()  # so the counts are right
+        Config = await Mail().Get(interaction.guild.id)
+        await interaction.followup.send(embed=await CatalogEmbed(interaction.guild, Config, interaction.user), ephemeral=True)
 
     @perfil.command(name="sincronizar", description="Crea o actualiza los perfiles de todo el staff según sus roles")
     async def sincronizar(self, interaction: discord.Interaction):

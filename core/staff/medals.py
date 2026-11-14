@@ -136,3 +136,28 @@ def Setup(client):
 
 def Manager() -> MedalEmojis | None:
     return _manager
+
+
+DESCRIPTION_MAX = 150
+
+
+async def CatalogEmbed(guild: discord.Guild, config: dict, viewer=None) -> discord.Embed:
+    """Every medal: icon, name, how to get it and how many have it (✅ = the viewer has it)."""
+    Info = config.get("medal_info") or {}
+    Roles = sorted((R for R in (guild.get_role(I) for I in config.get("medal_roles") or []) if R), key=lambda R: -R.position)
+    Mine = {R.id for R in getattr(viewer, "roles", [])}
+    embed = discord.Embed(title="🏅 Catálogo de medallas", color=discord.Color.gold())
+    if not Roles:
+        embed.description = "Todavía no hay medallas. Se eligen en `/config` → Mando Central → Roles de medalla."
+        return embed
+    M, Lines = Manager(), []
+    for R in Roles:
+        Emoji = await M.Get(R) if M else (getattr(R, "unicode_emoji", None) or FALLBACK)
+        Count = len(R.members)
+        Have = " ✅" if R.id in Mine else ""
+        How = Info.get(str(R.id)) or "*Sin descripción todavía.*"
+        Lines.append(f"{Emoji} **{R.name}**{Have} · {Count} la tiene{'n' if Count != 1 else ''}\n> {How}")
+    embed.description = "\n".join(Lines)[:4096]
+    Got = len([R for R in Roles if R.id in Mine])
+    embed.set_footer(text=f"Tienes {Got} de {len(Roles)}" if viewer and Mine else f"{len(Roles)} medallas")
+    return embed
