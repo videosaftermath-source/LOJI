@@ -3,17 +3,19 @@ Medals: roles the admins chose in /config → Mando Central → "Roles de medall
 the member has, with the role's icon.
 
 A role icon can't be written inside an embed, so the bot uploads each icon once as one of its own
-(application) emojis and reuses it; it's re-uploaded only if the icon changes. Nothing else is stored.
+(application) emojis, named like the role, and reuses it: re-uploaded only if the icon changes, renamed if
+the role is. Which emoji belongs to which role is kept in "medal_emojis".
 """
 
 import asyncio
 import logging
+import re
+import unicodedata
 
 import discord
 
 logger = logging.getLogger(__name__)
 FALLBACK = "🏅"
-PREFIX = "m"
 
 
 def MedalRoles(member, config: dict) -> list:
@@ -22,26 +24,66 @@ def MedalRoles(member, config: dict) -> list:
     return sorted((R for R in getattr(member, "roles", []) if R.id in Chosen), key=lambda R: -R.position)
 
 
-def EmojiName(role_id: int, icon_key: str) -> str:
-    """m<role>_<icon>: the icon part tells when the role's icon changed (max 32 characters)."""
-    return f"{PREFIX}{role_id}_{icon_key.replace('a_', '')[:8]}"
+LEGACY = re.compile(r"^m(\d{15,21})_([0-9a-f]{1,8})$")  # the old names: m<role>_<icon>
+MAPPING = "medal_emojis"  # role id -> which bot emoji is its icon, and from which icon
+
+
+def PrettyName(role_name: str) -> str:
+    """'Medalla de Oro ⭐' -> 'Medalla_de_Oro' (emoji names: letters, numbers and _, 2-32 characters)."""
+    Text = unicodedata.normalize("NFKD", role_name).encode("ascii", "ignore").decode()
+    Text = re.sub(r"[^A-Za-z0-9_]+", "_", Text).strip("_")
+    Text = re.sub(r"_+", "_", Text)[:32].strip("_")
+    return Text if len(Text) >= 2 else "medalla"
+
+
+def IconTag(icon_key: str) -> str:
+    return icon_key.replace("a_", "")[:8]
 
 
 class MedalEmojis:
-    """role id -> emoji text, uploading role icons as application emojis when needed."""
+    """role id -> emoji text, uploading role icons as the bot's own emojis named like the role."""
 
-    def __init__(self, client):
+    def __init__(self, client, db=None):
         self.client = client
-        self.existing: dict[str, discord.Emoji] | None = None
+        self.db = db
+        self.emojis: dict[int, discord.Emoji] | None = None  # emoji id -> emoji
+        self.mapping: dict[int, dict] = {}  # role id -> {"emoji": id, "icon": tag}
         self.lock = asyncio.Lock()
 
+    def Col(self):
+        if self.db is None:
+            from core.db import db
+
+            self.db = db
+        return self.db[MAPPING]
+
     async def Load(self):
-        if self.existing is None:
-            try:
-                self.existing = {E.name: E for E in await self.client.fetch_application_emojis() if E.name.startswith(PREFIX)}
-            except discord.HTTPException as e:
-                logger.warning(f"[Medals] Can't list the bot's emojis: {e}")
-                self.existing = {}
+        if self.emojis is not None:
+            return
+        try:
+            All = await self.client.fetch_application_emojis()
+        except discord.HTTPException as e:
+            logger.warning(f"[Medals] Can't list the bot's emojis: {e}")
+            All = []
+        self.emojis = {E.id: E for E in All}
+        self.mapping = {D["_id"]: D for D in await self.Col().find({}).to_list(length=None)}
+        for E in All:  # emojis made before the mapping existed
+            Match = LEGACY.match(E.name)
+            if Match and int(Match.group(1)) not in self.mapping:
+                await self.Remember(int(Match.group(1)), E.id, Match.group(2))
+
+    async def Remember(self, role_id: int, emoji_id: int, tag: str):
+        Doc = {"_id": role_id, "emoji": emoji_id, "icon": tag}
+        self.mapping[role_id] = Doc
+        await self.Col().update_one({"_id": role_id}, {"$set": Doc}, upsert=True)
+
+    def FreeName(self, wanted: str, mine: int | None) -> str:
+        Taken = {E.name for I, E in self.emojis.items() if I != mine}
+        Name, N = wanted, 2
+        while Name in Taken:
+            Suffix = f"_{N}"
+            Name, N = wanted[: 32 - len(Suffix)] + Suffix, N + 1
+        return Name
 
     async def Get(self, role) -> str:
         if getattr(role, "unicode_emoji", None):
@@ -49,22 +91,31 @@ class MedalEmojis:
         Icon = getattr(role, "icon", None)
         if Icon is None:
             return FALLBACK
-        Name = EmojiName(role.id, Icon.key)
-        if self.existing is not None and Name in self.existing:
-            return str(self.existing[Name])
+        Tag, Wanted = IconTag(Icon.key), PrettyName(role.name)
+        Known = self.mapping.get(role.id)
+        Emoji = self.emojis.get(Known["emoji"]) if Known and self.emojis else None
+        if Emoji and Known["icon"] == Tag and Emoji.name == self.FreeName(Wanted, Emoji.id):
+            return str(Emoji)  # the usual case: no API call
         async with self.lock:
             await self.Load()
-            if Name in self.existing:
-                return str(self.existing[Name])
+            Known = self.mapping.get(role.id)
+            Emoji = self.emojis.get(Known["emoji"]) if Known else None
+            Name = self.FreeName(Wanted, Emoji.id if Emoji else None)
             try:
-                for Old in [E for N, E in self.existing.items() if N.startswith(f"{PREFIX}{role.id}_")]:
-                    await Old.delete()  # the icon changed: the old one goes
-                    self.existing.pop(Old.name, None)
+                if Emoji and Known["icon"] == Tag:
+                    if Emoji.name != Name:  # the role was renamed (or the emoji had the old name)
+                        Emoji = await Emoji.edit(name=Name)
+                        self.emojis[Emoji.id] = Emoji
+                    return str(Emoji)
+                if Emoji:  # the icon changed: the old one goes
+                    await Emoji.delete()
+                    self.emojis.pop(Emoji.id, None)
                 New = await self.client.create_application_emoji(name=Name, image=await Icon.read())
             except (discord.HTTPException, ValueError) as e:
                 logger.warning(f"[Medals] Couldn't make the emoji for role {role.id}: {e}")
-                return FALLBACK
-            self.existing[Name] = New
+                return str(Emoji) if Emoji else FALLBACK
+            self.emojis[New.id] = New
+            await self.Remember(role.id, New.id, Tag)
             return str(New)
 
     async def Line(self, roles: list, names: bool = True) -> str:

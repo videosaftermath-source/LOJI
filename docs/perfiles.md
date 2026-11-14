@@ -48,4 +48,4 @@ Los administradores (permiso de Administrador de Discord) siempre ven todos los 
 - Se configuran en `/config` → Mando Central → **Roles de medalla**. Elige todas a la vez; caben hasta 25.
 - Se dan y se quitan con los roles de Discord, como siempre.
 - En `/perfil` sale **🏅 Medallas (3/13)** con el icono y el nombre de cada una, de mayor a menor según su posición en Discord. En la tarjeta de los tickets salen solo los iconos.
-- El bot sube cada icono de rol una sola vez como emoji propio. Si cambias el icono de un rol, crea uno nuevo y borra el viejo él solo.
+- El bot sube cada icono de rol una sola vez como emoji propio, con el mismo nombre que el rol (por ejemplo `:Medalla_de_Oro:`). Si renombras el rol, el emoji se renombra. Si cambias el icono, crea uno nuevo y borra el viejo él solo.
