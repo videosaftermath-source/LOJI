@@ -84,3 +84,48 @@ def test_only_the_claimer_sees_it_and_unclaim_restores_everything():
     assert transferred == (False, True)
     assert {t.name for t in channel.perms} == {t.name for t in original}, sorted(t.name for t in channel.perms)
     assert channel.perms == original  # exactly as before the claim
+
+
+def test_two_claims_at_once_only_one_wins():
+    import asyncio
+    from types import SimpleNamespace as N
+    from unittest import mock
+
+    import cogs.Events.on_ticket as OT
+    from tests.economy.fakes import DB
+
+    db = DB()
+    asyncio.run(db["Tickets"].insert_one({"_id": "t1", "MessageID": 50, "ChannelID": 300, "panel": "Reporte", "claimed": {"claimer": None}}))
+    sent, events = [], []
+
+    def inter(uid):
+        async def defer(**k):
+            pass
+
+        async def send(*a, **k):
+            sent.append((uid, a[0] if a else ""))
+
+        async def edit(**k):
+            pass
+
+        return N(user=N(id=uid, name=f"u{uid}", display_name=f"u{uid}", mention=f"<@{uid}>", display_avatar=None),
+                 guild=N(id=1), channel=N(id=300, name="reporte-001"), message=N(id=50),
+                 response=N(defer=defer), followup=N(send=send), edit_original_response=edit,
+                 client=N(db=db, dispatch=lambda *a: events.append(a)))
+
+    async def allowed(i):
+        return True
+
+    async def main():
+        view = OT.PTicketControl()
+        with mock.patch.object(OT, "TicketPermissions", allowed):
+            await asyncio.gather(*(OT.PTicketControl.claim(view, inter(u), None) for u in (6, 7)))
+
+    try:
+        asyncio.run(main())
+    except Exception:
+        pass  # whatever runs after the claim (renaming) needs a real channel
+    claims = [e for e in events if e[0] == "ticket_claimed"]
+    assert len(claims) == 1
+    winner = asyncio.run(db["Tickets"].find_one({"_id": "t1"}))["claimed"]["claimer"]
+    assert any("ya lo reclamó" in t for u, t in sent if u != winner)

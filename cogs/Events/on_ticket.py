@@ -247,21 +247,18 @@ class PTicketControl(discord.ui.View):
             return await interaction.followup.send(
                 "This isn't a ticket channel.", ephemeral=True
             )
-        if Result.get("claimed").get("claimer"):
-            return await interaction.followup.send(
-                "This ticket is already claimed.", ephemeral=True
-            )
-        await interaction.client.db["Tickets"].update_one(
-            {"ChannelID": interaction.channel.id},
-            {
-                "$set": {
-                    "claimed": {
-                        "claimer": interaction.user.id,
-                        "claimedAt": datetime.datetime.now(),
-                    }
-                }
-            },
+        # Atomic: only the first click wins (two people pressing Claim at once used to both "win").
+        Won = await interaction.client.db["Tickets"].update_one(
+            {"_id": Result["_id"], "$or": [{"claimed.claimer": None}, {"claimed": None}]},
+            {"$set": {"claimed": {"claimer": interaction.user.id, "claimedAt": datetime.datetime.now()}}},
         )
+        if not Won.modified_count:
+            Now_ = await interaction.client.db["Tickets"].find_one({"_id": Result["_id"]}) or {}
+            Who = (Now_.get("claimed") or {}).get("claimer")
+            return await interaction.followup.send(
+                f"{Emojis.no} Este ticket ya lo reclamó <@{Who}>." if Who else f"{Emojis.no} Este ticket ya está reclamado.",
+                ephemeral=True,
+            )
         interaction.client.dispatch("ticket_claimed", interaction.channel, interaction.user)
         embed = discord.Embed(
             color=discord.Color.green(),

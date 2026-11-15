@@ -4,6 +4,7 @@ people added to it) can see them. Every overwrite that's changed is saved, so un
 channel back exactly as it was. Server admins always see every channel (Discord's rule).
 """
 
+import asyncio
 import logging
 
 import discord
@@ -134,14 +135,26 @@ class TicketPrivacy(commands.Cog):
         Panel = await self.client.db[PANELS].find_one({"name": ticket.get("panel"), "type": "single", "guild": ticket.get("GuildID")}) or {}
         return {int(R) for R in Panel.get("permissions", []) if str(R).isdigit()}
 
+    def Lock(self, channel_id: int) -> asyncio.Lock:
+        """Claim/unclaim changes on one channel run one at a time, so they can't mix."""
+        if not hasattr(self, "_locks"):
+            self._locks: dict[int, asyncio.Lock] = {}
+        return self._locks.setdefault(channel_id, asyncio.Lock())
+
     @commands.Cog.listener()
     async def on_ticket_claimed(self, channel, member: discord.Member):
+        async with self.Lock(channel.id):
+            await self.MakePrivate(channel, member)
+
+    async def MakePrivate(self, channel, member: discord.Member):
         """Claim (button, command or transfer): only the claimer keeps access."""
         if not (await Mail().Get(channel.guild.id)).get("ticket_private_claim", True):
             return
         Ticket = await self.client.db[TICKETS].find_one({"ChannelID": channel.id})
         if not Ticket:
             return
+        if (Ticket.get("claimed") or {}).get("claimer") not in (None, member.id):
+            return  # someone else holds it now (a late or losing claim): don't touch the channel
         Guild = channel.guild
         Author = int(Ticket.get("UserID") or 0)
         Bot = getattr(Guild.me, "id", None)
@@ -177,6 +190,13 @@ class TicketPrivacy(commands.Cog):
 
     @commands.Cog.listener()
     async def on_unclaim(self, objectID):
+        Ticket = await self.client.db[TICKETS].find_one({"_id": objectID})
+        if not Ticket:
+            return
+        async with self.Lock(Ticket.get("ChannelID") or 0):
+            await self.Restore(objectID)
+
+    async def Restore(self, objectID):
         """Unclaimed: every overwrite goes back to how it was before the claim."""
         Ticket = await self.client.db[TICKETS].find_one({"_id": objectID})
         if not Ticket or "private_claimer" not in Ticket:

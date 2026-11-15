@@ -825,21 +825,12 @@ class TicketsPub(commands.Cog):
             return await interaction.followup.send(
                 content=f"{Emojis.no} This isn't a ticket channel."
             )
-        if Result.get("claimed").get("claimer"):
-            return await interaction.followup.send(
-                content=f"{Emojis.no} This ticket is already claimed."
-            )
-        await interaction.client.db["Tickets"].update_one(
-            {"ChannelID": interaction.channel.id},
-            {
-                "$set": {
-                    "claimed": {
-                        "claimer": interaction.user.id,
-                        "claimedAt": datetime.now(),
-                    }
-                }
-            },
+        Won = await interaction.client.db["Tickets"].update_one(
+            {"_id": Result["_id"], "$or": [{"claimed.claimer": None}, {"claimed": None}]},
+            {"$set": {"claimed": {"claimer": interaction.user.id, "claimedAt": datetime.now()}}},
         )
+        if not Won.modified_count:
+            return await interaction.followup.send(content=f"{Emojis.no} Este ticket ya está reclamado.")
         await interaction.followup.send(
             content=f"{Emojis.tick} **{interaction.user.display_name},** you've claimed the ticket!"
         )
