@@ -78,6 +78,9 @@ async def InfractionEmbed(self: commands.Bot, infraction: dict):
 
 
 class Infractions(commands.Cog):
+    async def cog_load(self):
+        self.client.add_dynamic_items(InfractionManageButton)  # works on old messages after restarts
+
     def __init__(self, client: commands.Bot):
         self.client = client
 
@@ -754,19 +757,13 @@ class Infractions(commands.Cog):
     @Permissions("Admin")
     @ModuleIsEnabled("infractions")
     async def view(self, ctx: commands.Context, id: str, isvoided: bool = False):
-        filter = {
-            "guild_id": ctx.guild.id,
-            "random_string": id,
-            "voided": {"$ne": True},
-        }
-        if isvoided:
-            filter["voided"] = True
-
-        infraction = await self.client.db["infractions"].find_one(filter)
+        # Voided ones are found too (they show "Delete"); `isvoided` is kept so old usage still works.
+        infraction = await FindInfraction(self.client.db, ctx.guild.id, id)
 
         if infraction is None:
             await ctx.send(
-                f"{Emojis.no} **{ctx.author.display_name}**, I couldn't find the infraction with ID `{id}` in this guild.",
+                f"{Emojis.no} **{ctx.author.display_name}**, no encuentro la sanción `{id}`. "
+                "Elígela de la lista que sale al escribir, o pulsa **Gestionar** en el mensaje de la sanción.",
             )
             return
 
@@ -776,6 +773,10 @@ class Infractions(commands.Cog):
             view.void.label = "Delete"
             view.void.style = discord.ButtonStyle.red
         await ctx.send(embed=embed, view=view)
+
+    @view.autocomplete("id")
+    async def view_choices(self, interaction: discord.Interaction, current: str):
+        return await InfractionChoices(interaction, current)
 
     def EmbedSize(self, embed: discord.Embed):
         size = len(embed.title or "") + len(embed.description or "")
@@ -936,6 +937,70 @@ class InfractionMultiple(discord.ui.UserSelect):
             content=f"{Emojis.tick} **{interaction.user.display_name},** I have infracted all the staff members!",
             view=None,
         )
+
+
+CONFUSABLE = str.maketrans({"O": "0", "0": "O", "I": "1", "1": "I"})
+
+
+async def FindInfraction(db, guild_id: int, raw: str) -> dict | None:
+    """By ID, forgiving: spaces, '#', backticks, lower case, and O/0 or I/1 mix-ups."""
+    Code = re.sub(r"[\s#`]", "", raw or "").upper()
+    if not Code:
+        return None
+    Col = db["infractions"]
+    Doc = await Col.find_one({"guild_id": guild_id, "random_string": Code})
+    if Doc:
+        return Doc
+    Doc = await Col.find_one({"guild_id": guild_id, "random_string": {"$regex": f"^{re.escape(Code)}$", "$options": "i"}})
+    if Doc:
+        return Doc
+    # Each ambiguous character can be either: build a pattern that accepts both.
+    Pattern = "".join(f"[{C}{C.translate(CONFUSABLE)}]" if C in "OI01" else re.escape(C) for C in Code)
+    return await Col.find_one({"guild_id": guild_id, "random_string": {"$regex": f"^{Pattern}$", "$options": "i"}})
+
+
+async def InfractionChoices(interaction: discord.Interaction, current: str) -> list:
+    """Latest infractions, searchable by ID, type or the sanctioned person's name."""
+    Docs = await interaction.client.db["infractions"].find({"guild_id": interaction.guild.id}).sort("timestamp", -1).limit(200).to_list(length=200)
+    Text = (current or "").lower().strip()
+    Out = []
+    for D in Docs:
+        Member = interaction.guild.get_member(D.get("staff") or 0)
+        Who = Member.display_name if Member else str(D.get("staff"))
+        When = D["timestamp"].strftime("%d/%m") if isinstance(D.get("timestamp"), datetime) else ""
+        Label = f"{D.get('random_string')} · {D.get('action')} · {Who} · {When}" + (" · anulada" if D.get("voided") else "")
+        if not Text or Text in Label.lower():
+            Out.append(app_commands.Choice(name=Label[:100], value=str(D.get("random_string"))))
+        if len(Out) == 25:
+            break
+    return Out
+
+
+class InfractionManageButton(discord.ui.DynamicItem[discord.ui.Button], template=r"infr:(?P<code>[A-Za-z0-9]{1,32})"):
+    """Under each published infraction: opens the same panel as /infraction view, without typing the ID."""
+
+    def __init__(self, code: str):
+        super().__init__(discord.ui.Button(label="Gestionar", emoji="🛠️", style=discord.ButtonStyle.grey, custom_id=f"infr:{code}"))
+        self.code = code
+
+    @classmethod
+    async def from_custom_id(cls, interaction: discord.Interaction, item: discord.ui.Button, match):
+        return cls(match["code"])
+
+    async def callback(self, interaction: discord.Interaction):
+        from core.bot.permissions import has_admin_role
+
+        Perms = interaction.user.guild_permissions
+        if not (Perms.administrator or Perms.manage_guild) and not await has_admin_role(interaction, ephemeral=True):
+            return
+        Infraction = await FindInfraction(interaction.client.db, interaction.guild.id, self.code)
+        if not Infraction:
+            return await interaction.response.send_message("Esta sanción ya no existe (se borró).", ephemeral=True)
+        View = ManageInfraction(Infraction, interaction.user)
+        if Infraction.get("voided"):
+            View.void.label = "Delete"
+            View.void.style = discord.ButtonStyle.red
+        await interaction.response.send_message(embed=await InfractionEmbed(interaction.client, Infraction), view=View, ephemeral=True)
 
 
 class ManageInfraction(discord.ui.View):

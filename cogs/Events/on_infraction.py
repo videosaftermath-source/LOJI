@@ -156,6 +156,14 @@ class on_infractions(commands.Cog):
             view = InfractionIssuer()
             view.issuer.label = f"Issued By {manager.display_name}"
 
+        # "Gestionar" button: manage it from the message itself, no need to type the ID.
+        from cogs.Modules.infractions import InfractionManageButton
+
+        if view is None:
+            view = discord.ui.View(timeout=None)
+        view.timeout = None
+        view.add_item(InfractionManageButton(Infraction.random_string))
+
         if custom:
             replacements = await Variables.infraction(
                 staff=staff, Infraction=Infraction, manager=manager, guild=guild
