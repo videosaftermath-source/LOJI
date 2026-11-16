@@ -191,6 +191,15 @@ class MainPanel(Panel):
     async def Create(self, interaction: discord.Interaction, _):
         await interaction.response.send_modal(DepartmentInfo(self.author))
 
+    @discord.ui.button(label="Guía de sanciones", emoji="📚", style=discord.ButtonStyle.blurple, row=3)
+    async def SanctionsGuide(self, interaction: discord.Interaction, _):
+        from cogs.Modules.Guide.guide import GuidePanel, PanelEmbed
+
+        async def Back(i: discord.Interaction):
+            await ShowMain(i, self.author)
+
+        await interaction.response.edit_message(content=None, embed=await PanelEmbed(interaction.guild), view=GuidePanel(self.author, Back))
+
     @discord.ui.button(label="Credenciales", emoji="🔑", style=discord.ButtonStyle.blurple, row=2)
     async def Credentials(self, interaction: discord.Interaction, _):
         await interaction.response.edit_message(
