@@ -181,14 +181,23 @@ class GuideCog(commands.Cog):
                 f"⏳ Ya usaste tus {PER_DAY} preguntas de las últimas 24 h. La siguiente se libera {discord.utils.format_dt(Free, 'R')}.",
                 ephemeral=True,
             )
-        await interaction.response.defer(ephemeral=True, thinking=True)
+        await interaction.response.defer(thinking=True)  # the answer is public
+
+        async def Private(text: str):
+            """Errors stay private: remove the public 'thinking...' and tell only the asker."""
+            try:
+                await interaction.delete_original_response()
+            except discord.HTTPException:
+                pass
+            await interaction.followup.send(text, ephemeral=True)
+
         try:
             Answer = await Ask(Key, Doc["text"], pregunta, interaction.guild.name)
         except GuideError as e:
-            return await interaction.followup.send(f"❌ {e}", ephemeral=True)
+            return await Private(f"❌ {e}")
         except Exception as e:
             logger.exception(f"[Guide] Unexpected error: {e!r}")
-            return await interaction.followup.send("❌ Algo falló al preguntar. No se te ha descontado la pregunta.", ephemeral=True)
+            return await Private("❌ Algo falló al preguntar. No se te ha descontado la pregunta.")
         await Store().Count(interaction.guild.id, interaction.user.id)  # only answered questions count
         embed = discord.Embed(title="📚 Guía de sanciones", color=LOJI_RED)
         embed.add_field(name="❓ Pregunta", value=pregunta[:1024], inline=False)
@@ -199,7 +208,8 @@ class GuideCog(commands.Cog):
             + (f" · Guía del {Updated:%d/%m/%Y}" if Updated else "")
             + " · Revisa la guía ante la duda"
         )
-        await interaction.followup.send(embed=embed, ephemeral=True)
+        embed.set_author(name=f"Pregunta de {interaction.user.display_name}", icon_url=interaction.user.display_avatar.url)
+        await interaction.followup.send(embed=embed)
 
 
 async def setup(client: commands.Bot) -> None:
