@@ -191,7 +191,10 @@ def PrivacyEmbed(state: dict) -> discord.Embed:
         "**Recompensas por vanity o tag:** " + ("🚫 no participas" if Out else "✅ participas") + "\n"
         "-# Solo miramos si tu estado contiene la vanity del servidor o si llevas su tag. Nunca guardamos el texto de tu estado: "
         "solo si cumples o no, y desde cuándo.\n\n"
-        "**¿Quieres que borremos tus datos?** Abre un ticket en el servidor y el staff lo hará."
+        "**Tickets:** al cerrarse, la conversación se guarda como transcripción en un canal privado del staff "
+        "(dentro de Discord, no en nuestra base de datos).\n\n"
+        "**¿Quieres que borremos tus datos?** Abre un ticket en el servidor y el staff lo hará.\n"
+        "-# Política completa: https://github.com/videosaftermath-source/LOJI/blob/main/PRIVACIDAD.md"
     )
     return embed
 

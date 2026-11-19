@@ -170,6 +170,9 @@ async def TicketPermissions(interaction: discord.Interaction):
     return IsTicketStaff(interaction.user, P.get("permissions") or [], Config)
 
 
+TRANSCRIPT_NOTICE = "📄 Al cerrar el ticket se guarda una transcripción para el staff · /privacidad"
+
+
 async def DefaultEmbed(Member: discord.Member, Ticket: dict) -> discord.Embed:
 
     embed = (
@@ -599,6 +602,12 @@ class TicketsPublic(commands.Cog):
 
         if not Embed:
             Embed = await DefaultEmbed(author, Ticket)
+        # Users must know the conversation is kept (Message Content Intent / privacy policy).
+        Footer = Embed.footer.text if Embed.footer else None
+        Embed.set_footer(
+            text=((Footer + " · ") if Footer else "") + TRANSCRIPT_NOTICE,
+            icon_url=Embed.footer.icon_url if Embed.footer else None,
+        )
         CategoryID = P.get("Category")
         if not CategoryID:
             await self.client.db["Tickets"].update_one(
