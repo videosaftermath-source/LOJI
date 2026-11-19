@@ -12,7 +12,7 @@ from core.integrations.r2 import upload_file_to_r2
 from core.ticket_names import ClaimedName, NextNumber, OpenName
 
 
-async def SendTranscript(client, guild, target, channel, panel: dict, ticket: dict, reason: str, closer, status_msg=None):
+async def SendTranscript(client, guild, target, channel, panel: dict, ticket: dict, reason: str, closer, status_msg=None, dm_status=None):
     """The whole ticket as one .html file in the transcript channel (Discord stores it, not our database)."""
     import io
 
@@ -55,6 +55,8 @@ async def SendTranscript(client, guild, target, channel, panel: dict, ticket: di
         embed.add_field(name="Abierto", value=f"<t:{int(ticket['opened'])}:f>", inline=True)
     embed.add_field(name="Mensajes", value=str(len(Messages)), inline=True)
     embed.add_field(name="✅ Solución", value=(reason or "—")[:1024], inline=False)
+    if dm_status:
+        embed.add_field(name="📩 MD al usuario", value=dm_status, inline=False)
     embed.add_field(
         name="Participantes", value="\n".join(f"<@{U}> · {N} msg" for U, N in sorted(People.items(), key=lambda x: -x[1]))[:1024] or "—", inline=False
     )
@@ -117,10 +119,25 @@ async def ClosedDM(user, guild, ticket: dict, reason: str, closer):
             value=f"Si quieres calificar al staff que te atendió, usa {Command} y elige a esa persona. ¡Nos ayuda a mejorar!",
             inline=False,
         )
+    if user is None:
+        return "❌ No se envió: ya no está en el servidor"
     try:
         await user.send(embed=embed, view=View) if View else await user.send(embed=embed)
-    except discord.HTTPException:
-        pass  # DMs closed
+        return "✅ Enviado"
+    except discord.Forbidden as e:
+        if e.code == 50007:
+            return "❌ No se envió: tiene los MD cerrados"
+        logging.warning(f"[ClosedDM] Forbidden DMing {user.id}: {e}")
+        return "❌ No se envió: Discord no me deja escribirle"
+    except discord.HTTPException as e:
+        # Anything else: try once more with the plain embed, without the button.
+        logging.warning(f"[ClosedDM] DM to {user.id} failed ({e}); retrying without the button.")
+        try:
+            await user.send(embed=embed)
+            return "✅ Enviado (sin botón de feedback)"
+        except discord.HTTPException as e2:
+            logging.warning(f"[ClosedDM] DM to {user.id} failed again: {e2}")
+            return f"❌ No se envió: error de Discord ({getattr(e2, 'status', '?')})"
 
 
 async def Opener(client, guild, user_id):
@@ -754,6 +771,11 @@ class TicketsPublic(commands.Cog):
                     {"$set": {"closed": {"reason": reason, "closer": member.id, "closedAt": datetime.datetime.now()}}},
                 )
                 try:
+                    User = await Opener(self.client, Channel.guild, (T or {}).get("UserID"))
+                    await asyncio.wait_for(ClosedDM(User, Channel.guild, {**(T or {}), "name": (T or {}).get("name") or Channel.name}, reason, member), 20)
+                except Exception as e2:
+                    logging.warning(f"[on_pticket_close] Fallback DM failed: {e2!r}")
+                try:
                     await Channel.delete(reason="Ticket cerrado")
                 except discord.HTTPException:
                     pass
@@ -784,10 +806,8 @@ class TicketsPublic(commands.Cog):
                     "Author": f"{member.name}/{member.id}",
                 },
             )
-        try:
-            user = await Guild.fetch_member(Result.get("UserID"))
-        except (discord.NotFound, discord.HTTPException):
-            user = None
+        # The member, or else the plain user (they may have left; Discord decides if a DM still reaches them).
+        user = await Opener(self.client, Guild, Result.get("UserID"))
         msg = None
         try:
             msg = await Channel.send(
@@ -832,15 +852,21 @@ class TicketsPublic(commands.Cog):
             except Exception as e:
                 logging.exception(f"[on_pticket_close] {name} failed for ticket {ObjectID}: {e!r}")
 
-        if user:
-            await Step("DM", ClosedDM(user, Guild, {**Result, "closed": Closed, "name": Result.get("name") or Channel.name}, reason, member), 20)
+        DM = {"status": "❌ No se envió (tardó demasiado o falló)"}
+
+        async def SendDM():
+            DM["status"] = await ClosedDM(user, Guild, {**Result, "closed": Closed, "name": Result.get("name") or Channel.name}, reason, member)
+
+        await Step("DM", SendDM(), 20)
+        if not DM["status"].startswith("✅"):
+            logging.warning(f"[on_pticket_close] Close DM for ticket {ObjectID} (user {Result.get('UserID')}): {DM['status']}")
 
         try:
             TranscriptChannel = Guild.get_channel(int(P.get("TranscriptChannel") or 0))
         except (TypeError, ValueError):
             TranscriptChannel = None
         if TranscriptChannel:
-            await Step("Transcript", SendTranscript(self.client, Guild, TranscriptChannel, Channel, P, {**Result, "_id": ObjectID}, reason, member, msg), 120)
+            await Step("Transcript", SendTranscript(self.client, Guild, TranscriptChannel, Channel, P, {**Result, "_id": ObjectID}, reason, member, msg, DM["status"]), 120)
 
         try:
             await Channel.delete(reason=f"Ticket cerrado por {member}")
