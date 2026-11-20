@@ -61,7 +61,12 @@ OBJECTIVES = {
     "pay": "💸 Créditos enviados con /pagar",
     "play": "🎲 Partidas jugadas (casino)",
     "gacha": "🎰 Tiradas en el gacha",
+    "voice": "🎙️ Minutos en voz",
+    "supporter": "🏷️ Llevar el tag o la vanity",
+    "boost": "💎 Boostear el servidor",
 }
+# Objectives that are a state, not a count: claimable while it's true, once per account.
+CONDITIONS = {"supporter", "boost"}
 QUEST_PERIODS = {"daily": "📅 Diaria", "weekly": "🗓️ Semanal", "once": "⭐ Única"}
 
 # Rarities (shared with the gacha). Perk = base + per_level * (level - 1).

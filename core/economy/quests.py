@@ -4,9 +4,10 @@ import time
 from datetime import datetime, timezone
 
 from pymongo import ReturnDocument
+from pymongo.errors import DuplicateKeyError
 
 from core.economy.activity import LocalDay
-from core.economy.constants import MAX_QUESTS, QUEST_PROGRESS, QUESTS
+from core.economy.constants import CONDITIONS, MAX_QUESTS, QUEST_PROGRESS, QUESTS
 from core.economy.service import EconomyError, EconomyService
 from core.economy.shop import NewId
 
@@ -90,8 +91,9 @@ class Quests:
                 upsert=True,
             )
 
-    async def Status(self, guild_id: int, user_id: int, config: dict) -> list[tuple[dict, int, bool]]:
-        """(quest, progress, claimed) for every active quest in its current period."""
+    async def Status(self, guild_id: int, user_id: int, config: dict, conditions: dict | None = None) -> list[tuple[dict, int, bool]]:
+        """(quest, progress, claimed) for every active quest in its current period.
+        Condition quests (tag, boost) count as done while `conditions` says so."""
         Now = datetime.now(timezone.utc)
         Offset = config["activity"]["utc_offset"]
         Result = []
@@ -104,15 +106,34 @@ class Quests:
                     "period_key": PeriodKey(Quest["period"], Now, Offset),
                 }
             ) or {}
-            Result.append((Quest, int(Doc.get("progress", 0)), bool(Doc.get("claimed"))))
+            Progress = int(Doc.get("progress", 0))
+            if Quest["objective"] in CONDITIONS:
+                Progress = int(Quest["target"]) if (conditions or {}).get(Quest["objective"]) else 0
+            Result.append((Quest, Progress, bool(Doc.get("claimed"))))
         return Result
 
-    async def Claim(self, guild_id: int, user_id: int, quest_id: str, config: dict) -> dict:
+    async def Claim(self, guild_id: int, user_id: int, quest_id: str, config: dict, conditions: dict | None = None) -> dict:
         """Gives the reward of a completed quest (once per period)."""
         Quest = next((Q for Q in await self.List(guild_id, only_enabled=True) if Q["quest_id"] == quest_id), None)
         if not Quest:
             raise QuestError("Esa misión ya no existe.")
         Key = PeriodKey(Quest["period"], datetime.now(timezone.utc), config["activity"]["utc_offset"])
+        if Quest["objective"] in CONDITIONS:
+            if not (conditions or {}).get(Quest["objective"]):
+                raise QuestError(
+                    "Para reclamarla tienes que llevar el tag o la vanity ahora mismo." if Quest["objective"] == "supporter"
+                    else "Para reclamarla tienes que estar boosteando el servidor ahora mismo."
+                )
+            Filter = {"guild_id": guild_id, "user_id": user_id, "quest_id": quest_id, "period_key": Key}
+            try:  # the unique index makes a second claim (or a double click) fail here
+                await self.progress.update_one(
+                    {**Filter, "claimed": {"$ne": True}},
+                    {"$set": {"claimed": True, "claimed_at": datetime.now(timezone.utc), "progress": int(Quest["target"])}},
+                    upsert=True,
+                )
+            except DuplicateKeyError:
+                raise QuestError("Ya la reclamaste.")
+            return await self.Pay(guild_id, user_id, Quest)
         # Only flips claimed if it's complete and not claimed yet: a double click can't claim twice.
         Doc = await self.progress.find_one_and_update(
             {
@@ -128,8 +149,23 @@ class Quests:
         )
         if Doc is None:
             raise QuestError("Todavía no la completaste (o ya la reclamaste).")
+        return await self.Pay(guild_id, user_id, Quest)
+
+    async def Pay(self, guild_id: int, user_id: int, Quest: dict) -> dict:
         if Quest.get("reward"):
-            await self.economy.Add(guild_id, user_id, int(Quest["reward"]), f"Misión: {Quest['name']}", ref=f"quest:{quest_id}")
+            await self.economy.Add(guild_id, user_id, int(Quest["reward"]), f"Misión: {Quest['name']}", ref=f"quest:{Quest['quest_id']}")
         if Quest.get("reward_item") and self.shop:
             await self.shop.Give(guild_id, user_id, Quest["reward_item"], 1)
         return Quest
+
+
+def Conditions(member) -> dict:
+    """The state-based objectives for this member right now."""
+    from core.economy.boost import IsBooster
+    from core.supporters import IsSupporter
+
+    Guild = getattr(member, "guild", None)
+    return {
+        "supporter": bool(Guild and IsSupporter(Guild.id, member.id)),
+        "boost": IsBooster(member),
+    }

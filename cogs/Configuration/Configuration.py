@@ -44,7 +44,7 @@ class ConfigMenu(discord.ui.Select):
         selection = self.values[0]
         if interaction.user.id != self.author.id:
             return await interaction.followup.send(embed=NotYourPanel(), ephemeral=True)
-        if selection in ("LOJI_MAIL", "LOJI_ECO", "LOJI_VANITY"):
+        if selection in ("LOJI_MAIL", "LOJI_ECO", "LOJI_VANITY", "LOJI_COMMUNITY"):
             return await LojiSection(interaction, selection)
         embed = discord.Embed(color=discord.Colour.dark_embed())
 
@@ -297,6 +297,10 @@ class ConfigMenu(discord.ui.Select):
 
 async def LojiSection(interaction: discord.Interaction, selection: str):
     """LOJI's own settings live here too, so everything is configured from /config."""
+    if selection == "LOJI_COMMUNITY":
+        from cogs.Modules.Community.panel import OpenPanel
+
+        return await OpenPanel(interaction)
     if selection == "LOJI_VANITY":
         from cogs.Modules.Supporters.supporters import OpenPanel
 
@@ -350,6 +354,8 @@ def Options(Config: dict = None):
                              description="Ganancias, chat, mascotas, gacha, casino, Marcha, inflación..."),
         discord.SelectOption(label="Vanity y tag", value="LOJI_VANITY", emoji="🏷️",
                              description="Roles, beneficios y anuncio para quien lleva la vanity o el tag"),
+        discord.SelectOption(label="Comunidad", value="LOJI_COMMUNITY", emoji="🌸",
+                             description="Bienvenida a supporters, tablero de misiones y chat extra"),
         discord.SelectOption(label="Módulos", value="Modules", emoji=f"{Emojis.modules}",
                              description="Activa o desactiva cada sistema del bot"),
         discord.SelectOption(label="Permisos", value="Permissions", emoji=f"{Emojis.settings_page}",

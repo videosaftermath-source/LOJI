@@ -8,6 +8,7 @@ from core.bot.Module import ModuleIsEnabled
 from core.bot.emojis import Emojis
 from core.economy.config import EcoConfig
 from core.economy.constants import MODULE, OBJECTIVES, QUEST_PERIODS
+from core.economy.quests import Conditions
 from core.economy.registry import Eco
 from core.economy.rewards import FormatAmount
 from core.economy.service import EconomyError
@@ -25,7 +26,7 @@ def Bar(progress: int, target: int) -> str:
 
 async def QuestsMessage(member: discord.Member) -> tuple[discord.Embed, discord.ui.View | None]:
     Config = await EcoConfig().Get(member.guild.id)
-    Status = await Eco().quests.Status(member.guild.id, member.id, Config)
+    Status = await Eco().quests.Status(member.guild.id, member.id, Config, Conditions(member))
     Items = {I["item_id"]: I for I in await Eco().shop.List(member.guild.id)}
     embed = discord.Embed(title="📜 Misiones", color=discord.Color.teal())
     embed.set_author(name=member.display_name, icon_url=member.display_avatar)
@@ -73,7 +74,7 @@ class ClaimSelect(discord.ui.Select):
             return await interaction.response.send_message("Esas no son tus misiones 👀", ephemeral=True)
         Config = await EcoConfig().Get(interaction.guild.id)
         try:
-            Quest = await Eco().quests.Claim(interaction.guild.id, interaction.user.id, self.values[0], Config)
+            Quest = await Eco().quests.Claim(interaction.guild.id, interaction.user.id, self.values[0], Config, Conditions(interaction.user))
         except EconomyError as e:
             return await interaction.response.send_message(f"{Emojis.no} {e}", ephemeral=True)
         embed, View = await QuestsMessage(interaction.user)

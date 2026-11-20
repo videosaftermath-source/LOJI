@@ -11,6 +11,7 @@ from core.bot.HelpEmbeds import NotYourPanel
 from core.bot.emojis import Emojis
 from core.economy.config import EcoConfig
 from core.economy.constants import (
+    CONDITIONS,
     ARCHETYPES,
     BOOSTS,
     COLLECTIBLE,
@@ -527,6 +528,7 @@ class QuestPanel(Panel):
     @discord.ui.button(label="Pausar", style=discord.ButtonStyle.grey)
     async def Toggle(self, interaction: discord.Interaction, _):
         await Eco().quests.Update(interaction.guild.id, self.quest["quest_id"], {"enabled": not self.quest.get("enabled")})
+        interaction.client.dispatch("quests_changed", interaction.guild.id)
         await QuestsPanel.Open(interaction, self.author)
 
     @discord.ui.button(label="Borrar", emoji="🗑️", style=discord.ButtonStyle.red)
@@ -536,6 +538,7 @@ class QuestPanel(Panel):
             button.label = "¿Seguro? Pulsa otra vez"
             return await interaction.response.edit_message(view=self)
         await Eco().quests.Delete(interaction.guild.id, self.quest["quest_id"])
+        interaction.client.dispatch("quests_changed", interaction.guild.id)
         await QuestsPanel.Open(interaction, self.author, "🗑️ Misión borrada.")
 
     @discord.ui.button(label="Volver", emoji="⬅️", style=discord.ButtonStyle.grey)
@@ -603,8 +606,11 @@ class QuestKind(Panel):
         self.draft["objective"] = (self.objective.values or ["messages"])[0]
         Item = getattr(self, "item", None)
         self.draft["reward_item"] = Item.values[0] if Item and Item.values else None
+        if self.draft["objective"] in CONDITIONS:  # a state (tag, boost): once per account, nothing to count
+            self.draft["period"], self.draft["target"] = "once", 1
         try:
             await Eco().quests.Create(interaction.guild.id, self.draft)
+            interaction.client.dispatch("quests_changed", interaction.guild.id)
         except EconomyError as e:
             return await Fail(interaction, e)
         await QuestsPanel.Open(interaction, self.author, f"{Emojis.tick} Misión creada.")

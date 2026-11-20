@@ -104,6 +104,13 @@ class SupporterCog(commands.Cog):
                 logger.warning(f"[Supporters] Reward failed for {member.id}: {e}")
         Channel = Guild.get_channel(config["announce_channel"] or 0)
         if Channel and await Store().ClaimAnnouncement(Guild.id, member.id):
+            try:  # the customizable card from /config → Comunidad, when it's on
+                from cogs.Modules.Community.community import SendWelcome
+
+                if await SendWelcome(member, Channel, config, vanity, tag):
+                    return
+            except Exception as e:
+                logger.warning(f"[Supporters] Welcome card failed for {member.id}, sending the plain message: {e!r}")
             Text = config["message"].replace("{user}", member.mention).replace("{cosa}", What(vanity, tag)).replace("{server}", Guild.name)
             try:
                 await Channel.send(Text, allowed_mentions=discord.AllowedMentions(users=[member]))

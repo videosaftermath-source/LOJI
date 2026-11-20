@@ -71,6 +71,10 @@ def Bonus(guild_id: int, user_id: int) -> tuple[float, float]:
     return _active.get((guild_id, user_id), (1.0, 0.0))
 
 
+def IsSupporter(guild_id: int, user_id: int) -> bool:
+    return (guild_id, user_id) in _active
+
+
 def SetActive(guild_id: int, user_id: int, config: dict | None):
     if config:
         _active[(guild_id, user_id)] = (float(config["multiplier"]), float(config["gacha_luck"]))

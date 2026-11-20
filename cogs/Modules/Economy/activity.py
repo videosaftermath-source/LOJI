@@ -189,10 +189,9 @@ class EconomyActivity(commands.Cog):
     async def PayVoice(self, guild: discord.Guild):
         Config = await EcoConfig().Get(guild.id)
         Settings = Config["voice"]
-        if not Settings["enabled"] or Settings["per_minute"] <= 0:
-            return
         if not await ModuleCheck(guild.id, MODULE):
             return
+        Pays = Settings["enabled"] and Settings["per_minute"] > 0
         Today = LocalDay(datetime.now(timezone.utc), Config["activity"]["utc_offset"]).isoformat()
         Service = Economy()
         for Channel in guild.voice_channels + guild.stage_channels:
@@ -203,7 +202,12 @@ class EconomyActivity(commands.Cog):
                 M for M in Channel.members
                 if not M.bot and not (M.voice and (M.voice.self_deaf or M.voice.deaf))
             ]
-            if len(Present) < Settings["min_members"]:
+            # "Minutes in voice" missions: unmuted, with someone else, outside the AFK channel.
+            if len(Present) >= 2:
+                for Member in Present:
+                    if not (Member.voice and (Member.voice.self_mute or Member.voice.mute)):
+                        self.client.dispatch("economy_progress", guild.id, Member.id, "voice", VOICE_TICK_MINUTES)
+            if not Pays or len(Present) < Settings["min_members"]:
                 continue
             for Member in Present:
                 async with Service.Lock(guild.id, Member.id):
