@@ -1,7 +1,8 @@
 """
 Community (/config → Comunidad): three customizable pieces, each in its own section of one document.
 
-- welcome:  the "thanks for supporting us" card sent when someone starts wearing the tag or the vanity.
+- welcome:  the "thanks for supporting us" card sent when someone starts wearing the tag or the vanity
+            (configured from /config → Vanity y tag, which is the one supporters system).
 - board:    the public missions board (banner, one row per mission with a "Reclamar" button, "Ver mi progreso").
 - overflow: a second general chat that opens when the main one is packed and closes when it goes quiet.
 
@@ -17,9 +18,15 @@ MAX_BOARD_QUESTS = 8  # Discord allows 40 components per message; each mission r
 MAX_BUTTONS = 3
 
 WELCOME = {
-    "enabled": True,
+    # One card per reason: "title/intro/note" when they wear the TAG, "*_vanity" when they put the vanity in their status.
+    # Wearing both gives nothing extra (they get the TAG card).
     "title": "### Gracias por apoyarnos {user}!",
-    "intro": "🌴 Se te otorgó el rol {rol} como recompensa\nℹ️ Te has **equipado** {cosa}!",
+    "intro": "🌴 Se te otorgó el rol {rol} como recompensa\nℹ️ Te has **equipado** nuestro **TAG**!",
+    "note": "-# Los mismos beneficios si llevas {vanity} en tu estado (vanity).",
+    "title_vanity": "### Gracias por apoyarnos {user}!",
+    "intro_vanity": "🌴 Se te otorgó el rol {rol} como recompensa\nℹ️ Has puesto nuestra **vanity** {vanity} en tu estado!",
+    "note_vanity": "-# Los mismos beneficios si te equipas nuestro **TAG**.",
+    # Shared by both cards.
     "benefits": (
         "🏆 **Beneficios** · TAG & VANITY\n"
         "💎 **Rol destacado** arriba de los boosters\n"
@@ -28,13 +35,21 @@ WELCOME = {
         "😀 **Emojis y stickers** externos\n"
         "⚡ **+20 %** de XP en niveles de voz y texto"
     ),
-    "note": "-# Los mismos beneficios si llevas {vanity} en tu estado (vanity).",
     "footer": "-# 🪙 Reclama tus monedas en {tareas} o con **/misiones** (una sola vez por cuenta). Mantén la etiqueta activa para conservar el rol y sus ventajas.",
     "color": "#5865F2",
     "thumbnail": "avatar",  # avatar | servidor | ninguna | an image URL
     # One per line: "label | emoji | where" (where = a link, or #channel-id / a channel mention).
     "buttons": "Reclamar monedas | 🪙 | {tareas_link}\nContactar con staff | 🎟️ |",
 }
+VARIANT_KEYS = ("title", "intro", "note")
+
+
+def Variant(settings: dict, tag: bool) -> dict:
+    """The welcome card settings for one reason: the TAG texts, or the vanity ones."""
+    if tag:
+        return dict(settings)
+    return {**settings, **{K: settings[f"{K}_vanity"] for K in VARIANT_KEYS}}
+
 
 BOARD = {
     "channel": None,

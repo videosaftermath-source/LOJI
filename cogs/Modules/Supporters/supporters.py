@@ -104,14 +104,13 @@ class SupporterCog(commands.Cog):
                 logger.warning(f"[Supporters] Reward failed for {member.id}: {e}")
         Channel = Guild.get_channel(config["announce_channel"] or 0)
         if Channel and await Store().ClaimAnnouncement(Guild.id, member.id):
-            try:  # the customizable card from /config → Comunidad, when it's on
+            try:
                 from cogs.Modules.Community.community import SendWelcome
 
-                if await SendWelcome(member, Channel, config, vanity, tag):
-                    return
+                return await SendWelcome(member, Channel, config, vanity, tag)
             except Exception as e:
-                logger.warning(f"[Supporters] Welcome card failed for {member.id}, sending the plain message: {e!r}")
-            Text = config["message"].replace("{user}", member.mention).replace("{cosa}", What(vanity, tag)).replace("{server}", Guild.name)
+                logger.warning(f"[Supporters] Card failed for {member.id}, sending a plain message: {e!r}")
+            Text = DEFAULTS["message"].replace("{user}", member.mention).replace("{cosa}", What(vanity, tag)).replace("{server}", Guild.name)
             try:
                 await Channel.send(Text, allowed_mentions=discord.AllowedMentions(users=[member]))
             except discord.HTTPException as e:
@@ -230,12 +229,12 @@ def Mention(guild, kind: str, value) -> str:
     return Thing.mention if Thing else "*sin configurar*"
 
 
-def PanelEmbed(guild: discord.Guild, config: dict, eco: dict | None = None) -> discord.Embed:
+def PanelEmbed(guild: discord.Guild, config: dict, eco: dict | None = None, card: dict | None = None) -> discord.Embed:
     embed = discord.Embed(title="🏷️ Vanity y tag · Configuración", color=LOJI_RED)
     embed.description = (
         ("✅ **Activado**" if config["enabled"] else "⏸️ **Desactivado**")
-        + "\nQuien lleve **la vanity en su estado** o **el tag del servidor** recibe los beneficios. "
-        "Tener las dos cosas no los duplica."
+        + "\nQuien lleve **la vanity en su estado** o **el tag del servidor** recibe **los mismos beneficios**. "
+        "Tener las dos cosas no da nada extra."
     )
     embed.add_field(name="🔗 Vanity", value=f"`{config['vanity']}`\n-# También detecta `.gg/{Slug(config['vanity'])}` y `/{Slug(config['vanity'])}`", inline=False)
     embed.add_field(name="🎭 Roles", value=f"> Por la vanity: {Mention(guild, 'role', config['vanity_role'])}\n> Por el tag: {Mention(guild, 'role', config['tag_role'])}", inline=False)
@@ -245,17 +244,31 @@ def PanelEmbed(guild: discord.Guild, config: dict, eco: dict | None = None) -> d
         value=f"> Ganancias **x{config['multiplier']:g}** (se suma al de booster)\n> Gacha **+{config['gacha_luck']:.0%}** de suerte\n> Premio de bienvenida (una vez): {Reward}",
         inline=False,
     )
-    embed.add_field(name="📣 Anuncio", value=f"{Mention(guild, 'channel', config['announce_channel'])}\n> {config['message']}"[:1024], inline=False)
+    if card:
+        embed.add_field(
+            name="📣 Tarjeta de anuncio",
+            value=f"Canal: {Mention(guild, 'channel', config['announce_channel'])}\n"
+            f"> 🏷️ **TAG:** {card['intro'].splitlines()[-1] if card['intro'] else '—'}\n"
+            f"> 🔗 **Vanity:** {card['intro_vanity'].splitlines()[-1] if card['intro_vanity'] else '—'}\n"
+            "-# Una sola tarjeta por persona (si lleva las dos cosas, sale la del TAG). Pulsa **Vista previa**."[:1024],
+            inline=False,
+        )
     embed.set_footer(text="Los roles se quitan solos cuando alguien se quita la vanity o el tag · /privacidad para no participar")
     return embed
 
 
-async def ShowPanel(interaction: discord.Interaction, author, note: str | None = None):
+async def FullEmbed(guild: discord.Guild, config: dict) -> discord.Embed:
+    from core.community import Store as Community
     from core.economy.config import EcoConfig
+
+    return PanelEmbed(guild, config, await EcoConfig().Get(guild.id), (await Community().Get(guild.id))["welcome"])
+
+
+async def ShowPanel(interaction: discord.Interaction, author, note: str | None = None):
 
     Config = await Store().Get(interaction.guild.id)
     await interaction.response.edit_message(
-        content=note, embed=PanelEmbed(interaction.guild, Config, await EcoConfig().Get(interaction.guild.id)), view=VanityPanel(author, Config)
+        content=note, embed=await FullEmbed(interaction.guild, Config), view=VanityPanel(author, Config)
     )
 
 
@@ -273,9 +286,14 @@ SETTINGS = {
     "vanity_role": ("Rol por la vanity", "🎭"),
     "tag_role": ("Rol por el tag", "🏷️"),
     "benefits": ("Beneficios de economía", "🪙"),
-    "announce_channel": ("Canal de anuncios", "📣"),
-    "message": ("Mensaje del anuncio", "💬"),
+    "announce_channel": ("Canal de la tarjeta", "📣"),
+    "card_tag": ("Tarjeta: textos del TAG", "🏷️"),
+    "card_vanity": ("Tarjeta: textos de la vanity", "🔗"),
+    "card_body": ("Tarjeta: beneficios y pie (las dos)", "📋"),
+    "card_look": ("Tarjeta: color, imagen y botones", "🎨"),
+    "card_reset": ("Tarjeta: restaurar la de ejemplo", "♻️"),
 }
+CARD_VARS = "`{user}` `{nombre}` `{server}` `{cosa}` `{rol}` `{vanity}` `{tareas}` `{tareas_link}`"
 
 
 class VanityPanel(Owned):
@@ -291,8 +309,19 @@ class VanityPanel(Owned):
         Config = await Store().Get(interaction.guild.id)
         if Key == "vanity":
             return await interaction.response.send_modal(TextModal(self.author, "vanity", "Texto de la vanity", Config["vanity"], 100))
-        if Key == "message":
-            return await interaction.response.send_modal(TextModal(self.author, "message", "Mensaje ({user}, {cosa}, {server})", Config["message"], 500, long=True))
+        if Key.startswith("card_"):
+            from core.community import Store as Community
+
+            Card = (await Community().Get(interaction.guild.id))["welcome"]
+            if Key == "card_reset":
+                from core.community import WELCOME
+
+                await Community().Reset(interaction.guild.id, "welcome", list(WELCOME))
+                return await ShowPanel(interaction, self.author, "♻️ Tarjeta restaurada a la de ejemplo.")
+            Modal = {"card_tag": CardTexts, "card_vanity": CardTexts, "card_body": CardBody, "card_look": CardLook}[Key]
+            return await interaction.response.send_modal(
+                Modal(self.author, Card, Key == "card_vanity") if Modal is CardTexts else Modal(self.author, Card)
+            )
         if Key == "benefits":
             return await interaction.response.send_modal(BenefitsModal(self.author, Config))
         await interaction.response.edit_message(content=f"**{SETTINGS[Key][0]}**", embed=None, view=PickTarget(self.author, Key))
@@ -307,17 +336,34 @@ class VanityPanel(Owned):
     async def Test(self, interaction: discord.Interaction, _):
         await interaction.response.edit_message(content="🔍 **¿A quién reviso?** Te digo qué ve el bot y qué falla.", embed=None, view=TestPick(self.author))
 
+    @discord.ui.button(label="Vista previa", emoji="👁️", style=discord.ButtonStyle.grey, row=1)
+    async def Preview(self, interaction: discord.Interaction, _):
+        """Both cards (TAG and vanity) with the admin as the member; only they see them."""
+        from cogs.Modules.Community.community import WelcomeValues, WelcomeView
+        from core.community import Store as Community, Variant
+
+        Card = await Community().Get(interaction.guild.id)
+        Config = await Store().Get(interaction.guild.id)
+        await interaction.response.defer(ephemeral=True, thinking=False)
+        for Tag in (True, False):
+            Role = interaction.guild.get_role(Config["tag_role" if Tag else "vanity_role"] or 0)
+            Values = WelcomeValues(interaction.user, [Role] if Role else [], not Tag, Tag, Config["vanity"], Card["board"])
+            await interaction.followup.send(
+                view=WelcomeView(interaction.user, Variant(Card["welcome"], Tag), Values, "**🏷️ Tarjeta del TAG**" if Tag else "**🔗 Tarjeta de la vanity**"),
+                ephemeral=True,
+                allowed_mentions=discord.AllowedMentions.none(),
+            )
+
     @discord.ui.button(label="Revisar ahora", emoji="🔄", style=discord.ButtonStyle.blurple, row=1)
     async def Rescan(self, interaction: discord.Interaction, _):
         await interaction.response.defer()
         Cog = interaction.client.get_cog("SupporterCog")
         Count = await Cog.ScanGuild(interaction.guild, force=True) if Cog else 0
-        from core.economy.config import EcoConfig
 
         Config = await Store().Get(interaction.guild.id)
         await interaction.edit_original_response(
             content=f"🔄 Revisado: **{Count}** miembro{'s' if Count != 1 else ''} lleva{'n' if Count != 1 else ''} la vanity o el tag.",
-            embed=PanelEmbed(interaction.guild, Config, await EcoConfig().Get(interaction.guild.id)), view=VanityPanel(self.author, Config),
+            embed=await FullEmbed(interaction.guild, Config), view=VanityPanel(self.author, Config),
         )
 
 
@@ -449,14 +495,100 @@ class BenefitsModal(discord.ui.Modal, title="Beneficios de economía"):
         await ShowPanel(interaction, self.author, "✅ Beneficios guardados. Pulsa **🔄 Revisar ahora** para aplicarlos a quienes ya cumplen.")
 
 
+def CardField(label, value, limit, long=True, required=False, placeholder=None):
+    return discord.ui.TextInput(
+        label=label[:45], default=value, max_length=limit, required=required, placeholder=placeholder,
+        style=discord.TextStyle.paragraph if long else discord.TextStyle.short,
+    )
+
+
+async def SaveCard(interaction: discord.Interaction, author, changes: dict):
+    from core.community import Store as Community
+
+    await Community().Set(interaction.guild.id, "welcome", changes)
+    await ShowPanel(interaction, author, f"✅ Tarjeta guardada. Pulsa **👁️ Vista previa**.\n-# Variables: {CARD_VARS}")
+
+
+class CardTexts(discord.ui.Modal):
+    """The texts that change between the TAG card and the vanity card."""
+
+    def __init__(self, author, card: dict, vanity: bool):
+        super().__init__(title="Tarjeta de la vanity" if vanity else "Tarjeta del TAG")
+        self.author, self.suffix = author, "_vanity" if vanity else ""
+        self.fields = {
+            "title": CardField("Título", card["title" + self.suffix], 200, long=False, required=True),
+            "intro": CardField("Primeras líneas ({rol}, {vanity}...)", card["intro" + self.suffix], 600),
+            "note": CardField("Nota pequeña", card["note" + self.suffix], 300),
+        }
+        for F in self.fields.values():
+            self.add_item(F)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        await SaveCard(interaction, self.author, {K + self.suffix: F.value.strip() for K, F in self.fields.items()})
+
+
+class CardBody(discord.ui.Modal, title="Beneficios y pie (las dos tarjetas)"):
+    def __init__(self, author, card: dict):
+        super().__init__()
+        self.author = author
+        self.benefits = CardField("Beneficios (uno por línea)", card["benefits"], 1500)
+        self.footer = CardField("Pie (bajo la línea)", card["footer"], 600)
+        self.add_item(self.benefits)
+        self.add_item(self.footer)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        await SaveCard(interaction, self.author, {"benefits": self.benefits.value.strip(), "footer": self.footer.value.strip()})
+
+
+class CardLook(discord.ui.Modal, title="Color, imagen y botones"):
+    def __init__(self, author, card: dict):
+        super().__init__()
+        self.author = author
+        self.color = CardField("Color (hex)", card["color"], 7, long=False, required=True, placeholder="#5865F2")
+        self.thumbnail = CardField("Imagen: avatar, servidor, ninguna o un enlace", card["thumbnail"], 400, long=False, required=True)
+        self.buttons = CardField("Botones: Etiqueta | emoji | #canal o enlace", card["buttons"], 600, placeholder="Contactar con staff | 🎟️ | #tickets")
+        for F in (self.color, self.thumbnail, self.buttons):
+            self.add_item(F)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        from core.community import ButtonUrl, ParseButtons, ValidColor
+
+        Color, Thumb = self.color.value.strip(), self.thumbnail.value.strip()
+        if not ValidColor(Color):
+            return await interaction.response.send_message("❌ El color va en hex, por ejemplo `#5865F2`.", ephemeral=True)
+        if Thumb not in ("avatar", "servidor", "ninguna") and not Thumb.startswith(("http://", "https://")):
+            return await interaction.response.send_message("❌ Imagen: `avatar`, `servidor`, `ninguna` o un enlace a una imagen.", ephemeral=True)
+        Lines = []
+        for Line in self.buttons.value.strip().splitlines():  # '#canal' by name becomes the channel's id so it survives renames
+            Parts = [P.strip() for P in Line.split("|")]
+            if len(Parts) >= 3 and Parts[2]:
+                Parts[2] = ResolveChannel(interaction.guild, Parts[2])
+            Lines.append(" | ".join(Parts))
+        Buttons = "\n".join(Lines)
+        Bad = [B["label"] for B in ParseButtons(Buttons) if B["target"] and "{" not in B["target"] and not ButtonUrl(B["target"], interaction.guild.id)]
+        if Bad:
+            return await interaction.response.send_message(
+                f"❌ No entiendo el destino de: **{', '.join(Bad)}**. Usa `#nombre-del-canal`, el ID del canal o un enlace `https://`.", ephemeral=True,
+            )
+        await SaveCard(interaction, self.author, {"color": Color if Color.startswith("#") else f"#{Color}", "thumbnail": Thumb, "buttons": Buttons})
+
+
+def ResolveChannel(guild: discord.Guild, target: str) -> str:
+    """'#tickets' or 'tickets' (by name) -> '<#id>'; anything else is left as is."""
+    Name = target.strip().lstrip("#").lower()
+    if not Name or target.strip().startswith(("http", "<#", "{")) or Name.isdigit():
+        return target.strip()
+    Channel = discord.utils.find(lambda C: C.name.lower() == Name, guild.channels)
+    return f"<#{Channel.id}>" if Channel else target.strip()
+
+
 async def OpenPanel(interaction: discord.Interaction):
     """Shown from /config (only the Tenno or server admins)."""
-    from core.economy.config import EcoConfig
 
     if not CanConfigure(interaction.user, await Mail().Get(interaction.guild.id)):
         return await interaction.followup.send("❌ Solo el Tenno (o un administrador) configura la vanity y el tag.", ephemeral=True)
     Config = await Store().Get(interaction.guild.id)
-    await interaction.edit_original_response(embed=PanelEmbed(interaction.guild, Config, await EcoConfig().Get(interaction.guild.id)), view=VanityPanel(interaction.user, Config))
+    await interaction.edit_original_response(embed=await FullEmbed(interaction.guild, Config), view=VanityPanel(interaction.user, Config))
 
 
 async def setup(client: commands.Bot) -> None:

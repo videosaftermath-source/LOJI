@@ -2,19 +2,8 @@
 
 Solo el Tenno o un administrador puede abrirlo.
 
-## 🏷️ Bienvenida a supporters
-La tarjeta que se envía en el **canal de anuncios de Vanity y tag** cuando alguien se pone el tag o la vanity
-(si está desactivada, se envía el mensaje simple de antes).
-
-- **Textos:** título, primeras líneas, beneficios (uno por línea), nota y pie.
-  Variables: `{user}` `{nombre}` `{server}` `{cosa}` `{rol}` `{vanity}` `{tareas}` `{tareas_link}`.
-  Una línea con `{rol}` o `{tareas}` vacíos no se muestra.
-- **Aspecto y botones:** color, imagen (`avatar`, `servidor`, `ninguna` o un enlace) y hasta 3 botones,
-  uno por línea: `Etiqueta | emoji | #canal o https://enlace`.
-- **Vista previa:** te la enseña a ti, sin publicar nada.
-
-Si el premio de la misión "Llevar el TAG" ya da monedas, pon el premio de bienvenida de Vanity y tag a 0
-para no pagar dos veces.
+La tarjeta de anuncio de supporters está en `/config` → **Vanity y tag** (ver `vanity.md`).
+Si la misión "Llevar el TAG" ya da monedas, pon el premio de bienvenida de Vanity y tag a 0 para no pagar dos veces.
 
 ## 🪙 Tablero de misiones
 Un mensaje fijo con banner, una fila por misión con botón **Reclamar** y **Ver mi progreso** (máximo 8 misiones).

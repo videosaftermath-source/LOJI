@@ -55,7 +55,7 @@ def test_config_sections_merge_defaults():
     run(Store.Set(G, "overflow", {"main": 10, "extra": 11}))
     Config = run(Store.Get(G))
     assert Config["overflow"]["main"] == 10 and Config["overflow"]["open_messages"] == OVERFLOW["open_messages"]
-    assert Config["welcome"]["enabled"] is True
+    assert Config["welcome"]["title_vanity"]
     run(Store.Reset(G, "overflow", ["main"]))
     assert run(Store.Get(G))["overflow"]["main"] is None
 
@@ -163,3 +163,12 @@ def test_board_fits_discord_limit():
     View = ui.LayoutView()
     View.add_item(Box)
     assert View.total_children_count <= 40 if hasattr(View, "total_children_count") else Count(View.to_components()) <= 40
+
+
+def test_one_card_per_reason():
+    from core.community import WELCOME, Variant
+
+    Tag, Vanity = Variant(WELCOME, True), Variant(WELCOME, False)
+    assert "TAG" in Tag["intro"] and "vanity" in Vanity["intro"]
+    assert Tag["benefits"] == Vanity["benefits"]  # same benefits either way
+    assert Vanity["note"] == WELCOME["note_vanity"]

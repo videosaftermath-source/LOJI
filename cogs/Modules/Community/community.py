@@ -1,4 +1,4 @@
-"""Comunidad: the supporter welcome card, the missions board and the overflow ("General 2") chat."""
+"""Comunidad: the missions board and the overflow ("General 2") chat, plus the supporter card (set up in Vanity y tag)."""
 
 import asyncio
 import logging
@@ -9,7 +9,7 @@ from discord import ui
 from discord.ext import commands, tasks
 
 from core.community import (
-    MAX_BOARD_QUESTS, ButtonUrl, ChannelId, CloseStep, Color, DropLinesWithEmpty, Fill, ParseButtons, Store, Title, Traffic,
+    MAX_BOARD_QUESTS, ButtonUrl, CloseStep, Variant, Color, DropLinesWithEmpty, Fill, ParseButtons, Store, Title, Traffic,
 )
 
 logger = logging.getLogger(__name__)
@@ -24,9 +24,7 @@ BAR = 8
 def WelcomeValues(member: discord.Member, roles: list, vanity: bool, tag: bool, vanity_text: str, board: dict) -> dict:
     from core.supporters import Slug
 
-    Thing = (
-        "nuestro **TAG** y nuestra **vanity**" if vanity and tag else "nuestra **vanity**" if vanity else "nuestro **TAG**"
-    )
+    Thing = "nuestro **TAG**" if tag else "nuestra **vanity**"  # one card per reason; both counts as the TAG
     BoardChannel = member.guild.get_channel(board.get("channel") or 0)
     return {
         "user": member.mention, "nombre": member.display_name, "server": member.guild.name, "cosa": Thing,
@@ -56,11 +54,13 @@ def LinkButtons(text: str, values: dict, guild_id: int) -> list[ui.Button]:
     return Buttons
 
 
-def WelcomeView(member: discord.Member, settings: dict, values: dict) -> ui.LayoutView:
+def WelcomeView(member: discord.Member, settings: dict, values: dict, heading: str | None = None) -> ui.LayoutView:
     def Text(key: str) -> str:
         return Fill(DropLinesWithEmpty(settings.get(key) or "", values), values).strip()
 
     View = ui.LayoutView(timeout=None)
+    if heading:  # previews say which card it is
+        View.add_item(ui.TextDisplay(heading))
     Box = ui.Container(accent_colour=Color(settings["color"]))
     Head = "\n".join(T for T in (Text("title"), Text("intro")) if T) or "‎"
     Image = Thumb(member, settings["thumbnail"])
@@ -80,16 +80,14 @@ def WelcomeView(member: discord.Member, settings: dict, values: dict) -> ui.Layo
     return View
 
 
-async def SendWelcome(member: discord.Member, channel, supporter_config: dict, vanity: bool, tag: bool) -> bool:
-    """The card from /config → Comunidad. False if it's off (the plain message is used then)."""
+async def SendWelcome(member: discord.Member, channel, supporter_config: dict, vanity: bool, tag: bool):
+    """The supporter announcement card: the TAG version if they wear the tag, otherwise the vanity one."""
     Config = await Store().Get(member.guild.id)
-    Settings = Config["welcome"]
-    if not Settings["enabled"]:
-        return False
+    Settings = Variant(Config["welcome"], tag)
     Roles = [R for R in (member.guild.get_role(supporter_config.get(K) or 0) for K, On in (("tag_role", tag), ("vanity_role", vanity)) if On) if R]
+    Roles = list(dict.fromkeys(Roles))  # the same role for both shows once
     Values = WelcomeValues(member, Roles, vanity, tag, supporter_config.get("vanity") or "", Config["board"])
     await channel.send(view=WelcomeView(member, Settings, Values), allowed_mentions=discord.AllowedMentions(users=[member], roles=False))
-    return True
 
 
 # ======================= missions board =======================

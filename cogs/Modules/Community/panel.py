@@ -2,11 +2,10 @@
 
 import discord
 
-from core.community import MAX_BOARD_QUESTS, WELCOME, ButtonUrl, ParseButtons, Store, ValidColor
+from core.community import MAX_BOARD_QUESTS, Store, ValidColor
 
 LOJI_RED = discord.Color.from_rgb(150, 12, 18)
 TIMEOUT = 600
-WELCOME_VARS = "`{user}` `{nombre}` `{server}` `{cosa}` `{rol}` `{vanity}` `{tareas}` `{tareas_link}`"
 
 
 class Owned(discord.ui.View):
@@ -38,15 +37,9 @@ async def MainEmbed(guild: discord.Guild) -> discord.Embed:
     from cogs.Modules.Community.community import BoardQuests
 
     C = await Store().Get(guild.id)
-    W, B, O = C["welcome"], C["board"], C["overflow"]
+    B, O = C["board"], C["overflow"]
     embed = discord.Embed(title="🌸 Comunidad", color=LOJI_RED)
-    embed.description = "Mensajes y sistemas para la comunidad. Todo se personaliza aquí."
-    embed.add_field(
-        name="🏷️ Bienvenida a supporters",
-        value=("✅ Activada" if W["enabled"] else "⏸️ Desactivada (se usa el mensaje simple)")
-        + "\n-# La tarjeta que sale cuando alguien se pone el tag o la vanity.",
-        inline=False,
-    )
+    embed.description = "Sistemas para la comunidad. La tarjeta de supporters está en `/config` → **Vanity y tag**."
     Count = len(await BoardQuests(guild.id))
     embed.add_field(
         name="🪙 Tablero de misiones",
@@ -64,10 +57,6 @@ async def MainEmbed(guild: discord.Guild) -> discord.Embed:
 
 
 class MainPanel(Owned):
-    @discord.ui.button(label="Bienvenida supporters", emoji="🏷️", style=discord.ButtonStyle.blurple)
-    async def Welcome(self, interaction: discord.Interaction, _):
-        await WelcomePanel.Open(interaction, self.author)
-
     @discord.ui.button(label="Tablero de misiones", emoji="🪙", style=discord.ButtonStyle.blurple)
     async def Board(self, interaction: discord.Interaction, _):
         await BoardPanel.Open(interaction, self.author)
@@ -98,144 +87,11 @@ class Back(discord.ui.Button):
         await MainPanel.Open(interaction, self.view.author)
 
 
-# ======================= welcome =======================
-
-
-def WelcomeEmbed(guild, W: dict) -> discord.Embed:
-    embed = discord.Embed(title="🏷️ Bienvenida a supporters", color=LOJI_RED)
-    embed.description = (
-        ("✅ **Activada.**" if W["enabled"] else "⏸️ **Desactivada:** se envía el mensaje simple de `/config` → Vanity y tag.")
-        + "\nSe envía al **canal de anuncios** de Vanity y tag cuando alguien se pone el tag o la vanity.\n"
-        "Pulsa **Vista previa** para verla contigo."
-    )
-    embed.add_field(name="Título", value=W["title"][:1024], inline=False)
-    embed.add_field(name="Beneficios", value=W["benefits"][:1024] or "—", inline=False)
-    Buttons = ParseButtons(W["buttons"])
-    embed.add_field(
-        name="Botones",
-        value="\n".join(f"{B['emoji'] or ''} {B['label']} → {B['target'] or '*sin destino: no se muestra*'}" for B in Buttons)[:1024] or "—",
-        inline=False,
-    )
-    embed.add_field(name="Aspecto", value=f"Color `{W['color']}` · Imagen: `{W['thumbnail']}`", inline=False)
-    embed.add_field(name="Variables", value=WELCOME_VARS + "\n-# Una línea con `{rol}` o `{tareas}` vacíos no se muestra.", inline=False)
-    return embed
-
-
-class WelcomePanel(Owned):
-    def __init__(self, author, W: dict):
-        super().__init__(author)
-        self.Toggle.label = "Desactivar" if W["enabled"] else "Activar"
-        self.add_item(Back(row=1))
-
-    @classmethod
-    async def Open(cls, interaction, author, note=None):
-        W = (await Store().Get(interaction.guild.id))["welcome"]
-        await Show(interaction, WelcomeEmbed(interaction.guild, W), cls(author, W), note)
-
-    @discord.ui.button(label="Textos", emoji="✏️", style=discord.ButtonStyle.blurple, row=0)
-    async def Texts(self, interaction: discord.Interaction, _):
-        W = (await Store().Get(interaction.guild.id))["welcome"]
-        await interaction.response.send_modal(WelcomeTexts(self.author, W))
-
-    @discord.ui.button(label="Aspecto y botones", emoji="🎨", style=discord.ButtonStyle.blurple, row=0)
-    async def Look(self, interaction: discord.Interaction, _):
-        W = (await Store().Get(interaction.guild.id))["welcome"]
-        await interaction.response.send_modal(WelcomeLook(self.author, W))
-
-    @discord.ui.button(label="Vista previa", emoji="👁️", style=discord.ButtonStyle.grey, row=0)
-    async def Preview(self, interaction: discord.Interaction, _):
-        from cogs.Modules.Community.community import WelcomeValues, WelcomeView
-        from core.supporters import DEFAULTS
-        from cogs.Modules.Supporters.supporters import Store as Supporters
-
-        C = await Store().Get(interaction.guild.id)
-        S = await Supporters().Get(interaction.guild.id)
-        Role = interaction.guild.get_role(S.get("tag_role") or 0)
-        Values = WelcomeValues(interaction.user, [Role] if Role else [], False, True, S.get("vanity") or DEFAULTS["vanity"], C["board"])
-        await interaction.response.send_message(
-            view=WelcomeView(interaction.user, C["welcome"], Values), ephemeral=True, allowed_mentions=discord.AllowedMentions.none(),
-        )
-
-    @discord.ui.button(label="Desactivar", emoji="⏯️", style=discord.ButtonStyle.grey, row=1)
-    async def Toggle(self, interaction: discord.Interaction, _):
-        W = (await Store().Get(interaction.guild.id))["welcome"]
-        await Store().Set(interaction.guild.id, "welcome", {"enabled": not W["enabled"]})
-        await WelcomePanel.Open(interaction, self.author, "✅ Activada." if not W["enabled"] else "⏸️ Desactivada.")
-
-    @discord.ui.button(label="Restaurar", emoji="♻️", style=discord.ButtonStyle.red, row=1)
-    async def Reset(self, interaction: discord.Interaction, _):
-        await Store().Reset(interaction.guild.id, "welcome", [K for K in WELCOME if K != "enabled"])
-        await WelcomePanel.Open(interaction, self.author, "♻️ Textos y aspecto restaurados.")
-
-
 def Field(label, value, limit, long=True, required=False, placeholder=None):
     return discord.ui.TextInput(
         label=label[:45], default=value, max_length=limit, required=required, placeholder=placeholder,
         style=discord.TextStyle.paragraph if long else discord.TextStyle.short,
     )
-
-
-class WelcomeTexts(discord.ui.Modal, title="Textos de la bienvenida"):
-    def __init__(self, author, W):
-        super().__init__()
-        self.author = author
-        self.fields = {
-            "title": Field("Título", W["title"], 200, long=False, required=True),
-            "intro": Field("Primeras líneas ({rol}, {cosa})", W["intro"], 600),
-            "benefits": Field("Beneficios (uno por línea)", W["benefits"], 1500),
-            "note": Field("Nota pequeña", W["note"], 300),
-            "footer": Field("Pie (bajo la línea)", W["footer"], 600),
-        }
-        for F in self.fields.values():
-            self.add_item(F)
-
-    async def on_submit(self, interaction: discord.Interaction):
-        await Store().Set(interaction.guild.id, "welcome", {K: F.value.strip() for K, F in self.fields.items()})
-        await WelcomePanel.Open(interaction, self.author, "✅ Textos guardados. Mira la **Vista previa**.")
-
-
-class WelcomeLook(discord.ui.Modal, title="Aspecto y botones"):
-    def __init__(self, author, W):
-        super().__init__()
-        self.author = author
-        self.color = Field("Color (hex)", W["color"], 7, long=False, required=True, placeholder="#5865F2")
-        self.thumbnail = Field("Imagen: avatar, servidor, ninguna o un enlace", W["thumbnail"], 400, long=False, required=True)
-        self.buttons = Field("Botones: Etiqueta | emoji | #canal o enlace", W["buttons"], 600, placeholder="Contactar con staff | 🎟️ | #tickets")
-        for F in (self.color, self.thumbnail, self.buttons):
-            self.add_item(F)
-
-    async def on_submit(self, interaction: discord.Interaction):
-        Color, Thumb = self.color.value.strip(), self.thumbnail.value.strip()
-        if not ValidColor(Color):
-            return await interaction.response.send_message("❌ El color va en hex, por ejemplo `#5865F2`.", ephemeral=True)
-        if Thumb not in ("avatar", "servidor", "ninguna") and not Thumb.startswith(("http://", "https://")):
-            return await interaction.response.send_message("❌ Imagen: `avatar`, `servidor`, `ninguna` o un enlace a una imagen.", ephemeral=True)
-        Buttons = self.buttons.value.strip()
-        Bad = [
-            B["label"] for B in ParseButtons(Buttons)
-            if B["target"] and "{" not in B["target"] and not ButtonUrl(ResolveChannel(interaction.guild, B["target"]), interaction.guild.id)
-        ]
-        if Bad:
-            return await interaction.response.send_message(
-                f"❌ No entiendo el destino de: **{', '.join(Bad)}**. Usa `#nombre-del-canal`, el ID del canal o un enlace `https://`.", ephemeral=True,
-            )
-        Lines = []
-        for Line in Buttons.splitlines():  # '#canal' by name becomes the channel's id so it survives renames
-            Parts = [P.strip() for P in Line.split("|")]
-            if len(Parts) >= 3 and Parts[2]:
-                Parts[2] = ResolveChannel(interaction.guild, Parts[2])
-            Lines.append(" | ".join(Parts))
-        await Store().Set(interaction.guild.id, "welcome", {"color": Color if Color.startswith("#") else f"#{Color}", "thumbnail": Thumb, "buttons": "\n".join(Lines)})
-        await WelcomePanel.Open(interaction, self.author, "✅ Guardado. Mira la **Vista previa**.")
-
-
-def ResolveChannel(guild: discord.Guild, target: str) -> str:
-    """'#tickets' or 'tickets' (by name) -> '<#id>'; anything else is left as is."""
-    Name = target.strip().lstrip("#").lower()
-    if not Name or target.strip().startswith(("http", "<#", "{")) or Name.isdigit():
-        return target.strip()
-    Channel = discord.utils.find(lambda C: C.name.lower() == Name, guild.channels)
-    return f"<#{Channel.id}>" if Channel else target.strip()
 
 
 # ======================= board =======================
