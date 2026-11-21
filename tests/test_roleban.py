@@ -68,3 +68,25 @@ def test_roleban_remembers_its_channel():
     run(S.Start(G, 5, [], by=9, reason="x", slot={"channel": 71, "role": 8}))
     Doc = run(S.Active(G, 5))
     assert (Doc["channel"], Doc["role"]) == (71, 8)
+
+
+def test_bulk_ids_from_mentions_and_ids():
+    from cogs.Modules.roleban import ParseIds
+
+    Text = "<@123456789012345678>, <@!223456789012345678> 323456789012345678\n123456789012345678 hola 42"
+    assert ParseIds(Text) == [123456789012345678, 223456789012345678, 323456789012345678]
+
+
+def test_who_can_be_quarantined():
+    from cogs.Modules.roleban import CanQuarantine
+
+    Me = N(top_role=10)
+    Guild = N(owner_id=1, me=Me)
+    Mod = N(id=2, top_role=8)
+    def M(id, top, bot=False):
+        return N(id=id, top_role=top, bot=bot, mention=f"<@{id}>")
+    assert CanQuarantine(Guild, Mod, M(3, 1)) is None
+    assert "tuyo" in CanQuarantine(Guild, Mod, M(3, 8))
+    assert CanQuarantine(Guild, Mod, M(1, 1))  # the owner
+    assert CanQuarantine(Guild, Mod, M(4, 1, bot=True))
+    assert "mío" in CanQuarantine(Guild, N(id=1, top_role=99), M(5, 12))

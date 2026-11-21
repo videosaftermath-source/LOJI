@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+import re
 from datetime import timezone
 
 import discord
@@ -23,6 +24,37 @@ def Store() -> Rolebans:
 
         _store = Rolebans(db)
     return _store
+
+
+MAX_BULK = 25
+WARNING = "El staff te explicará el motivo por aquí.\n⚠️ **SI SALES DEL SERVIDOR SERÁS BANEADO.**"
+
+
+def ParseIds(text: str) -> list[int]:
+    """Mentions or IDs in any order and separator, without repeats."""
+    return list(dict.fromkeys(int(I) for I in re.findall(r"\d{15,21}", text or "")))
+
+
+def PickSlot(guild: discord.Guild, config: dict, canal: str) -> tuple[dict | None, str | None]:
+    Available = Slots(config)
+    if not Available:
+        return None, "❌ Falta configurarlo: `/roleban configurar`."
+    Slot = next((S for S in Available if str(S["channel"]) == (canal or "").strip().strip("<#>")), None)
+    if not Slot:
+        return None, "❌ Elige uno de los canales de cuarentena de la lista."
+    if not guild.get_role(Slot["role"]):
+        return None, "❌ El rol de ese canal de cuarentena ya no existe: vuelve a configurarlo."
+    return Slot, None
+
+
+def CanQuarantine(guild: discord.Guild, mod, member) -> str | None:
+    if member.bot or member.id in (mod.id, guild.owner_id):
+        return f"❌ {member.mention}: no se le puede poner cuarentena."
+    if member.top_role >= mod.top_role and mod.id != guild.owner_id:
+        return f"❌ {member.mention}: tiene un rol igual o más alto que el tuyo."
+    if member.top_role >= guild.me.top_role:
+        return f"❌ {member.mention}: tiene un rol igual o más alto que el mío."
+    return None
 
 
 def SlotsText(guild: discord.Guild, slots: list[dict], log: int | None) -> str:
@@ -131,44 +163,24 @@ class Roleban(commands.Cog):
     @app_commands.autocomplete(canal=ChannelChoices)
     @Permissions("Staff")
     async def add(self, interaction: discord.Interaction, usuario: discord.Member, canal: str, motivo: app_commands.Range[str, 1, 500] = "Sin motivo"):
-        Guild, Mod, Me = interaction.guild, interaction.user, interaction.guild.me
+        Guild = interaction.guild
         Config = await Store().Config(Guild.id)
-        Available = Slots(Config)
-        if not Available:
-            return await interaction.response.send_message("❌ Falta configurarlo: `/roleban configurar`.", ephemeral=True)
-        Slot = next((S for S in Available if str(S["channel"]) == canal.strip().strip("<#>")), None)
-        if not Slot:
-            return await interaction.response.send_message("❌ Elige uno de los canales de cuarentena de la lista.", ephemeral=True)
-        Quarantine = Guild.get_role(Slot["role"])
-        if not Quarantine:
-            return await interaction.response.send_message("❌ El rol de ese canal de cuarentena ya no existe: vuelve a configurarlo.", ephemeral=True)
-        if usuario.bot or usuario.id in (Mod.id, Guild.owner_id):
-            return await interaction.response.send_message("❌ No puedes ponerle cuarentena a esa persona.", ephemeral=True)
-        if usuario.top_role >= Mod.top_role and Mod.id != Guild.owner_id:
-            return await interaction.response.send_message("❌ No puedes: tiene un rol igual o más alto que el tuyo.", ephemeral=True)
-        if usuario.top_role >= Me.top_role:
-            return await interaction.response.send_message("❌ No puedo: tiene un rol igual o más alto que el mío.", ephemeral=True)
+        Slot, Problem = PickSlot(Guild, Config, canal)
+        if Problem:
+            return await interaction.response.send_message(Problem, ephemeral=True)
+        Problem = CanQuarantine(Guild, interaction.user, usuario)
+        if Problem:
+            return await interaction.response.send_message(Problem, ephemeral=True)
         await interaction.response.defer()
-        async with self.Lock(Guild.id, usuario.id):
-            if await Store().Active(Guild.id, usuario.id):
-                return await interaction.followup.send(f"❌ {usuario.mention} ya está en cuarentena.", allowed_mentions=discord.AllowedMentions.none())
-            Remove, Keep = Plan(usuario.roles, Quarantine.id, Me.top_role.position)
-            Doc = await Store().Start(Guild.id, usuario.id, Remove, Mod.id, motivo, Slot)
-            if not Doc:
-                return await interaction.followup.send(f"❌ {usuario.mention} ya está en cuarentena.", allowed_mentions=discord.AllowedMentions.none())
-            try:
-                await usuario.edit(roles=Keep + [Quarantine], reason=f"Roleban por {Mod} ({Mod.id}): {motivo}"[:512])
-            except discord.HTTPException as e:
-                await Store().End(Guild.id, usuario.id, "failed", Mod.id, str(e))
-                return await interaction.followup.send(f"❌ No pude cambiarle los roles: {e.text or e}")
+        Doc, Keep, Problem = await self.Apply(Guild, interaction.user, usuario, Slot, motivo)
+        if Problem:
+            return await interaction.followup.send(Problem, allowed_mentions=discord.AllowedMentions.none())
         Saved = Doc["roles"]
         Channel = Guild.get_channel(Slot["channel"])
         if Channel:
             try:
                 await Channel.send(
-                    f"{usuario.mention}, has sido puesto en **cuarentena** (roleban).\n"
-                    "El staff te explicará el motivo por aquí.\n"
-                    "⚠️ **SI SALES DEL SERVIDOR SERÁS BANEADO.**",
+                    f"{usuario.mention}, has sido puesto en **cuarentena** (roleban).\n" + WARNING,
                     embed=RolesEmbed(usuario, Saved, "🔒 Roles retirados"),
                     allowed_mentions=discord.AllowedMentions(users=[usuario]),
                 )
@@ -182,11 +194,91 @@ class Roleban(commands.Cog):
         await interaction.followup.send(embed=Done, allowed_mentions=discord.AllowedMentions.none())
         Log = RolesEmbed(usuario, Saved, "🔒 Roleban")
         Log.add_field(name="Usuario", value=f"{usuario.mention} (`{usuario.id}`)", inline=True)
-        Log.add_field(name="Moderador", value=Mod.mention, inline=True)
+        Log.add_field(name="Moderador", value=interaction.user.mention, inline=True)
         Log.add_field(name="Canal", value=f"<#{Slot['channel']}>", inline=True)
         Log.add_field(name="Motivo", value=motivo[:1024], inline=False)
         Log.timestamp = discord.utils.utcnow()
         await self.Log(Guild, Config, Log)
+
+    async def Apply(self, guild: discord.Guild, mod, member: discord.Member, slot: dict, reason: str):
+        """Takes the roles and saves them. (roleban, roles that stay, problem)."""
+        Quarantine = guild.get_role(slot["role"])
+        async with self.Lock(guild.id, member.id):
+            if await Store().Active(guild.id, member.id):
+                return None, [], f"❌ {member.mention} ya está en cuarentena."
+            Remove, Keep = Plan(member.roles, Quarantine.id, guild.me.top_role.position)
+            Doc = await Store().Start(guild.id, member.id, Remove, mod.id, reason, slot)
+            if not Doc:
+                return None, [], f"❌ {member.mention} ya está en cuarentena."
+            try:
+                await member.edit(roles=Keep + [Quarantine], reason=f"Roleban por {mod} ({mod.id}): {reason}"[:512])
+            except discord.HTTPException as e:
+                await Store().End(guild.id, member.id, "failed", mod.id, str(e))
+                return None, [], f"❌ {member.mention}: no pude cambiarle los roles ({e.text or e})"
+        return Doc, Keep, None
+
+    @roleban.command(name="varios", description="Cuarentena para varios a la vez (raids): menciones o IDs")
+    @app_commands.describe(
+        usuarios=f"Menciones o IDs separados por espacios o comas (máximo {MAX_BULK})",
+        canal="A qué canal de cuarentena van", motivo="Por qué (queda en el registro)",
+    )
+    @app_commands.autocomplete(canal=ChannelChoices)
+    @Permissions("Staff")
+    async def varios(self, interaction: discord.Interaction, usuarios: str, canal: str, motivo: app_commands.Range[str, 1, 500] = "Raid"):
+        Guild, Mod = interaction.guild, interaction.user
+        Config = await Store().Config(Guild.id)
+        Slot, Problem = PickSlot(Guild, Config, canal)
+        if Problem:
+            return await interaction.response.send_message(Problem, ephemeral=True)
+        Ids = ParseIds(usuarios)
+        if not Ids:
+            return await interaction.response.send_message("❌ No encontré ninguna mención ni ID.", ephemeral=True)
+        if len(Ids) > MAX_BULK:
+            return await interaction.response.send_message(f"❌ Máximo {MAX_BULK} a la vez (pusiste {len(Ids)}).", ephemeral=True)
+        await interaction.response.defer()
+        Done, Failed = [], []
+        for Id in Ids:
+            Member = Guild.get_member(Id)
+            if not Member:
+                try:
+                    Member = await Guild.fetch_member(Id)
+                except discord.HTTPException:
+                    Failed.append(f"`{Id}`: no está en el servidor")
+                    continue
+            Problem = CanQuarantine(Guild, Mod, Member)
+            if not Problem:
+                Doc, _, Problem = await self.Apply(Guild, Mod, Member, Slot, motivo)
+            if Problem:
+                Failed.append(f"{Member.mention}: {Problem.removeprefix('❌ ').replace(Member.mention, '').strip(' :.') or 'no se pudo'}")
+            else:
+                Done.append((Member, Doc))
+        if Done:
+            Channel = Guild.get_channel(Slot["channel"])
+            if Channel:
+                try:
+                    await Channel.send(
+                        " ".join(M.mention for M, _ in Done) + "\nHabéis sido puestos en **cuarentena** (roleban).\n" + WARNING,
+                        allowed_mentions=discord.AllowedMentions(users=[M for M, _ in Done]),
+                    )
+                except discord.HTTPException as e:
+                    logger.warning(f"[Roleban] Can't post in the quarantine channel: {e}")
+        Summary = discord.Embed(title="🔒 Cuarentena masiva", color=LOJI_RED)
+        Summary.description = f"Canal: <#{Slot['channel']}>"
+        Summary.add_field(
+            name=f"✅ En cuarentena ({len(Done)})",
+            value="\n".join(f"{M.mention} · {len(D['roles'])} rol{'es' if len(D['roles']) != 1 else ''}" for M, D in Done)[:1024] or "—",
+            inline=False,
+        )
+        if Failed:
+            Summary.add_field(name=f"❌ No se pudo ({len(Failed)})", value="\n".join(Failed)[:1024], inline=False)
+        await interaction.followup.send(embed=Summary, allowed_mentions=discord.AllowedMentions.none())
+        if Done:
+            Log = Summary.copy()
+            Log.add_field(name="Moderador", value=Mod.mention, inline=True)
+            Log.add_field(name="Motivo", value=motivo[:1024], inline=False)
+            Log.set_footer(text="Los roles de cada uno: /roleban ver")
+            Log.timestamp = discord.utils.utcnow()
+            await self.Log(Guild, Config, Log)
 
     # ---------------- pardon ----------------
 
