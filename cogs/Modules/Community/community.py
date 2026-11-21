@@ -90,6 +90,57 @@ async def SendWelcome(member: discord.Member, channel, supporter_config: dict, v
     await channel.send(view=WelcomeView(member, Settings, Values), allowed_mentions=discord.AllowedMentions(users=[member], roles=False))
 
 
+# ======================= boost card =======================
+
+
+def BoostValues(member: discord.Member, eco: dict, board: dict) -> dict:
+    """Variables for the boost card. The economy ones are empty when the booster perks are off (their lines hide)."""
+    from core.economy.rewards import FormatAmount
+
+    Booster = eco["booster"]
+    On = Booster["enabled"]
+    Since = member.premium_since or discord.utils.utcnow()
+    BoardChannel = member.guild.get_channel(board.get("channel") or 0)
+    Extra = round((float(Booster["multiplier"]) - 1) * 100)
+    return {
+        "user": member.mention, "nombre": member.display_name, "server": member.guild.name,
+        "fecha": discord.utils.format_dt(Since, "D"), "boosts": str(member.guild.premium_subscription_count or 0),
+        "multiplicador": f"+{Extra} %" if On and Extra > 0 else "",
+        "suerte": f"+{round(float(Booster['gacha_luck']) * 100)} %" if On and Booster["gacha_luck"] > 0 else "",
+        "premio": FormatAmount(int(Booster["reward"]), eco) if On and Booster["reward"] > 0 else "",
+        "tareas": BoardChannel.mention if BoardChannel else "",
+        "tareas_link": BoardChannel.jump_url if BoardChannel else "",
+    }
+
+
+async def BoostCard(member: discord.Member, heading: str | None = None) -> ui.LayoutView:
+    from core.economy.config import EcoConfig
+
+    Config = await Store().Get(member.guild.id)
+    return WelcomeView(member, Config["boost"], BoostValues(member, await EcoConfig().Get(member.guild.id), Config["board"]), heading)
+
+
+async def AnnounceBoost(member: discord.Member) -> bool:
+    """Posts the card once per boost. True if it was posted."""
+    from core.db import db
+    from core.community import BOOST_SEEN
+
+    Settings = (await Store().Get(member.guild.id))["boost"]
+    Channel = member.guild.get_channel(Settings["channel"] or 0)
+    if not Settings["enabled"] or not Channel or not member.premium_since:
+        return False
+    Since = int(member.premium_since.timestamp())
+    Key = f"{member.guild.id}:{member.id}"
+    Done = await db[BOOST_SEEN].update_one({"_id": Key, "since": {"$ne": Since}}, {"$set": {"since": Since}}, upsert=False)
+    if not Done.matched_count:
+        try:
+            await db[BOOST_SEEN].insert_one({"_id": Key, "since": Since})
+        except Exception:
+            return False  # this boost was already announced
+    await Channel.send(view=await BoostCard(member), allowed_mentions=discord.AllowedMentions(users=[member], roles=False))
+    return True
+
+
 # ======================= missions board =======================
 
 
@@ -296,6 +347,15 @@ class Community(commands.Cog):
 
     def Lock(self, guild_id: int) -> asyncio.Lock:
         return self.locks.setdefault(guild_id, asyncio.Lock())
+
+    @commands.Cog.listener()
+    async def on_member_update(self, before: discord.Member, after: discord.Member):
+        if after.premium_since is None or before.premium_since == after.premium_since:
+            return
+        try:
+            await AnnounceBoost(after)
+        except Exception as e:
+            logger.warning(f"[Community] Boost card for {after.id} failed: {e!r}")
 
     @commands.Cog.listener()
     async def on_quests_changed(self, guild_id: int):

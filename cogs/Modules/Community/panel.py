@@ -47,6 +47,13 @@ async def MainEmbed(guild: discord.Guild) -> discord.Embed:
         + f" · {Count} misión{'es' if Count != 1 else ''}\n-# Las misiones con botón de reclamar, en un canal.",
         inline=False,
     )
+    Boost = C["boost"]
+    embed.add_field(
+        name="💎 Boosts",
+        value=("✅ Activado" if Boost["enabled"] else "⏸️ Desactivado") + f" · {Where(guild, Boost['channel'])}"
+        + "\n-# Tarjeta de agradecimiento cuando alguien boostea.",
+        inline=False,
+    )
     embed.add_field(
         name="💬 Chat extra (General 2)",
         value=(("🟢 Abierto ahora" if O["is_open"] else "✅ Activado") if O["enabled"] else "⏸️ Desactivado")
@@ -60,6 +67,10 @@ class MainPanel(Owned):
     @discord.ui.button(label="Tablero de misiones", emoji="🪙", style=discord.ButtonStyle.blurple)
     async def Board(self, interaction: discord.Interaction, _):
         await BoardPanel.Open(interaction, self.author)
+
+    @discord.ui.button(label="Boosts", emoji="💎", style=discord.ButtonStyle.blurple)
+    async def Boost(self, interaction: discord.Interaction, _):
+        await BoostPanel.Open(interaction, self.author)
 
     @discord.ui.button(label="Chat extra", emoji="💬", style=discord.ButtonStyle.blurple)
     async def Overflow(self, interaction: discord.Interaction, _):
@@ -403,3 +414,138 @@ class OverflowTexts(discord.ui.Modal, title="Mensajes del chat extra"):
         await OverflowPanel.Open(
             interaction, self.author, "✅ Mensajes guardados. Variables: `{principal}` `{extra}` `{server}`.",
         )
+
+
+# ======================= boost card =======================
+
+
+def BoostEmbed(guild, B: dict) -> discord.Embed:
+    from core.community import BOOST_VARS, ParseButtons
+
+    embed = discord.Embed(title="💎 Tarjeta de boost", color=LOJI_RED)
+    embed.description = (
+        ("✅ **Activada.**" if B["enabled"] else "⏸️ **Desactivada.**")
+        + " Cuando alguien boostea, LOJI publica la tarjeta en el canal elegido (una vez por boost).\n"
+        "Las ventajas por defecto son las de la **economía** (`/config` → Economía → Boosters): si las cambias allí, la tarjeta se actualiza sola.\n"
+        "Pulsa **Vista previa** para verla contigo."
+    )
+    embed.add_field(name="Canal", value=Where(guild, B["channel"]), inline=True)
+    embed.add_field(name="Aspecto", value=f"Color `{B['color']}` · Imagen: `{B['thumbnail']}`", inline=True)
+    embed.add_field(name="Título", value=B["title"][:1024], inline=False)
+    embed.add_field(name="Ventajas", value=B["benefits"][:1024] or "—", inline=False)
+    Buttons = ParseButtons(B["buttons"])
+    embed.add_field(
+        name="Botones",
+        value="\n".join(f"{X['emoji'] or ''} {X['label']} → {X['target'] or '*sin destino: no se muestra*'}" for X in Buttons)[:1024] or "—",
+        inline=False,
+    )
+    embed.add_field(name="Variables", value=BOOST_VARS + "\n-# Una línea con una variable vacía no se muestra (p. ej. `{premio}` si no hay premio).", inline=False)
+    return embed
+
+
+class BoostPanel(Owned):
+    def __init__(self, author, B: dict):
+        super().__init__(author)
+        Pick = discord.ui.ChannelSelect(placeholder="📍 Canal donde se anuncia", channel_types=[discord.ChannelType.text, discord.ChannelType.news], row=0)
+        Pick.callback = self.PickChannel
+        self.add_item(Pick)
+        self.Toggle.label = "Desactivar" if B["enabled"] else "Activar"
+        self.add_item(Back(row=2))
+
+    @classmethod
+    async def Open(cls, interaction, author, note=None):
+        B = (await Store().Get(interaction.guild.id))["boost"]
+        await Show(interaction, BoostEmbed(interaction.guild, B), cls(author, B), note)
+
+    async def PickChannel(self, interaction: discord.Interaction):
+        await Store().Set(interaction.guild.id, "boost", {"channel": int(interaction.data["values"][0])})
+        await BoostPanel.Open(interaction, self.author, "✅ Canal guardado.")
+
+    @discord.ui.button(label="Activar", emoji="⏯️", style=discord.ButtonStyle.green, row=1)
+    async def Toggle(self, interaction: discord.Interaction, _):
+        B = (await Store().Get(interaction.guild.id))["boost"]
+        if not B["enabled"] and not interaction.guild.get_channel(B["channel"] or 0):
+            return await BoostPanel.Open(interaction, self.author, "❌ Elige primero el canal.")
+        await Store().Set(interaction.guild.id, "boost", {"enabled": not B["enabled"]})
+        await BoostPanel.Open(interaction, self.author, "✅ Activada." if not B["enabled"] else "⏸️ Desactivada.")
+
+    @discord.ui.button(label="Textos", emoji="✏️", style=discord.ButtonStyle.blurple, row=1)
+    async def Texts(self, interaction: discord.Interaction, _):
+        B = (await Store().Get(interaction.guild.id))["boost"]
+        await interaction.response.send_modal(BoostTexts(self.author, B))
+
+    @discord.ui.button(label="Aspecto y botones", emoji="🎨", style=discord.ButtonStyle.blurple, row=1)
+    async def Look(self, interaction: discord.Interaction, _):
+        B = (await Store().Get(interaction.guild.id))["boost"]
+        await interaction.response.send_modal(CardLook(self.author, B, "boost", BoostPanel))
+
+    @discord.ui.button(label="Vista previa", emoji="👁️", style=discord.ButtonStyle.grey, row=1)
+    async def Preview(self, interaction: discord.Interaction, _):
+        from cogs.Modules.Community.community import BoostCard
+
+        await interaction.response.send_message(
+            view=await BoostCard(interaction.user, "-# Vista previa (como si acabaras de boostear)"), ephemeral=True,
+            allowed_mentions=discord.AllowedMentions.none(),
+        )
+
+    @discord.ui.button(label="Restaurar", emoji="♻️", style=discord.ButtonStyle.red, row=1)
+    async def Reset(self, interaction: discord.Interaction, _):
+        from core.community import BOOST
+
+        await Store().Reset(interaction.guild.id, "boost", [K for K in BOOST if K not in ("enabled", "channel")])
+        await BoostPanel.Open(interaction, self.author, "♻️ Textos y aspecto restaurados.")
+
+
+class BoostTexts(discord.ui.Modal, title="Textos de la tarjeta de boost"):
+    def __init__(self, author, B):
+        super().__init__()
+        self.author = author
+        self.fields = {
+            "title": Field("Título", B["title"], 200, long=False, required=True),
+            "intro": Field("Línea bajo el título ({fecha}...)", B["intro"], 400),
+            "benefits": Field("Ventajas (una por línea)", B["benefits"], 1500),
+            "footer": Field("Pie (bajo la línea)", B["footer"], 600),
+        }
+        for F in self.fields.values():
+            self.add_item(F)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        await Store().Set(interaction.guild.id, "boost", {K: F.value.strip() for K, F in self.fields.items()})
+        await BoostPanel.Open(interaction, self.author, "✅ Textos guardados. Mira la **Vista previa**.")
+
+
+class CardLook(discord.ui.Modal, title="Color, imagen y botones"):
+    """Shared by the cards in Comunidad: saves color, image and link buttons of one section."""
+
+    def __init__(self, author, card: dict, section: str, panel):
+        super().__init__()
+        self.author, self.section, self.panel = author, section, panel
+        self.color = Field("Color (hex)", card["color"], 7, long=False, required=True, placeholder="#F47FFF")
+        self.thumbnail = Field("Imagen: avatar, servidor, ninguna o un enlace", card["thumbnail"], 400, long=False, required=True)
+        self.buttons = Field("Botones: Etiqueta | emoji | #canal o enlace", card["buttons"], 600, placeholder="Roles especiales | ✨ | #booster-roles")
+        for F in (self.color, self.thumbnail, self.buttons):
+            self.add_item(F)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        from cogs.Modules.Supporters.supporters import ResolveChannel
+        from core.community import ButtonUrl, ParseButtons
+
+        Color, Thumb = self.color.value.strip(), self.thumbnail.value.strip()
+        if not ValidColor(Color):
+            return await interaction.response.send_message("❌ El color va en hex, por ejemplo `#F47FFF`.", ephemeral=True)
+        if Thumb not in ("avatar", "servidor", "ninguna") and not Thumb.startswith(("http://", "https://")):
+            return await interaction.response.send_message("❌ Imagen: `avatar`, `servidor`, `ninguna` o un enlace a una imagen.", ephemeral=True)
+        Lines = []
+        for Line in self.buttons.value.strip().splitlines():
+            Parts = [P.strip() for P in Line.split("|")]
+            if len(Parts) >= 3 and Parts[2]:
+                Parts[2] = ResolveChannel(interaction.guild, Parts[2])
+            Lines.append(" | ".join(Parts))
+        Buttons = "\n".join(Lines)
+        Bad = [B["label"] for B in ParseButtons(Buttons) if B["target"] and "{" not in B["target"] and not ButtonUrl(B["target"], interaction.guild.id)]
+        if Bad:
+            return await interaction.response.send_message(
+                f"❌ No entiendo el destino de: **{', '.join(Bad)}**. Usa `#nombre-del-canal`, el ID del canal o un enlace `https://`.", ephemeral=True,
+            )
+        await Store().Set(interaction.guild.id, self.section, {"color": Color if Color.startswith("#") else f"#{Color}", "thumbnail": Thumb, "buttons": Buttons})
+        await self.panel.Open(interaction, self.author, "✅ Guardado. Mira la **Vista previa**.")

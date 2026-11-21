@@ -28,3 +28,12 @@ y lo anuncia (en el extra y, si quieres, en el principal). Cuando el extra tiene
 - **Abrir ya / Cerrar ya** para probarlo a mano.
 - El bot necesita **Gestionar canales** (o permisos) y **Enviar mensajes** en el chat extra.
 - Funciona sin leer el contenido de los mensajes: solo cuenta cuántos hay y de quién.
+
+## 💎 Boosts
+Cuando alguien boostea, LOJI publica una tarjeta (Components V2) en el canal elegido: una vez por boost.
+- **Textos:** título, línea bajo el título (`{fecha}` = booster desde), ventajas (una por línea) y pie.
+- **Aspecto y botones:** color (por defecto rosa boost `#F47FFF`), imagen y hasta 3 botones de enlace.
+- Las ventajas por defecto son **solo las de la economía** y salen de `/config` → Economía → Boosters:
+  `{multiplicador}` (ganancias), `{suerte}` (gacha) y `{premio}` (lo que se regala al boostear, una vez).
+  Si están apagadas, esas líneas no se muestran.
+- Variables: `{user}` `{nombre}` `{server}` `{fecha}` `{boosts}` `{multiplicador}` `{suerte}` `{premio}` `{tareas}` `{tareas_link}`.

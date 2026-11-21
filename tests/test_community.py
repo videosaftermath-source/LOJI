@@ -172,3 +172,21 @@ def test_one_card_per_reason():
     assert "TAG" in Tag["intro"] and "vanity" in Vanity["intro"]
     assert Tag["benefits"] == Vanity["benefits"]  # same benefits either way
     assert Vanity["note"] == WELCOME["note_vanity"]
+
+
+def test_boost_card_shows_only_economy_perks():
+    import datetime
+    from cogs.Modules.Community.community import BoostValues, WelcomeView
+    from core.community import BOOST
+
+    Guild = N(id=9, name="Sótano Social", icon=None, premium_subscription_count=7, get_channel=lambda i: None)
+    Member = N(guild=Guild, mention="<@5>", display_name="Surge", display_avatar=N(url="https://cdn/a.png"),
+               premium_since=datetime.datetime(2026, 11, 20, tzinfo=datetime.timezone.utc))
+    Eco = Merge(DEFAULT_CONFIG, {})
+    Text = str(WelcomeView(Member, BOOST, BoostValues(Member, Eco, {})).to_components())
+    assert "<@5> acaba de boostear Sótano Social!" in Text
+    assert "+30 %" in Text and "+50 %" in Text and "<t:1795132800:D>" in Text
+    assert "Cobrar misiones" not in Text  # no board channel: the button hides
+    Off = Merge(DEFAULT_CONFIG, {"booster": {"enabled": False}})
+    Text = str(WelcomeView(Member, BOOST, BoostValues(Member, Off, {})).to_components())
+    assert "economía" not in Text and "gacha" not in Text and "Ya tienes" not in Text  # perks off: those lines hide

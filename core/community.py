@@ -101,7 +101,26 @@ OVERFLOW = {
     "warned_at": None,
 }
 
-SECTIONS = {"welcome": WELCOME, "board": BOARD, "overflow": OVERFLOW}
+BOOST = {
+    "enabled": False,
+    "channel": None,
+    "title": "### {user} acaba de boostear {server}!",
+    "intro": "-# 💎 Booster desde {fecha}",
+    "benefits": (
+        "🔓 __**Ventajas desbloqueadas**__\n"
+        "🪙 **{multiplicador}** en todo lo que ganas en la economía\n"
+        "🍀 **{suerte}** de suerte en el gacha"
+    ),
+    "note": "",
+    "footer": "-# 🎁 Ya tienes {premio} en tu cuenta. ¡Gracias por apoyar {server}! 💜",
+    "color": "#F47FFF",
+    "thumbnail": "avatar",
+    "buttons": "Cobrar misiones | 🪙 | {tareas_link}",
+}
+BOOST_VARS = "`{user}` `{nombre}` `{server}` `{fecha}` `{boosts}` `{multiplicador}` `{suerte}` `{premio}` `{tareas}` `{tareas_link}`"
+BOOST_SEEN = "boost_cards"  # one card per boost (same start time = same boost)
+
+SECTIONS = {"welcome": WELCOME, "board": BOARD, "overflow": OVERFLOW, "boost": BOOST}
 
 
 class Community:
