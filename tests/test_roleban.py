@@ -90,3 +90,45 @@ def test_who_can_be_quarantined():
     assert CanQuarantine(Guild, Mod, M(1, 1))  # the owner
     assert CanQuarantine(Guild, Mod, M(4, 1, bot=True))
     assert "mío" in CanQuarantine(Guild, N(id=1, top_role=99), M(5, 12))
+
+
+def test_enforce_fixes_permissions_and_reports():
+    import discord
+    from cogs.Modules.roleban import Roleban
+
+    class Channel:
+        def __init__(self, id, broken=False):
+            self.id, self.mention, self.broken, self.ow = id, f"<#{id}>", broken, {}
+
+        def overwrites_for(self, role):
+            return discord.PermissionOverwrite(**self.ow.get(role.id, {}))
+
+        async def set_permissions(self, role, overwrite, reason=None):
+            if self.broken:
+                raise discord.Forbidden(N(status=403, reason="x"), "no")
+            self.ow[role.id] = {K: V for K, V in overwrite if V is not None}
+
+    Edited = []
+
+    async def edit(permissions, reason=None):
+        Edited.append(permissions.value)
+
+    Role = N(id=7, mention="<@&7>", permissions=discord.Permissions(view_channel=True), edit=edit)
+    Own, General, Category, Locked = Channel(70), Channel(71), Channel(72), Channel(73, broken=True)
+    General.ow[7] = {"view_channel": True}  # someone gave it access by mistake
+    Guild = N(id=G, channels=[Own, General, Category, Locked], get_role=lambda i: Role if i == 7 else None,
+              get_channel=lambda i: Own if i == 70 else None)
+    Cog = Roleban.__new__(Roleban)
+    Cog.locks = {}
+    Fixed, Failed = run(Cog.Enforce(Guild, {"slots": [{"channel": 70, "role": 7}]}))
+    assert Edited == [0]  # the role grants nothing now
+    def Got(channel):
+        O = channel.overwrites_for(Role)
+        return (O.view_channel, O.send_messages, O.read_message_history)
+
+    assert Got(Own) == (True, True, True)
+    assert Got(General) == (False, None, None) and Got(Category) == (False, None, None)
+    assert any("3" in F for F in Fixed) and any("<#73>" in F for F in Failed)
+    Role.permissions = discord.Permissions.none()
+    Fixed, Failed = run(Cog.Enforce(Guild, {"slots": [{"channel": 70, "role": 7}]}))
+    assert Fixed == [] and len(Failed) == 1  # nothing left to fix (only the channel it can't touch)

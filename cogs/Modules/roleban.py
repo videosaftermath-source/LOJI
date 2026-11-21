@@ -7,10 +7,10 @@ from datetime import timezone
 
 import discord
 from discord import app_commands
-from discord.ext import commands
+from discord.ext import commands, tasks
 
 from core.bot.permissions import Permissions
-from core.roleban import MAX_SLOTS, Plan, RolesList, Restorable, Rolebans, SetSlot, Slots
+from core.roleban import CHECK_HOURS, MAX_SLOTS, NeedsFix, Wanted, Plan, RolesList, Restorable, Rolebans, SetSlot, Slots
 
 logger = logging.getLogger(__name__)
 LOJI_RED = discord.Color.from_rgb(150, 12, 18)
@@ -72,6 +72,82 @@ class Roleban(commands.Cog):
     def __init__(self, client: commands.Bot):
         self.client = client
         self.locks: dict[tuple[int, int], asyncio.Lock] = {}
+        self.Audit.start()
+
+    def cog_unload(self):
+        self.Audit.cancel()
+
+    # ---------------- permissions of the quarantine roles ----------------
+
+    async def Enforce(self, guild: discord.Guild, config: dict, channels: list | None = None) -> tuple[list[str], list[str]]:
+        """Puts every quarantine role's permissions right. Returns (what was fixed, what couldn't be)."""
+        Fixed, Failed = [], []
+        async with self.Lock(guild.id, 0):
+            for Slot in Slots(config):
+                Role, Own = guild.get_role(Slot["role"]), guild.get_channel(Slot["channel"])
+                if not Role or not Own:
+                    Failed.append(f"<#{Slot['channel']}>: " + ("el rol ya no existe" if not Role else "el canal ya no existe"))
+                    continue
+                if channels is None and Role.permissions.value:
+                    try:
+                        await Role.edit(permissions=discord.Permissions.none(), reason="Cuarentena: el rol no debe dar ningún permiso")
+                        Fixed.append(f"{Role.mention}: quité sus permisos generales")
+                    except discord.HTTPException as e:
+                        Failed.append(f"{Role.mention}: no pude quitar sus permisos ({e.text or e})")
+                Count, Where = 0, []
+                for Channel in channels if channels is not None else guild.channels:
+                    Want = Wanted(Channel.id, Own.id)
+                    Overwrite = Channel.overwrites_for(Role)
+                    if not NeedsFix(Overwrite, Want):
+                        continue
+                    for K, V in Want.items():
+                        setattr(Overwrite, K, V)
+                    try:
+                        await Channel.set_permissions(Role, overwrite=Overwrite, reason="Cuarentena: el rol solo ve su canal")
+                        Count += 1
+                        Where.append(Channel.mention)
+                    except discord.HTTPException:
+                        Failed.append(f"{Channel.mention}: no tengo permiso para cambiarlo")
+                if Count:
+                    Shown = ", ".join(Where[:10]) + (f" y {Count - 10} más" if Count > 10 else "")
+                    Fixed.append(f"{Role.mention}: corregí **{Count}** canal{'es' if Count != 1 else ''} ({Shown})")
+        return Fixed, Failed
+
+    async def Report(self, guild: discord.Guild, config: dict, fixed: list[str], failed: list[str], title: str):
+        if not fixed and not failed:
+            return
+        embed = discord.Embed(title=title, color=discord.Color.orange() if failed else discord.Color.green(), timestamp=discord.utils.utcnow())
+        if fixed:
+            embed.add_field(name="🛠️ Corregido", value="\n".join(fixed)[:1024], inline=False)
+        if failed:
+            embed.add_field(name="⚠️ No pude", value="\n".join(failed)[:1024], inline=False)
+        embed.set_footer(text=f"Reviso los roles de cuarentena cada {CHECK_HOURS} h")
+        await self.Log(guild, config, embed)
+
+    @tasks.loop(hours=CHECK_HOURS)
+    async def Audit(self):
+        for Guild in self.client.guilds:
+            try:
+                Config = await Store().Config(Guild.id)
+                if not Slots(Config):
+                    continue
+                Fixed, Failed = await self.Enforce(Guild, Config)
+                await self.Report(Guild, Config, Fixed, Failed, "🔍 Revisión de la cuarentena")
+            except Exception as e:
+                logger.exception(f"[Roleban] Audit failed in {Guild.id}: {e!r}")
+
+    @Audit.before_loop
+    async def BeforeAudit(self):
+        await self.client.wait_until_ready()
+
+    @commands.Cog.listener()
+    async def on_guild_channel_create(self, channel):
+        """A new channel: the quarantine roles must not see it either."""
+        Config = await Store().Config(channel.guild.id)
+        if Slots(Config):
+            Fixed, Failed = await self.Enforce(channel.guild, Config, [channel])
+            if Failed:
+                await self.Report(channel.guild, Config, [], Failed, "🔍 Canal nuevo y cuarentena")
 
     def Lock(self, guild_id: int, user_id: int) -> asyncio.Lock:
         return self.locks.setdefault((guild_id, user_id), asyncio.Lock())
@@ -121,15 +197,22 @@ class Roleban(commands.Cog):
         if registro:
             Changes["log"] = registro.id
         await Store().SetConfig(interaction.guild.id, Changes)
-        Perms = canal.permissions_for(rol)
-        Tip = "" if Perms.view_channel and Perms.send_messages else f"\n⚠️ {rol.mention} todavía **no puede ver o escribir** en {canal.mention}: dale permiso en ese canal."
-        await interaction.response.send_message(
-            f"✅ Canal de cuarentena guardado: {canal.mention} con {rol.mention}.\n"
-            + SlotsText(interaction.guild, New, registro.id if registro else Config.get("log"))
-            + "\n-# Cada rol de cuarentena **no** debe ver el resto de canales (quítale *Ver canal* donde @everyone lo tenga)."
-            + Tip,
-            ephemeral=True,
+        Head = f"✅ Canal de cuarentena guardado: {canal.mention} con {rol.mention}.\n" + SlotsText(interaction.guild, New, registro.id if registro else Config.get("log"))
+        await interaction.response.send_message(Head + "\n\n⏳ Configurando los permisos del rol en todos los canales…", ephemeral=True)
+        Config = await Store().Config(interaction.guild.id)
+        Fixed, Failed = await self.Enforce(interaction.guild, Config)
+        await self.Report(interaction.guild, Config, Fixed, Failed, "🛠️ Cuarentena configurada")
+        Result = (
+            ("\n".join(f"🛠️ {F}" for F in Fixed) or "✅ Los permisos ya estaban bien.")
+            + ("\n" + "\n".join(f"⚠️ {F}" for F in Failed) if Failed else "")
         )
+        try:
+            await interaction.edit_original_response(
+                content=(Head + "\n\n" + Result)[:1900]
+                + f"\n-# Cada rol de cuarentena ve **solo** su canal. Lo reviso cada {CHECK_HOURS} h y en cada canal nuevo; los cambios van al registro.",
+            )
+        except discord.HTTPException:
+            pass
 
     @roleban.command(name="quitar-canal", description="Quita uno de los canales de cuarentena")
     @app_commands.describe(canal="El canal de cuarentena que ya no se usará")

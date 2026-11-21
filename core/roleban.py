@@ -119,3 +119,20 @@ def RolesList(roles: list[dict], limit: int = 3900) -> str:
         Lines.append(Line)
         Size += len(Line) + 1
     return "\n".join(Lines) or "*ninguno*"
+
+
+# ---------------- keeping the quarantine roles set up ----------------
+# Each quarantine role sees only its own channel: allowed there, "View channel" denied everywhere else
+# (categories included). The role itself grants nothing.
+
+OWN = {"view_channel": True, "send_messages": True, "read_message_history": True}
+OTHER = {"view_channel": False}
+CHECK_HOURS = 3
+
+
+def Wanted(channel_id: int, own_channel_id: int) -> dict:
+    return OWN if channel_id == own_channel_id else OTHER
+
+
+def NeedsFix(overwrite, wanted: dict) -> bool:
+    return any(getattr(overwrite, K) != V for K, V in wanted.items())
