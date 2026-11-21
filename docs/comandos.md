@@ -23,6 +23,7 @@ Todo se **configura en `/config`** y todo se **explica en `/ayuda`**.
 | `/tareas` | Lista de tareas; **➕ Nueva tarea** para Tenno y Consejo Supremo |
 | `/perfil ver · editar · panel` | Perfiles de staff y panel por departamento |
 | Tickets de Birb | Al reclamar o responder, sale la tarjeta "Te atiende"  · Canales numerados por panel (`reporte-001`): `/config` → Tickets → panel → 🔢 Nombres (número) · `/admin unclaim` quita la reclamación a la fuerza (admins y altos cargos) · `/add usuario` añade a alguien al ticket (quien lo reclamó o admins) |
+| `/roleban add · varios · pardon · ver · lista` | Cuarentena: quita todos los roles menos el de cuarentena (se guardan y `pardon` los devuelve), eligiendo a qué canal de cuarentena va. `varios`: hasta 25 menciones o IDs a la vez, para raids. Si alguien sale del servidor en cuarentena, queda baneado. Admins: `/roleban configurar` (hasta 3 canales, cada uno con su rol, y el registro) y `/roleban quitar-canal` |
 
 ## Administración
 | Comando | Para qué |
