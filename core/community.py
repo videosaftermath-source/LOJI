@@ -51,18 +51,31 @@ def Variant(settings: dict, tag: bool) -> dict:
     return {**settings, **{K: settings[f"{K}_vanity"] for K in VARIANT_KEYS}}
 
 
+COIN = "<:ESS_moneda:1573482755088711700>"
+
 BOARD = {
     "channel": None,
     "message_id": None,
-    "banner": "",
-    "title": "## 🪙 Tareas diarias · {server}",
-    "description": "Participa, completa tus objetivos y reclama tus monedas.",
+    "banner": "https://cdn.imgchest.com/files/e4a582843fbf.png",
+    "title": "## " + COIN + " Misiones del {server}",
+    "description": "Cumple los objetivos, pulsa **Cobrar** y las monedas son tuyas. Las diarias se renuevan cada noche.",
     "footer": (
-        "-# Mensajes y voz se reinician cada día a las 00:00. Voz: sin mute/deafen, fuera de AFK y con otra persona. "
-        "El TAG y el boost solo se pagan una vez, aunque los quites y vuelvas a poner."
+        "-# 🔄 Las diarias vuelven a las 00:00 · 🎙️ La voz cuenta sin mute ni ensordecer, fuera del AFK y acompañado · "
+        "🏷️ El tag y el boost se cobran una sola vez por cuenta."
     ),
-    "color": "#57F287",
+    "color": "#BBA896",
+    "coin": COIN,  # next to each reward and on the buttons
+    "claim_label": "Cobrar",
+    "progress_label": "Mi progreso",
 }
+
+# "🪄 Misiones de ejemplo" in the board panel creates these (only the ones not there yet, by name).
+EXAMPLE_QUESTS = [
+    {"name": "Enviar 25 mensajes", "period": "daily", "objective": "messages", "target": 25, "reward": 250},
+    {"name": "Pasar 15 minutos en voz", "period": "daily", "objective": "voice", "target": 15, "reward": 300},
+    {"name": "Llevar nuestro tag", "period": "once", "objective": "supporter", "target": 1, "reward": 250},
+    {"name": "Boostear el servidor", "period": "once", "objective": "boost", "target": 1, "reward": 1000},
+]
 
 OVERFLOW = {
     "enabled": False,

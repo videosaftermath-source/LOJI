@@ -151,10 +151,59 @@ class BoardPanel(Owned):
 
         await interaction.response.send_message(view=await BoardView(interaction.guild), ephemeral=True)
 
+    @discord.ui.button(label="Moneda y botones", emoji="🪙", style=discord.ButtonStyle.blurple, row=2)
+    async def Coin(self, interaction: discord.Interaction, _):
+        B = (await Store().Get(interaction.guild.id))["board"]
+        await interaction.response.send_modal(BoardCoin(self.author, B))
+
+    @discord.ui.button(label="Misiones de ejemplo", emoji="🪄", style=discord.ButtonStyle.grey, row=2)
+    async def Examples(self, interaction: discord.Interaction, _):
+        """Creates the default missions (25 messages, 15 min of voice, tag, boost) that aren't there yet."""
+        from core.community import EXAMPLE_QUESTS
+        from core.economy.registry import Eco
+        from core.economy.service import EconomyError
+
+        Existing = {Q["name"].lower() for Q in await Eco().quests.List(interaction.guild.id)}
+        Made, Problem = [], None
+        for Quest in EXAMPLE_QUESTS:
+            if Quest["name"].lower() in Existing:
+                continue
+            try:
+                await Eco().quests.Create(interaction.guild.id, {**Quest, "reward_item": None})
+                Made.append(Quest["name"])
+            except EconomyError as e:
+                Problem = str(e)
+                break
+        if Made:
+            interaction.client.dispatch("quests_changed", interaction.guild.id)
+        Note = (f"🪄 Creadas: **{', '.join(Made)}**." if Made else "Las misiones de ejemplo ya existían.") + (f"\n❌ {Problem}" if Problem else "")
+        await BoardPanel.Open(interaction, self.author, Note + "\n-# Puedes cambiarlas o borrarlas en `/config` → Economía → Misiones.")
+
     @discord.ui.button(label="Restaurar textos", emoji="♻️", style=discord.ButtonStyle.red, row=1)
     async def Reset(self, interaction: discord.Interaction, _):
-        await Store().Reset(interaction.guild.id, "board", ["title", "description", "footer", "color", "banner"])
+        await Store().Reset(interaction.guild.id, "board", ["title", "description", "footer", "color", "banner", "coin", "claim_label", "progress_label"])
         await BoardPanel.Open(interaction, self.author, "♻️ Textos restaurados. Pulsa **Publicar** para aplicarlo.")
+
+
+class BoardCoin(discord.ui.Modal, title="Moneda y botones"):
+    def __init__(self, author, B):
+        super().__init__()
+        self.author = author
+        self.coin = Field("Emoji de la moneda", B["coin"], 80, long=False, required=True, placeholder="<:moneda:123...>")
+        self.claim = Field("Texto del botón de cada misión", B["claim_label"], 40, long=False, required=True)
+        self.progress = Field("Texto del botón de progreso", B["progress_label"], 40, long=False, required=True)
+        for F in (self.coin, self.claim, self.progress):
+            self.add_item(F)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        from cogs.Modules.Community.community import Emoji
+
+        if not Emoji(self.coin.value):
+            return await interaction.response.send_message("❌ Ese emoji no vale. Pega un emoji normal o uno del servidor (`<:nombre:id>`).", ephemeral=True)
+        await Store().Set(interaction.guild.id, "board", {
+            "coin": self.coin.value.strip(), "claim_label": self.claim.value.strip(), "progress_label": self.progress.value.strip(),
+        })
+        await BoardPanel.Open(interaction, self.author, "✅ Guardado. Pulsa **Publicar / actualizar** para aplicarlo al tablero.")
 
 
 class BoardTexts(discord.ui.Modal, title="Tablero de misiones"):

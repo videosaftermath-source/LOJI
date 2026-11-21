@@ -6,7 +6,10 @@ La tarjeta de anuncio de supporters está en `/config` → **Vanity y tag** (ver
 Si la misión "Llevar el TAG" ya da monedas, pon el premio de bienvenida de Vanity y tag a 0 para no pagar dos veces.
 
 ## 🪙 Tablero de misiones
-Un mensaje fijo con banner, una fila por misión con botón **Reclamar** y **Ver mi progreso** (máximo 8 misiones).
+Un mensaje fijo con banner, una fila por misión con botón **Cobrar** y **📊 Mi progreso** (máximo 8 misiones).
+Viene preparado para Sótano Social (banner, color `#BBA896`, emoji de moneda); todo se cambia en **Textos y banner** y **Moneda y botones**.
+**🪄 Misiones de ejemplo** crea las 4 de serie: 25 mensajes (250, diaria), 15 min en voz (300, diaria), llevar el tag (250, una vez)
+y boostear (1.000, una vez).
 Las misiones se crean en `/config` → Economía → Misiones; el tablero se actualiza solo.
 
 Objetivos nuevos:

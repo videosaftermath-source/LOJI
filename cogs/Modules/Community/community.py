@@ -14,7 +14,7 @@ from core.community import (
 
 logger = logging.getLogger(__name__)
 CHECK_SECONDS = 20
-PERIOD_LABEL = {"daily": "Diaria", "weekly": "Semanal", "once": "Una sola vez por cuenta"}
+PERIOD_LABEL = {"daily": "Cada día", "weekly": "Cada semana", "once": "Solo una vez"}
 BAR = 8
 
 
@@ -101,14 +101,23 @@ async def BoardQuests(guild_id: int) -> list[dict]:
     return sorted(Quests, key=lambda Q: Order.get(Q["period"], 9))[:MAX_BOARD_QUESTS]
 
 
-def RewardText(quest: dict, eco: dict, items: dict) -> str:
+def Prize(quest: dict, board: dict, items: dict) -> str:
+    """'<coin> **250**' (+ the item, if the mission gives one)."""
     Parts = []
     if quest.get("reward"):
-        Parts.append(f"{int(quest['reward']):,} {eco['currency']['name']}".replace(",", "."))
+        Parts.append(f"{board.get('coin') or '🪙'} **{int(quest['reward']):,}**".replace(",", "."))
     Item = items.get(quest.get("reward_item"))
     if Item:
         Parts.append(f"{Item.get('emoji') or '📦'} {Item['name']}")
     return " + ".join(Parts) or "—"
+
+
+def Emoji(text: str):
+    """A custom emoji like <:name:id> or a normal one; None if it's empty or broken."""
+    try:
+        return discord.PartialEmoji.from_str(text.strip()) if text and text.strip() else None
+    except Exception:
+        return None
 
 
 def Bar(progress: int, target: int) -> str:
@@ -142,16 +151,19 @@ async def BoardView(guild: discord.Guild, member: discord.Member | None = None) 
     if not Quests:
         Box.add_item(ui.TextDisplay("*Todavía no hay misiones. Se crean en `/config` → Economía → Misiones.*"))
     for Index, Quest in enumerate(Quests):
-        Line = f"**{Quest['name']} · {RewardText(Quest, Eco_, Items)}**\n{PERIOD_LABEL.get(Quest['period'], '')}"
+        Line = f"**{Quest['name']}**\n{Prize(Quest, Settings, Items)} · {PERIOD_LABEL.get(Quest['period'], '')}"
         Button = ClaimButton(Quest["quest_id"], personal=bool(member))
+        Button.item.label, Button.item.emoji = Settings["claim_label"] or "Cobrar", Emoji(Settings["coin"])
         if member:
             Progress, Claimed = Status.get(Quest["quest_id"], (0, False))
             Target = int(Quest["target"])
             if Claimed:
-                Line += " · ✅ Reclamada"
-                Button.item.disabled, Button.item.label, Button.item.style = True, "Reclamada", discord.ButtonStyle.grey
+                Line += " · ✅ Cobrada"
+                Button.item.disabled, Button.item.label, Button.item.style = True, "Cobrada", discord.ButtonStyle.grey
             elif Progress >= Target:
                 Line += " · 🎉 ¡Lista!"
+            elif Quest["objective"] in ("supporter", "boost"):
+                Line += " · " + ("aún no llevas el tag" if Quest["objective"] == "supporter" else "aún no boosteas")
             else:
                 Line += f" · {Bar(Progress, Target)} {min(Progress, Target)}/{Target}"
                 Button.item.disabled, Button.item.style = True, discord.ButtonStyle.grey
@@ -161,7 +173,9 @@ async def BoardView(guild: discord.Guild, member: discord.Member | None = None) 
     if Settings["footer"]:
         Box.add_item(ui.TextDisplay(Fill(Settings["footer"], Values)))
     if not member:
-        Box.add_item(ui.ActionRow(ProgressButton()))
+        Progress = ProgressButton()
+        Progress.item.label = Settings["progress_label"] or "Mi progreso"
+        Box.add_item(ui.ActionRow(Progress))
     View.add_item(Box)
     return View
 
@@ -169,7 +183,7 @@ async def BoardView(guild: discord.Guild, member: discord.Member | None = None) 
 class ClaimButton(ui.DynamicItem[ui.Button], template=r"qc:(?P<quest>[A-Za-z0-9]{1,24}):(?P<mode>[bp])"):
     def __init__(self, quest_id: str, personal: bool = False):
         super().__init__(ui.Button(
-            label="Reclamar", emoji="🪙", style=discord.ButtonStyle.green, custom_id=f"qc:{quest_id}:{'p' if personal else 'b'}",
+            label="Cobrar", emoji="🪙", style=discord.ButtonStyle.green, custom_id=f"qc:{quest_id}:{'p' if personal else 'b'}",
         ))
         self.quest_id, self.personal = quest_id, personal
 
@@ -212,7 +226,8 @@ class ClaimButton(ui.DynamicItem[ui.Button], template=r"qc:(?P<quest>[A-Za-z0-9]
         except EconomyError as e:
             return await interaction.response.send_message(f"❌ {e}", ephemeral=True)
         Items = {I["item_id"]: I for I in await Eco().shop.List(interaction.guild.id)}
-        Done = f"🎉 Reclamaste **{Quest['name']}**: +{RewardText(Quest, Config, Items)}"
+        Board = (await Store().Get(interaction.guild.id))["board"]
+        Done = f"🎉 Cobraste **{Quest['name']}**: +{Prize(Quest, Board, Items)}"
         if self.personal:
             await interaction.response.edit_message(view=await BoardView(interaction.guild, interaction.user))
             return await interaction.followup.send(Done, ephemeral=True)
@@ -221,7 +236,7 @@ class ClaimButton(ui.DynamicItem[ui.Button], template=r"qc:(?P<quest>[A-Za-z0-9]
 
 class ProgressButton(ui.DynamicItem[ui.Button], template=r"qprog"):
     def __init__(self):
-        super().__init__(ui.Button(label="Ver mi progreso", emoji="📈", style=discord.ButtonStyle.grey, custom_id="qprog"))
+        super().__init__(ui.Button(label="Mi progreso", emoji="📊", style=discord.ButtonStyle.grey, custom_id="qprog"))
 
     @classmethod
     async def from_custom_id(cls, interaction, item, match):
