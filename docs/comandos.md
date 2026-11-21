@@ -27,7 +27,7 @@ Todo se **configura en `/config`** y todo se **explica en `/ayuda`**.
 ## Administración
 | Comando | Para qué |
 |---|---|
-| `/config` | **Toda la configuración**: 📮 Mando Central, 🏷️ Vanity y tag, 🪙 Economía y los módulos de Birb |
+| `/config` | **Toda la configuración**: 📮 Mando Central, 🌸 Comunidad, 🏷️ Vanity y tag, 🪙 Economía y los módulos de Birb |
 | `/eco-admin …` | dar, quitar, tienda, códigos, misiones, mascotas, regalar-mascota, gacha, stats, hacienda, desbloquear, reiniciar, cancelar-marcha |
 | `/perfil sincronizar · fecha` | Crear perfiles del staff y corregir fechas |
 | `/anuncio` · `/embed` | Mensajes con diseño |
