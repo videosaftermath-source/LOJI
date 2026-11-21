@@ -9,7 +9,7 @@ from discord import app_commands
 from discord.ext import commands
 
 from core.bot.permissions import Permissions
-from core.roleban import Plan, RolesList, Restorable, Rolebans
+from core.roleban import MAX_SLOTS, Plan, RolesList, Restorable, Rolebans, SetSlot, Slots
 
 logger = logging.getLogger(__name__)
 LOJI_RED = discord.Color.from_rgb(150, 12, 18)
@@ -23,6 +23,11 @@ def Store() -> Rolebans:
 
         _store = Rolebans(db)
     return _store
+
+
+def SlotsText(guild: discord.Guild, slots: list[dict], log: int | None) -> str:
+    Lines = [f"{I}. <#{S['channel']}> → <@&{S['role']}>" for I, S in enumerate(slots, 1)] or ["*ninguno*"]
+    return f"**Canales de cuarentena ({len(slots)}/{MAX_SLOTS}):**\n" + "\n".join(Lines) + (f"\nRegistro: <#{log}>" if log else "")
 
 
 def RolesEmbed(member, roles: list[dict], title: str) -> discord.Embed:
@@ -51,14 +56,14 @@ class Roleban(commands.Cog):
 
     # ---------------- setup ----------------
 
-    @roleban.command(name="configurar", description="Rol y canal de cuarentena, y canal de registro")
+    @roleban.command(name="configurar", description="Añade (o cambia) un canal de cuarentena con su rol (máximo 3)")
     @app_commands.describe(
-        rol="El rol de cuarentena (solo debe poder ver el canal de cuarentena)",
-        canal="Donde se avisa al usuario (el canal de cuarentena)",
-        registro="Canal del staff donde queda constancia (opcional)",
+        canal="Canal de cuarentena: donde se avisa al usuario",
+        rol="Rol de cuarentena de ese canal (solo debe poder ver ese canal)",
+        registro="Canal del staff donde queda constancia (opcional, vale para todos)",
     )
     @Permissions("Admin")
-    async def configurar(self, interaction: discord.Interaction, rol: discord.Role, canal: discord.TextChannel, registro: discord.TextChannel | None = None):
+    async def configurar(self, interaction: discord.Interaction, canal: discord.TextChannel, rol: discord.Role, registro: discord.TextChannel | None = None):
         Me = interaction.guild.me
         Problems = []
         if not Me.guild_permissions.manage_roles:
@@ -73,28 +78,70 @@ class Roleban(commands.Cog):
             Problems.append(f"No puedo escribir en {canal.mention}.")
         if Problems:
             return await interaction.response.send_message("❌ " + "\n❌ ".join(Problems), ephemeral=True)
-        await Store().SetConfig(interaction.guild.id, {"role": rol.id, "channel": canal.id, "log": registro.id if registro else None})
-        Everyone = canal.permissions_for(rol)
-        Tip = "" if Everyone.view_channel and Everyone.send_messages else f"\n⚠️ {rol.mention} todavía **no puede ver o escribir** en {canal.mention}: dale permiso en ese canal."
+        Config = await Store().Config(interaction.guild.id)
+        try:
+            New = SetSlot(Slots(Config), canal.id, rol.id)
+        except ValueError:
+            return await interaction.response.send_message(
+                f"❌ Ya hay {MAX_SLOTS} canales de cuarentena. Quita uno con `/roleban quitar-canal`.", ephemeral=True,
+            )
+        Changes = {"slots": New}
+        if registro:
+            Changes["log"] = registro.id
+        await Store().SetConfig(interaction.guild.id, Changes)
+        Perms = canal.permissions_for(rol)
+        Tip = "" if Perms.view_channel and Perms.send_messages else f"\n⚠️ {rol.mention} todavía **no puede ver o escribir** en {canal.mention}: dale permiso en ese canal."
         await interaction.response.send_message(
-            f"✅ Cuarentena lista: rol {rol.mention}, canal {canal.mention}"
-            + (f", registro {registro.mention}" if registro else "")
-            + ".\n-# Recuerda que el rol de cuarentena **no** debe ver el resto de canales (quítale *Ver canal* donde @everyone lo tenga)."
+            f"✅ Canal de cuarentena guardado: {canal.mention} con {rol.mention}.\n"
+            + SlotsText(interaction.guild, New, registro.id if registro else Config.get("log"))
+            + "\n-# Cada rol de cuarentena **no** debe ver el resto de canales (quítale *Ver canal* donde @everyone lo tenga)."
             + Tip,
             ephemeral=True,
         )
 
+    @roleban.command(name="quitar-canal", description="Quita uno de los canales de cuarentena")
+    @app_commands.describe(canal="El canal de cuarentena que ya no se usará")
+    @Permissions("Admin")
+    async def quitar_canal(self, interaction: discord.Interaction, canal: discord.TextChannel):
+        Config = await Store().Config(interaction.guild.id)
+        Current = Slots(Config)
+        New = [S for S in Current if S["channel"] != canal.id]
+        if len(New) == len(Current):
+            return await interaction.response.send_message(f"❌ {canal.mention} no es un canal de cuarentena.", ephemeral=True)
+        await Store().SetConfig(interaction.guild.id, {"slots": New})
+        await interaction.response.send_message(
+            f"🧹 {canal.mention} ya no es canal de cuarentena.\n" + SlotsText(interaction.guild, New, Config.get("log"))
+            + "\n-# Quien ya esté en cuarentena ahí sigue igual; `pardon` funciona normal.",
+            ephemeral=True,
+        )
+
+    async def ChannelChoices(self, interaction: discord.Interaction, current: str) -> list[app_commands.Choice[str]]:
+        Choices = []
+        for S in Slots(await Store().Config(interaction.guild.id)):
+            Channel = interaction.guild.get_channel(S["channel"])
+            Name = f"#{Channel.name}" if Channel else f"Canal borrado ({S['channel']})"
+            if current.lower().lstrip("#") in Name.lower():
+                Choices.append(app_commands.Choice(name=Name[:100], value=str(S["channel"])))
+        return Choices
+
     # ---------------- add ----------------
 
     @roleban.command(name="add", description="Quita todos los roles a un miembro y lo deja en cuarentena")
-    @app_commands.describe(usuario="A quién", motivo="Por qué (queda en el registro)")
+    @app_commands.describe(usuario="A quién", canal="A qué canal de cuarentena va", motivo="Por qué (queda en el registro)")
+    @app_commands.autocomplete(canal=ChannelChoices)
     @Permissions("Staff")
-    async def add(self, interaction: discord.Interaction, usuario: discord.Member, motivo: app_commands.Range[str, 1, 500] = "Sin motivo"):
+    async def add(self, interaction: discord.Interaction, usuario: discord.Member, canal: str, motivo: app_commands.Range[str, 1, 500] = "Sin motivo"):
         Guild, Mod, Me = interaction.guild, interaction.user, interaction.guild.me
         Config = await Store().Config(Guild.id)
-        Quarantine = Guild.get_role(Config.get("role") or 0)
-        if not Quarantine:
+        Available = Slots(Config)
+        if not Available:
             return await interaction.response.send_message("❌ Falta configurarlo: `/roleban configurar`.", ephemeral=True)
+        Slot = next((S for S in Available if str(S["channel"]) == canal.strip().strip("<#>")), None)
+        if not Slot:
+            return await interaction.response.send_message("❌ Elige uno de los canales de cuarentena de la lista.", ephemeral=True)
+        Quarantine = Guild.get_role(Slot["role"])
+        if not Quarantine:
+            return await interaction.response.send_message("❌ El rol de ese canal de cuarentena ya no existe: vuelve a configurarlo.", ephemeral=True)
         if usuario.bot or usuario.id in (Mod.id, Guild.owner_id):
             return await interaction.response.send_message("❌ No puedes ponerle cuarentena a esa persona.", ephemeral=True)
         if usuario.top_role >= Mod.top_role and Mod.id != Guild.owner_id:
@@ -106,7 +153,7 @@ class Roleban(commands.Cog):
             if await Store().Active(Guild.id, usuario.id):
                 return await interaction.followup.send(f"❌ {usuario.mention} ya está en cuarentena.", allowed_mentions=discord.AllowedMentions.none())
             Remove, Keep = Plan(usuario.roles, Quarantine.id, Me.top_role.position)
-            Doc = await Store().Start(Guild.id, usuario.id, Remove, Mod.id, motivo)
+            Doc = await Store().Start(Guild.id, usuario.id, Remove, Mod.id, motivo, Slot)
             if not Doc:
                 return await interaction.followup.send(f"❌ {usuario.mention} ya está en cuarentena.", allowed_mentions=discord.AllowedMentions.none())
             try:
@@ -115,7 +162,7 @@ class Roleban(commands.Cog):
                 await Store().End(Guild.id, usuario.id, "failed", Mod.id, str(e))
                 return await interaction.followup.send(f"❌ No pude cambiarle los roles: {e.text or e}")
         Saved = Doc["roles"]
-        Channel = Guild.get_channel(Config.get("channel") or 0)
+        Channel = Guild.get_channel(Slot["channel"])
         if Channel:
             try:
                 await Channel.send(
@@ -128,7 +175,7 @@ class Roleban(commands.Cog):
             except discord.HTTPException as e:
                 logger.warning(f"[Roleban] Can't post in the quarantine channel: {e}")
         Done = discord.Embed(
-            description=f"🔒 {usuario.mention} está en **cuarentena**. Se le quitaron **{len(Saved)}** rol{'es' if len(Saved) != 1 else ''}."
+            description=f"🔒 {usuario.mention} está en **cuarentena** en <#{Slot['channel']}>. Se le quitaron **{len(Saved)}** rol{'es' if len(Saved) != 1 else ''}."
             + (f"\n-# Se quedan {len(Keep)} que no puedo quitar (booster, bots o por encima de mi rol)." if Keep else ""),
             color=LOJI_RED,
         )
@@ -136,6 +183,7 @@ class Roleban(commands.Cog):
         Log = RolesEmbed(usuario, Saved, "🔒 Roleban")
         Log.add_field(name="Usuario", value=f"{usuario.mention} (`{usuario.id}`)", inline=True)
         Log.add_field(name="Moderador", value=Mod.mention, inline=True)
+        Log.add_field(name="Canal", value=f"<#{Slot['channel']}>", inline=True)
         Log.add_field(name="Motivo", value=motivo[:1024], inline=False)
         Log.timestamp = discord.utils.utcnow()
         await self.Log(Guild, Config, Log)
@@ -154,8 +202,8 @@ class Roleban(commands.Cog):
             if not Doc:
                 return await interaction.followup.send(f"❌ {usuario.mention} no está en cuarentena.", allowed_mentions=discord.AllowedMentions.none())
             Back, Lost = Restorable(Doc["roles"], {R.id: R for R in Guild.roles}, Me.top_role.position)
-            Quarantine = Guild.get_role(Config.get("role") or 0)
-            Now = [R for R in usuario.roles if not R.is_default() and R != Quarantine]
+            Quarantine = {Doc.get("role")} | {S["role"] for S in Slots(Config)}  # whichever quarantine role they have
+            Now = [R for R in usuario.roles if not R.is_default() and R.id not in Quarantine]
             try:
                 await usuario.edit(roles=list(dict.fromkeys(Now + Back)), reason=f"Roleban levantado por {Mod} ({Mod.id}): {motivo}"[:512])
             except discord.HTTPException as e:
@@ -190,6 +238,8 @@ class Roleban(commands.Cog):
         embed = RolesEmbed(usuario, Doc["roles"], "🔒 En cuarentena")
         embed.add_field(name="Desde", value=discord.utils.format_dt(Doc["at"] if Doc["at"].tzinfo else Doc["at"].replace(tzinfo=timezone.utc), "R"), inline=True)
         embed.add_field(name="Por", value=f"<@{Doc['by']}>", inline=True)
+        if Doc.get("channel"):
+            embed.add_field(name="Canal", value=f"<#{Doc['channel']}>", inline=True)
         embed.add_field(name="Motivo", value=Doc.get("reason") or "—", inline=False)
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
@@ -198,7 +248,7 @@ class Roleban(commands.Cog):
     async def lista(self, interaction: discord.Interaction):
         Docs = await Store().List(interaction.guild.id)
         embed = discord.Embed(title=f"🔒 En cuarentena ({len(Docs)})", color=LOJI_RED)
-        embed.description = "\n".join(f"• <@{D['user_id']}> · por <@{D['by']}> · {(D.get('reason') or '—')[:60]}" for D in Docs)[:4000] or "Nadie."
+        embed.description = "\n".join(f"• <@{D['user_id']}> · " + (f"<#{D['channel']}> · " if D.get("channel") else "") + f"por <@{D['by']}> · {(D.get('reason') or '—')[:60]}" for D in Docs)[:4000] or "Nadie."
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
     # ---------------- leaving = ban ----------------
@@ -229,7 +279,9 @@ class Roleban(commands.Cog):
     async def on_member_join(self, member: discord.Member):
         if not await Store().Active(member.guild.id, member.id):
             return
-        Role = member.guild.get_role((await Store().Config(member.guild.id)).get("role") or 0)
+        Doc = await Store().Active(member.guild.id, member.id)
+        Fallback = Slots(await Store().Config(member.guild.id))
+        Role = member.guild.get_role(Doc.get("role") or (Fallback[0]["role"] if Fallback else 0))
         if Role:
             try:
                 await member.add_roles(Role, reason="Volvió estando en cuarentena (roleban)")

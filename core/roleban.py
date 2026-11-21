@@ -11,6 +11,26 @@ from datetime import datetime, timezone
 
 COLLECTION = "rolebans"
 CONFIG = "roleban_config"
+MAX_SLOTS = 3  # quarantine channels, each with its own role (so the member only sees that channel)
+
+
+def Slots(config: dict) -> list[dict]:
+    """[{"channel": id, "role": id}] (configs from before there were several become one)."""
+    if "slots" in config:
+        return list(config["slots"] or [])
+    if config.get("role") and config.get("channel"):
+        return [{"channel": config["channel"], "role": config["role"]}]
+    return []
+
+
+def SetSlot(slots: list[dict], channel_id: int, role_id: int) -> list[dict]:
+    """Adds the channel or changes its role. Raises ValueError when there are already MAX_SLOTS."""
+    Out = [S for S in slots if S["channel"] != channel_id]
+    if len(Out) >= MAX_SLOTS:
+        raise ValueError
+    Index = next((I for I, S in enumerate(slots) if S["channel"] == channel_id), len(Out))
+    Out.insert(Index, {"channel": channel_id, "role": role_id})
+    return Out
 
 
 def Now() -> datetime:
@@ -56,13 +76,14 @@ class Rolebans:
     async def Active(self, guild_id: int, user_id: int) -> dict | None:
         return await self.col.find_one({"guild_id": guild_id, "user_id": user_id, "active": True})
 
-    async def Start(self, guild_id: int, user_id: int, roles: list, by: int, reason: str) -> dict | None:
+    async def Start(self, guild_id: int, user_id: int, roles: list, by: int, reason: str, slot: dict | None = None) -> dict | None:
         """Saves the roleban. None if there's already one (two moderators at once: only one wins)."""
         if await self.Active(guild_id, user_id):
             return None
         Doc = {
             "guild_id": guild_id, "user_id": user_id, "active": True, "by": by, "reason": reason, "at": Now(),
             "roles": [{"id": R.id, "name": R.name} for R in roles],
+            "channel": (slot or {}).get("channel"), "role": (slot or {}).get("role"),
         }
         Result = await self.col.update_one(
             {"guild_id": guild_id, "user_id": user_id, "active": True}, {"$setOnInsert": Doc}, upsert=True,

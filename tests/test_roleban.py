@@ -46,3 +46,25 @@ def test_roles_list_fits():
     Text = RolesList(Roles)
     assert len(Text) <= 4000 and Text.endswith("más")
     assert RolesList([]) == "*ninguno*"
+
+
+def test_up_to_three_quarantine_channels():
+    import pytest
+    from core.roleban import SetSlot, Slots
+
+    assert Slots({"role": 7, "channel": 70}) == [{"channel": 70, "role": 7}]  # old single setup still works
+    assert Slots({}) == []
+    S = SetSlot([], 70, 7)
+    S = SetSlot(S, 71, 8)
+    S = SetSlot(S, 72, 9)
+    S = SetSlot(S, 71, 10)  # same channel: only the role changes, order kept
+    assert S == [{"channel": 70, "role": 7}, {"channel": 71, "role": 10}, {"channel": 72, "role": 9}]
+    with pytest.raises(ValueError):
+        SetSlot(S, 73, 11)
+
+
+def test_roleban_remembers_its_channel():
+    S = Rolebans(DB())
+    run(S.Start(G, 5, [], by=9, reason="x", slot={"channel": 71, "role": 8}))
+    Doc = run(S.Active(G, 5))
+    assert (Doc["channel"], Doc["role"]) == (71, 8)
