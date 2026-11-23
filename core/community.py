@@ -116,6 +116,8 @@ BOOST = {
     "color": "#F47FFF",
     "thumbnail": "avatar",
     "buttons": "Cobrar misiones | 🪙 | {tareas_link}",
+    "json": "",  # when set, the card is this Components V2 JSON (with {variables}) instead of the simple design
+    "json_name": "",
 }
 BOOST_VARS = "`{user}` `{nombre}` `{server}` `{fecha}` `{boosts}` `{multiplicador}` `{suerte}` `{premio}` `{tareas}` `{tareas_link}`"
 BOOST_SEEN = "boost_cards"  # one card per boost (same start time = same boost)
@@ -256,3 +258,93 @@ def CloseStep(settings: dict, now: float, extra_messages: int, opened_at: float 
     if opened_at and now - opened_at < int(settings["min_open_minutes"]) * 60:
         return None
     return "warn" if extra_messages < int(settings["close_below"]) else None
+
+
+# ---------------- Components V2 from JSON (boost card "modo JSON") ----------------
+
+ALLOWED_TYPES = {1: "fila", 2: "botón", 9: "sección", 10: "texto", 11: "miniatura", 12: "galería", 14: "separador", 17: "contenedor"}
+MAX_COMPONENTS = 40
+MAX_TEXT = 4000
+
+
+def ParseCardJson(text: str) -> list[dict]:
+    """The components of a pasted/uploaded Components V2 message. Raises ValueError with a message for the admin.
+    Accepts {"components": [...]}, a whole message ({"flags": 32768, "components": [...]}) or just the list."""
+    import json
+
+    try:
+        Data = json.loads(text)
+    except json.JSONDecodeError as e:
+        raise ValueError(f"No es un JSON válido (línea {e.lineno}, columna {e.colno}: {e.msg}).")
+    Components = Data.get("components") if isinstance(Data, dict) else Data
+    if not isinstance(Components, list) or not Components:
+        raise ValueError("No encuentro la lista `components`.")
+    if isinstance(Data, dict) and (Data.get("embeds") or Data.get("content")):
+        raise ValueError("Con Components V2 no puede haber `content` ni `embeds`: pon el texto en componentes de texto (tipo 10).")
+    Count, Text = 0, 0
+
+    def Walk(items, where):
+        nonlocal Count, Text
+        for Item in items:
+            if not isinstance(Item, dict) or Item.get("type") not in ALLOWED_TYPES:
+                Kind = Item.get("type") if isinstance(Item, dict) else Item
+                raise ValueError(f"Tipo de componente no permitido en {where}: `{Kind}`. Solo: " + ", ".join(f"{K} ({V})" for K, V in ALLOWED_TYPES.items()) + ".")
+            Count += 1
+            if Item["type"] == 2 and Item.get("style") != 5:
+                raise ValueError("Solo se permiten botones de **enlace** (style 5 con `url`): los demás no harían nada.")
+            if Item["type"] == 10:
+                Text += len(str(Item.get("content", "")))
+            if Item.get("accessory"):
+                Walk([Item["accessory"]], "un accesorio")
+            Walk(Item.get("components") or [], ALLOWED_TYPES[Item["type"]])
+
+    Walk(Components, "el mensaje")
+    if Count > MAX_COMPONENTS:
+        raise ValueError(f"Tiene {Count} componentes; Discord permite {MAX_COMPONENTS}.")
+    if Text > MAX_TEXT:
+        raise ValueError(f"Tiene {Text} caracteres de texto; Discord permite {MAX_TEXT}.")
+    return Components
+
+
+def FillJson(value, values: dict):
+    """Replaces {variables} inside every text of the JSON (not in the keys)."""
+    if isinstance(value, str):
+        return Fill(value, values)
+    if isinstance(value, list):
+        return [FillJson(V, values) for V in value]
+    if isinstance(value, dict):
+        return {K: FillJson(V, values) for K, V in value.items()}
+    return value
+
+
+# ---------------- booster icon panels ----------------
+
+ICON_PANELS = "icon_panels"
+BOOSTERS = "boosters"  # who LOJI knows is boosting (to notice boosts lost while it was offline)
+ICONS = {
+    "heading": "### Iconos · {n}/{total}",
+    "log": None,
+    "ready": False,  # LOJI has learned who boosts (the first check does it quietly)
+}
+MAX_ICONS = 5
+PANEL_DEFAULTS = {
+    "banner": "",
+    "text": "## 🚀 Iconos Boosters\nApoya al servidor boosteándolo y desbloquea roles exclusivos con iconografía especial para destacar tu perfil.\nSolo {booster} puede elegirlos.",
+    "footer": "-# Puedes tener un icono de toda la colección a la vez y cambiarlo cuando quieras. Si dejas de boostear, tu icono se retirará automáticamente.",
+    "color": "#C9C9D1",
+}
+SECTIONS["icons"] = ICONS
+
+
+def IconSwap(member_role_ids: set[int], icon_role_ids: set[int], clicked: int) -> tuple[set[int], set[int], str]:
+    """(roles to add, roles to remove, what happened: "removed" | "added" | "swapped").
+    Only one icon at a time across every panel; clicking the one you wear takes it off."""
+    Wearing = member_role_ids & icon_role_ids
+    if clicked in Wearing:
+        return set(), {clicked}, "removed"
+    return {clicked}, Wearing, "swapped" if Wearing else "added"
+
+
+def BoostChanges(known: set[int], current: set[int]) -> tuple[set[int], set[int]]:
+    """(new boosters, boosters who stopped) between what LOJI remembered and who boosts now."""
+    return current - known, known - current

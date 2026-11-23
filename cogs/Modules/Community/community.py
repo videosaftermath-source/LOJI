@@ -137,8 +137,34 @@ async def AnnounceBoost(member: discord.Member) -> bool:
             await db[BOOST_SEEN].insert_one({"_id": Key, "since": Since})
         except Exception:
             return False  # this boost was already announced
-    await Channel.send(view=await BoostCard(member), allowed_mentions=discord.AllowedMentions(users=[member], roles=False))
+    if Settings.get("json"):
+        await SendJson(Channel._state.http, Channel.id, await BoostJson(member), users=[member.id])
+    else:
+        await Channel.send(view=await BoostCard(member), allowed_mentions=discord.AllowedMentions(users=[member], roles=False))
     return True
+
+
+async def BoostJson(member: discord.Member) -> list[dict]:
+    """The uploaded JSON card with this member's {variables} filled in."""
+    from core.community import FillJson, ParseCardJson
+    from core.economy.config import EcoConfig
+
+    Config = await Store().Get(member.guild.id)
+    Values = BoostValues(member, await EcoConfig().Get(member.guild.id), Config["board"])
+    return FillJson(ParseCardJson(Config["boost"]["json"]), Values)
+
+
+async def SendJson(http, channel_id: int, components: list[dict], users: list[int] = (), ephemeral_token: tuple | None = None):
+    """Sends raw Components V2 (flag 32768). With ephemeral_token=(application_id, interaction_token) it's a
+    private follow-up to an interaction instead (for previews)."""
+    from discord.http import Route
+
+    Payload = {"flags": 1 << 15, "components": components, "allowed_mentions": {"parse": [], "users": [str(U) for U in users]}}
+    if ephemeral_token:
+        Payload["flags"] |= 1 << 6
+        App, Token = ephemeral_token
+        return await http.request(Route("POST", "/webhooks/{webhook_id}/{webhook_token}", webhook_id=App, webhook_token=Token), json=Payload)
+    return await http.request(Route("POST", "/channels/{channel_id}/messages", channel_id=channel_id), json=Payload)
 
 
 # ======================= missions board =======================

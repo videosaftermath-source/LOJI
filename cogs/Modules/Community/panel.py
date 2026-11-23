@@ -54,6 +54,14 @@ async def MainEmbed(guild: discord.Guild) -> discord.Embed:
         + "\n-# Tarjeta de agradecimiento cuando alguien boostea.",
         inline=False,
     )
+    from cogs.Modules.Community.icons import Panels
+
+    Count_ = len(await Panels(guild.id))
+    embed.add_field(
+        name="🎨 Iconos boosters",
+        value=f"{Count_} panel{'es' if Count_ != 1 else ''}\n-# Roles con icono que solo los boosters pueden ponerse (uno a la vez).",
+        inline=False,
+    )
     embed.add_field(
         name="💬 Chat extra (General 2)",
         value=(("🟢 Abierto ahora" if O["is_open"] else "✅ Activado") if O["enabled"] else "⏸️ Desactivado")
@@ -71,6 +79,12 @@ class MainPanel(Owned):
     @discord.ui.button(label="Boosts", emoji="💎", style=discord.ButtonStyle.blurple)
     async def Boost(self, interaction: discord.Interaction, _):
         await BoostPanel.Open(interaction, self.author)
+
+    @discord.ui.button(label="Iconos boosters", emoji="🎨", style=discord.ButtonStyle.blurple)
+    async def Icons(self, interaction: discord.Interaction, _):
+        from cogs.Modules.Community.icons_panel import IconsHome
+
+        await IconsHome.Open(interaction, self.author)
 
     @discord.ui.button(label="Chat extra", emoji="💬", style=discord.ButtonStyle.blurple)
     async def Overflow(self, interaction: discord.Interaction, _):
@@ -430,6 +444,16 @@ def BoostEmbed(guild, B: dict) -> discord.Embed:
         "Pulsa **Vista previa** para verla contigo."
     )
     embed.add_field(name="Canal", value=Where(guild, B["channel"]), inline=True)
+    embed.add_field(
+        name="Modo", value=f"📄 **JSON** (`{B.get('json_name') or 'archivo'}`)" if B.get("json") else "🧩 Diseño sencillo", inline=True,
+    )
+    if B.get("json"):
+        embed.add_field(
+            name="📄 Modo JSON activo",
+            value="Se publica tu JSON (con las variables rellenadas). Los textos, aspecto y botones de abajo no se usan "
+            "hasta que pulses **Quitar JSON**.",
+            inline=False,
+        )
     embed.add_field(name="Aspecto", value=f"Color `{B['color']}` · Imagen: `{B['thumbnail']}`", inline=True)
     embed.add_field(name="Título", value=B["title"][:1024], inline=False)
     embed.add_field(name="Ventajas", value=B["benefits"][:1024] or "—", inline=False)
@@ -479,10 +503,27 @@ class BoostPanel(Owned):
         B = (await Store().Get(interaction.guild.id))["boost"]
         await interaction.response.send_modal(CardLook(self.author, B, "boost", BoostPanel))
 
+    @discord.ui.button(label="Subir JSON", emoji="📄", style=discord.ButtonStyle.blurple, row=2)
+    async def UploadJson(self, interaction: discord.Interaction, _):
+        await interaction.response.send_modal(BoostJsonModal(self.author))
+
+    @discord.ui.button(label="Quitar JSON", emoji="🧹", style=discord.ButtonStyle.grey, row=2)
+    async def ClearJson(self, interaction: discord.Interaction, _):
+        await Store().Set(interaction.guild.id, "boost", {"json": "", "json_name": ""})
+        await BoostPanel.Open(interaction, self.author, "🧹 JSON quitado: vuelve el diseño sencillo.")
+
     @discord.ui.button(label="Vista previa", emoji="👁️", style=discord.ButtonStyle.grey, row=1)
     async def Preview(self, interaction: discord.Interaction, _):
-        from cogs.Modules.Community.community import BoostCard
+        from cogs.Modules.Community.community import BoostCard, BoostJson, SendJson
 
+        B = (await Store().Get(interaction.guild.id))["boost"]
+        if B.get("json"):
+            await interaction.response.defer(ephemeral=True, thinking=False)
+            try:
+                await SendJson(interaction.client.http, 0, await BoostJson(interaction.user), ephemeral_token=(interaction.application_id, interaction.token))
+            except (ValueError, discord.HTTPException) as e:
+                await interaction.followup.send(f"❌ El JSON no se puede mostrar: {getattr(e, 'text', None) or e}", ephemeral=True)
+            return
         await interaction.response.send_message(
             view=await BoostCard(interaction.user, "-# Vista previa (como si acabaras de boostear)"), ephemeral=True,
             allowed_mentions=discord.AllowedMentions.none(),
@@ -494,6 +535,44 @@ class BoostPanel(Owned):
 
         await Store().Reset(interaction.guild.id, "boost", [K for K in BOOST if K not in ("enabled", "channel")])
         await BoostPanel.Open(interaction, self.author, "♻️ Textos y aspecto restaurados.")
+
+
+class BoostJsonModal(discord.ui.Modal, title="Tarjeta de boost en JSON"):
+    def __init__(self, author):
+        super().__init__()
+        self.author = author
+        self.file = discord.ui.FileUpload(min_values=1, max_values=1)
+        self.add_item(discord.ui.Label(
+            text="Archivo .json (Components V2)",
+            description="Puedes usar {user}, {fecha}, {server}, {premio}... Solo botones de enlace.",
+            component=self.file,
+        ))
+
+    async def on_submit(self, interaction: discord.Interaction):
+        from cogs.Modules.Community.community import BoostValues, SendJson
+        from core.community import FillJson, ParseCardJson
+        from core.economy.config import EcoConfig
+
+        File = (self.file.values or [None])[0]
+        if not File or not File.filename.lower().endswith((".json", ".txt")):
+            return await interaction.response.send_message("❌ Sube un archivo `.json`.", ephemeral=True)
+        await interaction.response.defer()
+        try:
+            Text = (await File.read()).decode("utf-8-sig")
+            Components = ParseCardJson(Text)
+        except UnicodeDecodeError:
+            return await interaction.followup.send("❌ El archivo no está en UTF-8.", ephemeral=True)
+        except ValueError as e:
+            return await interaction.followup.send(f"❌ {e}", ephemeral=True)
+        # Discord is the real judge: only saved if the preview goes through.
+        C = await Store().Get(interaction.guild.id)
+        Values = BoostValues(interaction.user, await EcoConfig().Get(interaction.guild.id), C["board"])
+        try:
+            await SendJson(interaction.client.http, 0, FillJson(Components, Values), ephemeral_token=(interaction.application_id, interaction.token))
+        except discord.HTTPException as e:
+            return await interaction.followup.send(f"❌ Discord no acepta ese JSON: {e.text or e}\nNo se ha guardado nada.", ephemeral=True)
+        await Store().Set(interaction.guild.id, "boost", {"json": Text, "json_name": File.filename[:80]})
+        await BoostPanel.Open(interaction, self.author, "✅ JSON guardado (la vista previa está abajo). Desde ahora la tarjeta usa tu diseño.")
 
 
 class BoostTexts(discord.ui.Modal, title="Textos de la tarjeta de boost"):

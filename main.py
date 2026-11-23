@@ -184,6 +184,7 @@ class Client(commands.AutoShardedBot):
             "cogs.Modules.Profiles.profiles",
             "cogs.Modules.Guide.guide",
             "cogs.Modules.Community.community",
+            "cogs.Modules.Community.icons",
             "cogs.Modules.roleban",
             "cogs.Modules.Supporters.supporters",
             "cogs.Modules.Economy.basics",

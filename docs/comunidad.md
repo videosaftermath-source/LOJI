@@ -37,3 +37,24 @@ Cuando alguien boostea, LOJI publica una tarjeta (Components V2) en el canal ele
   `{multiplicador}` (ganancias), `{suerte}` (gacha) y `{premio}` (lo que se regala al boostear, una vez).
   Si están apagadas, esas líneas no se muestran.
 - Variables: `{user}` `{nombre}` `{server}` `{fecha}` `{boosts}` `{multiplicador}` `{suerte}` `{premio}` `{tareas}` `{tareas_link}`.
+
+### Tarjeta de boost en JSON
+En 💎 Boosts → **📄 Subir JSON** subes un archivo `.json` de Components V2 (`{"components": [...]}`, el mensaje entero
+o solo la lista). Dentro puedes usar las mismas variables (`{user}`, `{fecha}`, `{premio}`…). LOJI lo comprueba y te
+enseña la vista previa; **solo se guarda si Discord lo acepta**. Solo botones de enlace. **🧹 Quitar JSON** vuelve al diseño sencillo.
+
+## 🎨 Iconos boosters
+Paneles con 1 a 5 iconos (rol + emoji) y un botón neutro por icono. Se pueden crear todos los que quieras.
+- **Solo boosters** (el rol automático de Discord "Server Booster"), **un icono a la vez** entre todos los paneles:
+  pulsar otro lo cambia y pulsar el que llevas lo quita.
+- Crear: **➕ Nuevo panel** → textos (banner opcional, texto con `{booster}`, aclaración, color) → roles en el menú →
+  sus emojis → canal (se publica). Al editar, **Publicar / actualizar** edita el mismo mensaje.
+- El título de la sección es `### Iconos · {n}/{total}` (se numera solo); se cambia en **⚙️ Ajustes**, donde también
+  está el **registro** opcional (quién se pone o quita iconos).
+- Cada rol solo puede estar en un panel; los emojis personalizados tienen que ser de un servidor donde esté LOJI.
+
+## 💔 Seguimiento de boosters
+LOJI recuerda quién boostea. Cuando alguien deja de hacerlo: **MD avisando** de que pierde los beneficios, se le quita
+el icono y las ventajas de economía dejan de aplicarse solas. Además revisa **cada hora** por si Discord no avisó
+(caídas, reinicios): quien dejó de boostear recibe lo mismo, quien boosteó con LOJI apagado recibe su tarjeta y su
+premio, y cualquiera que lleve un icono sin boostear lo pierde. La primera revisión solo aprende quién boostea (sin MDs).
