@@ -58,3 +58,10 @@ LOJI recuerda quién boostea. Cuando alguien deja de hacerlo: **MD avisando** de
 el icono y las ventajas de economía dejan de aplicarse solas. Además revisa **cada hora** por si Discord no avisó
 (caídas, reinicios): quien dejó de boostear recibe lo mismo, quien boosteó con LOJI apagado recibe su tarjeta y su
 premio, y cualquiera que lleve un icono sin boostear lo pierde. La primera revisión solo aprende quién boostea (sin MDs).
+
+## 👋 Bienvenidas
+Igual que la tarjeta de boost, pero cuando alguien **entra al servidor**: diseño sencillo (título, línea bajo el título,
+cuerpo, pie, color, imagen y hasta 3 botones de enlace) o **📄 JSON** con vista previa.
+- Variables: `{user}` `{nombre}` `{server}` `{numero}` (miembro número…) `{miembros}` `{creada}` (fecha de la cuenta)
+  `{fecha}` (fecha de entrada) `{tareas}` `{tareas_link}`.
+- No se da la bienvenida a bots, ni otra vez en 24 h a quien sale y vuelve, ni a quien vuelve estando en cuarentena.

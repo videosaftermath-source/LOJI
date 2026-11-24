@@ -47,6 +47,13 @@ async def MainEmbed(guild: discord.Guild) -> discord.Embed:
         + f" · {Count} misión{'es' if Count != 1 else ''}\n-# Las misiones con botón de reclamar, en un canal.",
         inline=False,
     )
+    Join = C["join"]
+    embed.add_field(
+        name="👋 Bienvenidas",
+        value=("✅ Activado" if Join["enabled"] else "⏸️ Desactivado") + f" · {Where(guild, Join['channel'])}"
+        + "\n-# Tarjeta para cada persona que entra al servidor.",
+        inline=False,
+    )
     Boost = C["boost"]
     embed.add_field(
         name="💎 Boosts",
@@ -75,6 +82,10 @@ class MainPanel(Owned):
     @discord.ui.button(label="Tablero de misiones", emoji="🪙", style=discord.ButtonStyle.blurple)
     async def Board(self, interaction: discord.Interaction, _):
         await BoardPanel.Open(interaction, self.author)
+
+    @discord.ui.button(label="Bienvenidas", emoji="👋", style=discord.ButtonStyle.blurple)
+    async def Join(self, interaction: discord.Interaction, _):
+        await JoinPanel.Open(interaction, self.author)
 
     @discord.ui.button(label="Boosts", emoji="💎", style=discord.ButtonStyle.blurple)
     async def Boost(self, interaction: discord.Interaction, _):
@@ -430,19 +441,40 @@ class OverflowTexts(discord.ui.Modal, title="Mensajes del chat extra"):
         )
 
 
-# ======================= boost card =======================
+# ======================= cards (boost, welcome) =======================
+
+CARDS = {
+    "boost": {
+        "title": "💎 Tarjeta de boost",
+        "when": "Cuando alguien boostea, LOJI publica la tarjeta en el canal elegido (una vez por boost).\n"
+        "Las ventajas por defecto son las de la **economía** (`/config` → Economía → Boosters): si las cambias allí, la tarjeta se actualiza sola.",
+        "body": "Ventajas",
+        "preview": "-# Vista previa (como si acabaras de boostear)",
+        "example": "Roles especiales | ✨ | #booster-roles",
+    },
+    "join": {
+        "title": "👋 Bienvenidas",
+        "when": "Cuando alguien entra al servidor, LOJI publica la tarjeta en el canal elegido. Si sale y vuelve, "
+        "no se le da la bienvenida otra vez hasta pasadas 24 h; tampoco a bots ni a quien vuelve estando en cuarentena.",
+        "body": "Cuerpo",
+        "preview": "-# Vista previa (como si acabaras de entrar)",
+        "example": "Normas | 📜 | #normas",
+    },
+}
 
 
-def BoostEmbed(guild, B: dict) -> discord.Embed:
-    from core.community import BOOST_VARS, ParseButtons
+def Vars(section: str) -> str:
+    from core.community import BOOST_VARS, JOIN_VARS
 
-    embed = discord.Embed(title="💎 Tarjeta de boost", color=LOJI_RED)
-    embed.description = (
-        ("✅ **Activada.**" if B["enabled"] else "⏸️ **Desactivada.**")
-        + " Cuando alguien boostea, LOJI publica la tarjeta en el canal elegido (una vez por boost).\n"
-        "Las ventajas por defecto son las de la **economía** (`/config` → Economía → Boosters): si las cambias allí, la tarjeta se actualiza sola.\n"
-        "Pulsa **Vista previa** para verla contigo."
-    )
+    return BOOST_VARS if section == "boost" else JOIN_VARS
+
+
+def CardEmbed(guild, section: str, B: dict) -> discord.Embed:
+    from core.community import ParseButtons
+
+    Spec = CARDS[section]
+    embed = discord.Embed(title=Spec["title"], color=LOJI_RED)
+    embed.description = ("✅ **Activada.** " if B["enabled"] else "⏸️ **Desactivada.** ") + Spec["when"] + "\nPulsa **Vista previa** para verla contigo."
     embed.add_field(name="Canal", value=Where(guild, B["channel"]), inline=True)
     embed.add_field(
         name="Modo", value=f"📄 **JSON** (`{B.get('json_name') or 'archivo'}`)" if B.get("json") else "🧩 Diseño sencillo", inline=True,
@@ -456,21 +488,23 @@ def BoostEmbed(guild, B: dict) -> discord.Embed:
         )
     embed.add_field(name="Aspecto", value=f"Color `{B['color']}` · Imagen: `{B['thumbnail']}`", inline=True)
     embed.add_field(name="Título", value=B["title"][:1024], inline=False)
-    embed.add_field(name="Ventajas", value=B["benefits"][:1024] or "—", inline=False)
+    embed.add_field(name=Spec["body"], value=B["benefits"][:1024] or "—", inline=False)
     Buttons = ParseButtons(B["buttons"])
     embed.add_field(
         name="Botones",
         value="\n".join(f"{X['emoji'] or ''} {X['label']} → {X['target'] or '*sin destino: no se muestra*'}" for X in Buttons)[:1024] or "—",
         inline=False,
     )
-    embed.add_field(name="Variables", value=BOOST_VARS + "\n-# Una línea con una variable vacía no se muestra (p. ej. `{premio}` si no hay premio).", inline=False)
+    embed.add_field(name="Variables", value=Vars(section) + "\n-# Una línea con una variable vacía no se muestra.", inline=False)
     return embed
 
 
-class BoostPanel(Owned):
+class CardPanel(Owned):
+    section = "boost"
+
     def __init__(self, author, B: dict):
         super().__init__(author)
-        Pick = discord.ui.ChannelSelect(placeholder="📍 Canal donde se anuncia", channel_types=[discord.ChannelType.text, discord.ChannelType.news], row=0)
+        Pick = discord.ui.ChannelSelect(placeholder="📍 Canal donde se publica", channel_types=[discord.ChannelType.text, discord.ChannelType.news], row=0)
         Pick.callback = self.PickChannel
         self.add_item(Pick)
         self.Toggle.label = "Desactivar" if B["enabled"] else "Activar"
@@ -478,81 +512,89 @@ class BoostPanel(Owned):
 
     @classmethod
     async def Open(cls, interaction, author, note=None):
-        B = (await Store().Get(interaction.guild.id))["boost"]
-        await Show(interaction, BoostEmbed(interaction.guild, B), cls(author, B), note)
+        B = (await Store().Get(interaction.guild.id))[cls.section]
+        await Show(interaction, CardEmbed(interaction.guild, cls.section, B), cls(author, B), note)
 
     async def PickChannel(self, interaction: discord.Interaction):
-        await Store().Set(interaction.guild.id, "boost", {"channel": int(interaction.data["values"][0])})
-        await BoostPanel.Open(interaction, self.author, "✅ Canal guardado.")
+        await Store().Set(interaction.guild.id, self.section, {"channel": int(interaction.data["values"][0])})
+        await self.Open(interaction, self.author, "✅ Canal guardado.")
 
     @discord.ui.button(label="Activar", emoji="⏯️", style=discord.ButtonStyle.green, row=1)
     async def Toggle(self, interaction: discord.Interaction, _):
-        B = (await Store().Get(interaction.guild.id))["boost"]
+        B = (await Store().Get(interaction.guild.id))[self.section]
         if not B["enabled"] and not interaction.guild.get_channel(B["channel"] or 0):
-            return await BoostPanel.Open(interaction, self.author, "❌ Elige primero el canal.")
-        await Store().Set(interaction.guild.id, "boost", {"enabled": not B["enabled"]})
-        await BoostPanel.Open(interaction, self.author, "✅ Activada." if not B["enabled"] else "⏸️ Desactivada.")
+            return await self.Open(interaction, self.author, "❌ Elige primero el canal.")
+        await Store().Set(interaction.guild.id, self.section, {"enabled": not B["enabled"]})
+        await self.Open(interaction, self.author, "✅ Activada." if not B["enabled"] else "⏸️ Desactivada.")
 
     @discord.ui.button(label="Textos", emoji="✏️", style=discord.ButtonStyle.blurple, row=1)
     async def Texts(self, interaction: discord.Interaction, _):
-        B = (await Store().Get(interaction.guild.id))["boost"]
-        await interaction.response.send_modal(BoostTexts(self.author, B))
+        B = (await Store().Get(interaction.guild.id))[self.section]
+        await interaction.response.send_modal(CardTexts(self.author, B, type(self)))
 
     @discord.ui.button(label="Aspecto y botones", emoji="🎨", style=discord.ButtonStyle.blurple, row=1)
     async def Look(self, interaction: discord.Interaction, _):
-        B = (await Store().Get(interaction.guild.id))["boost"]
-        await interaction.response.send_modal(CardLook(self.author, B, "boost", BoostPanel))
+        B = (await Store().Get(interaction.guild.id))[self.section]
+        await interaction.response.send_modal(CardLook(self.author, B, self.section, type(self)))
 
     @discord.ui.button(label="Subir JSON", emoji="📄", style=discord.ButtonStyle.blurple, row=2)
     async def UploadJson(self, interaction: discord.Interaction, _):
-        await interaction.response.send_modal(BoostJsonModal(self.author))
+        await interaction.response.send_modal(CardJsonModal(self.author, type(self)))
 
     @discord.ui.button(label="Quitar JSON", emoji="🧹", style=discord.ButtonStyle.grey, row=2)
     async def ClearJson(self, interaction: discord.Interaction, _):
-        await Store().Set(interaction.guild.id, "boost", {"json": "", "json_name": ""})
-        await BoostPanel.Open(interaction, self.author, "🧹 JSON quitado: vuelve el diseño sencillo.")
+        await Store().Set(interaction.guild.id, self.section, {"json": "", "json_name": ""})
+        await self.Open(interaction, self.author, "🧹 JSON quitado: vuelve el diseño sencillo.")
 
     @discord.ui.button(label="Vista previa", emoji="👁️", style=discord.ButtonStyle.grey, row=1)
     async def Preview(self, interaction: discord.Interaction, _):
-        from cogs.Modules.Community.community import BoostCard, BoostJson, SendJson
+        from cogs.Modules.Community.community import CardJson, CardView, SendJson
 
-        B = (await Store().Get(interaction.guild.id))["boost"]
+        B = (await Store().Get(interaction.guild.id))[self.section]
         if B.get("json"):
             await interaction.response.defer(ephemeral=True, thinking=False)
             try:
-                await SendJson(interaction.client.http, 0, await BoostJson(interaction.user), ephemeral_token=(interaction.application_id, interaction.token))
+                await SendJson(interaction.client.http, 0, await CardJson(self.section, interaction.user), ephemeral_token=(interaction.application_id, interaction.token))
             except (ValueError, discord.HTTPException) as e:
                 await interaction.followup.send(f"❌ El JSON no se puede mostrar: {getattr(e, 'text', None) or e}", ephemeral=True)
             return
         await interaction.response.send_message(
-            view=await BoostCard(interaction.user, "-# Vista previa (como si acabaras de boostear)"), ephemeral=True,
+            view=await CardView(self.section, interaction.user, CARDS[self.section]["preview"]), ephemeral=True,
             allowed_mentions=discord.AllowedMentions.none(),
         )
 
     @discord.ui.button(label="Restaurar", emoji="♻️", style=discord.ButtonStyle.red, row=1)
     async def Reset(self, interaction: discord.Interaction, _):
-        from core.community import BOOST
+        from core.community import SECTIONS
 
-        await Store().Reset(interaction.guild.id, "boost", [K for K in BOOST if K not in ("enabled", "channel")])
-        await BoostPanel.Open(interaction, self.author, "♻️ Textos y aspecto restaurados.")
+        await Store().Reset(interaction.guild.id, self.section, [K for K in SECTIONS[self.section] if K not in ("enabled", "channel")])
+        await self.Open(interaction, self.author, "♻️ Textos y aspecto restaurados.")
 
 
-class BoostJsonModal(discord.ui.Modal, title="Tarjeta de boost en JSON"):
-    def __init__(self, author):
+class BoostPanel(CardPanel):
+    section = "boost"
+
+
+class JoinPanel(CardPanel):
+    section = "join"
+
+
+class CardJsonModal(discord.ui.Modal, title="Tarjeta en JSON"):
+    def __init__(self, author, panel):
         super().__init__()
-        self.author = author
+        self.author, self.panel = author, panel
         self.file = discord.ui.FileUpload(min_values=1, max_values=1)
         self.add_item(discord.ui.Label(
             text="Archivo .json (Components V2)",
-            description="Puedes usar {user}, {fecha}, {server}, {premio}... Solo botones de enlace.",
+            description="Puedes usar las variables del panel ({user}, {server}...). Solo botones de enlace.",
             component=self.file,
         ))
 
     async def on_submit(self, interaction: discord.Interaction):
-        from cogs.Modules.Community.community import BoostValues, SendJson
+        from cogs.Modules.Community.community import CardValues, SendJson
         from core.community import FillJson, ParseCardJson
-        from core.economy.config import EcoConfig
 
+        Section = self.panel.section
         File = (self.file.values or [None])[0]
         if not File or not File.filename.lower().endswith((".json", ".txt")):
             return await interaction.response.send_message("❌ Sube un archivo `.json`.", ephemeral=True)
@@ -565,32 +607,32 @@ class BoostJsonModal(discord.ui.Modal, title="Tarjeta de boost en JSON"):
         except ValueError as e:
             return await interaction.followup.send(f"❌ {e}", ephemeral=True)
         # Discord is the real judge: only saved if the preview goes through.
-        C = await Store().Get(interaction.guild.id)
-        Values = BoostValues(interaction.user, await EcoConfig().Get(interaction.guild.id), C["board"])
         try:
-            await SendJson(interaction.client.http, 0, FillJson(Components, Values), ephemeral_token=(interaction.application_id, interaction.token))
+            await SendJson(interaction.client.http, 0, FillJson(Components, await CardValues(Section, interaction.user)),
+                           ephemeral_token=(interaction.application_id, interaction.token))
         except discord.HTTPException as e:
             return await interaction.followup.send(f"❌ Discord no acepta ese JSON: {e.text or e}\nNo se ha guardado nada.", ephemeral=True)
-        await Store().Set(interaction.guild.id, "boost", {"json": Text, "json_name": File.filename[:80]})
-        await BoostPanel.Open(interaction, self.author, "✅ JSON guardado (la vista previa está abajo). Desde ahora la tarjeta usa tu diseño.")
+        await Store().Set(interaction.guild.id, Section, {"json": Text, "json_name": File.filename[:80]})
+        await self.panel.Open(interaction, self.author, "✅ JSON guardado (la vista previa está abajo). Desde ahora la tarjeta usa tu diseño.")
 
 
-class BoostTexts(discord.ui.Modal, title="Textos de la tarjeta de boost"):
-    def __init__(self, author, B):
+class CardTexts(discord.ui.Modal, title="Textos de la tarjeta"):
+    def __init__(self, author, B, panel):
         super().__init__()
-        self.author = author
+        self.author, self.panel = author, panel
+        Body = CARDS[panel.section]["body"]
         self.fields = {
             "title": Field("Título", B["title"], 200, long=False, required=True),
-            "intro": Field("Línea bajo el título ({fecha}...)", B["intro"], 400),
-            "benefits": Field("Ventajas (una por línea)", B["benefits"], 1500),
+            "intro": Field("Línea bajo el título", B["intro"], 400),
+            "benefits": Field(f"{Body} (una idea por línea)", B["benefits"], 1500),
             "footer": Field("Pie (bajo la línea)", B["footer"], 600),
         }
         for F in self.fields.values():
             self.add_item(F)
 
     async def on_submit(self, interaction: discord.Interaction):
-        await Store().Set(interaction.guild.id, "boost", {K: F.value.strip() for K, F in self.fields.items()})
-        await BoostPanel.Open(interaction, self.author, "✅ Textos guardados. Mira la **Vista previa**.")
+        await Store().Set(interaction.guild.id, self.panel.section, {K: F.value.strip() for K, F in self.fields.items()})
+        await self.panel.Open(interaction, self.author, "✅ Textos guardados. Mira la **Vista previa**.")
 
 
 class CardLook(discord.ui.Modal, title="Color, imagen y botones"):

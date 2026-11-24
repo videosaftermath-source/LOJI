@@ -113,13 +113,6 @@ def BoostValues(member: discord.Member, eco: dict, board: dict) -> dict:
     }
 
 
-async def BoostCard(member: discord.Member, heading: str | None = None) -> ui.LayoutView:
-    from core.economy.config import EcoConfig
-
-    Config = await Store().Get(member.guild.id)
-    return WelcomeView(member, Config["boost"], BoostValues(member, await EcoConfig().Get(member.guild.id), Config["board"]), heading)
-
-
 async def AnnounceBoost(member: discord.Member) -> bool:
     """Posts the card once per boost. True if it was posted."""
     from core.db import db
@@ -137,21 +130,8 @@ async def AnnounceBoost(member: discord.Member) -> bool:
             await db[BOOST_SEEN].insert_one({"_id": Key, "since": Since})
         except Exception:
             return False  # this boost was already announced
-    if Settings.get("json"):
-        await SendJson(Channel._state.http, Channel.id, await BoostJson(member), users=[member.id])
-    else:
-        await Channel.send(view=await BoostCard(member), allowed_mentions=discord.AllowedMentions(users=[member], roles=False))
+    await PostCard("boost", member, Channel)
     return True
-
-
-async def BoostJson(member: discord.Member) -> list[dict]:
-    """The uploaded JSON card with this member's {variables} filled in."""
-    from core.community import FillJson, ParseCardJson
-    from core.economy.config import EcoConfig
-
-    Config = await Store().Get(member.guild.id)
-    Values = BoostValues(member, await EcoConfig().Get(member.guild.id), Config["board"])
-    return FillJson(ParseCardJson(Config["boost"]["json"]), Values)
 
 
 async def SendJson(http, channel_id: int, components: list[dict], users: list[int] = (), ephemeral_token: tuple | None = None):
@@ -165,6 +145,82 @@ async def SendJson(http, channel_id: int, components: list[dict], users: list[in
         App, Token = ephemeral_token
         return await http.request(Route("POST", "/webhooks/{webhook_id}/{webhook_token}", webhook_id=App, webhook_token=Token), json=Payload)
     return await http.request(Route("POST", "/channels/{channel_id}/messages", channel_id=channel_id), json=Payload)
+
+
+# ======================= welcome (new members) =======================
+
+
+def JoinValues(member: discord.Member, board: dict) -> dict:
+    BoardChannel = member.guild.get_channel(board.get("channel") or 0)
+    Count = member.guild.member_count or len(member.guild.members)
+    Joined = getattr(member, "joined_at", None) or discord.utils.utcnow()
+    return {
+        "user": member.mention, "nombre": member.display_name, "server": member.guild.name,
+        "numero": f"{Count:,}".replace(",", "."), "miembros": f"{Count:,}".replace(",", "."),
+        "creada": discord.utils.format_dt(member.created_at, "D"), "fecha": discord.utils.format_dt(Joined, "D"),
+        "tareas": BoardChannel.mention if BoardChannel else "",
+        "tareas_link": BoardChannel.jump_url if BoardChannel else "",
+    }
+
+
+async def CardValues(section: str, member: discord.Member) -> dict:
+    """The {variables} of a card ("boost" or "join") for this member."""
+    Config = await Store().Get(member.guild.id)
+    if section == "boost":
+        from core.economy.config import EcoConfig
+
+        return BoostValues(member, await EcoConfig().Get(member.guild.id), Config["board"])
+    return JoinValues(member, Config["board"])
+
+
+async def CardView(section: str, member: discord.Member, heading: str | None = None) -> ui.LayoutView:
+    Config = await Store().Get(member.guild.id)
+    return WelcomeView(member, Config[section], await CardValues(section, member), heading)
+
+
+async def CardJson(section: str, member: discord.Member) -> list[dict]:
+    from core.community import FillJson, ParseCardJson
+
+    Config = await Store().Get(member.guild.id)
+    return FillJson(ParseCardJson(Config[section]["json"]), await CardValues(section, member))
+
+
+async def PostCard(section: str, member: discord.Member, channel):
+    """Posts a card in its simple design or as its uploaded JSON."""
+    Settings = (await Store().Get(member.guild.id))[section]
+    if Settings.get("json"):
+        await SendJson(channel._state.http, channel.id, await CardJson(section, member), users=[member.id])
+    else:
+        await channel.send(view=await CardView(section, member), allowed_mentions=discord.AllowedMentions(users=[member], roles=False))
+
+
+async def AnnounceJoin(member: discord.Member) -> bool:
+    """The welcome card for a new member (not again for a day if they leave and come back)."""
+    from datetime import datetime, timedelta, timezone
+
+    from core.community import JOIN_COOLDOWN_HOURS, JOIN_SEEN
+    from core.db import db
+
+    Settings = (await Store().Get(member.guild.id))["join"]
+    Channel = member.guild.get_channel(Settings["channel"] or 0)
+    if member.bot or not Settings["enabled"] or not Channel:
+        return False
+    try:  # back in quarantine after leaving: no welcome
+        from cogs.Modules.roleban import Store as Rolebans
+
+        if await Rolebans().Active(member.guild.id, member.id):
+            return False
+    except Exception:
+        pass
+    Now = datetime.now(timezone.utc)
+    Key = f"{member.guild.id}:{member.id}"
+    Recent = await db[JOIN_SEEN].find_one({"_id": Key})
+    At = (Recent or {}).get("at")
+    if At and (At if At.tzinfo else At.replace(tzinfo=timezone.utc)) > Now - timedelta(hours=JOIN_COOLDOWN_HOURS):
+        return False
+    await db[JOIN_SEEN].update_one({"_id": Key}, {"$set": {"at": Now}}, upsert=True)
+    await PostCard("join", member, Channel)
+    return True
 
 
 # ======================= missions board =======================
@@ -382,6 +438,13 @@ class Community(commands.Cog):
             await AnnounceBoost(after)
         except Exception as e:
             logger.warning(f"[Community] Boost card for {after.id} failed: {e!r}")
+
+    @commands.Cog.listener()
+    async def on_member_join(self, member: discord.Member):
+        try:
+            await AnnounceJoin(member)
+        except Exception as e:
+            logger.warning(f"[Community] Welcome card for {member.id} failed: {e!r}")
 
     @commands.Cog.listener()
     async def on_quests_changed(self, guild_id: int):

@@ -190,3 +190,33 @@ def test_boost_card_shows_only_economy_perks():
     Off = Merge(DEFAULT_CONFIG, {"booster": {"enabled": False}})
     Text = str(WelcomeView(Member, BOOST, BoostValues(Member, Off, {})).to_components())
     assert "economía" not in Text and "gacha" not in Text and "Ya tienes" not in Text  # perks off: those lines hide
+
+
+def test_join_card_and_cooldown(monkeypatch):
+    import datetime
+    import cogs.Modules.Community.community as cc
+    import core.db
+    from core.community import JOIN, Community
+    from cogs.Modules.Community.community import JoinValues, WelcomeView
+
+    Guild = N(id=9, name="Sótano Social", icon=None, member_count=1234, members=[], get_channel=lambda i: None)
+    Member = N(id=5, bot=False, guild=Guild, mention="<@5>", display_name="Nuevo", display_avatar=N(url="https://cdn/a.png"),
+               created_at=datetime.datetime(2024, 1, 1, tzinfo=datetime.timezone.utc), joined_at=None)
+    Text = str(WelcomeView(Member, JOIN, JoinValues(Member, {})).to_components())
+    assert "¡Te damos la bienvenida a Sótano Social, <@5>!" in Text and "#1.234" in Text
+
+    D = DB()
+    Store = Community(D)
+    run(Store.Set(9, "join", {"enabled": True, "channel": 77}))
+    Posted = []
+
+    async def PostCard(section, member, channel):
+        Posted.append(member.id)
+    monkeypatch.setattr(cc, "Store", lambda: Store)
+    monkeypatch.setattr(cc, "PostCard", PostCard)
+    monkeypatch.setattr(core.db, "db", D, raising=False)
+    Guild.get_channel = lambda i: object() if i == 77 else None
+    assert run(cc.AnnounceJoin(Member)) and Posted == [5]
+    assert not run(cc.AnnounceJoin(Member))  # left and came back: not welcomed again today
+    assert not run(cc.AnnounceJoin(N(**{**Member.__dict__, "id": 6, "bot": True})))  # bots: no
+    assert Posted == [5]

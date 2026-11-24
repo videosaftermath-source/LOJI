@@ -122,7 +122,30 @@ BOOST = {
 BOOST_VARS = "`{user}` `{nombre}` `{server}` `{fecha}` `{boosts}` `{multiplicador}` `{suerte}` `{premio}` `{tareas}` `{tareas_link}`"
 BOOST_SEEN = "boost_cards"  # one card per boost (same start time = same boost)
 
-SECTIONS = {"welcome": WELCOME, "board": BOARD, "overflow": OVERFLOW, "boost": BOOST}
+JOIN = {
+    "enabled": False,
+    "channel": None,
+    "title": "### ¡Te damos la bienvenida a {server}, {user}!",
+    "intro": "-# 👋 Eres el miembro **#{numero}**",
+    "benefits": (
+        "✨ __**Para empezar**__\n"
+        "📜 Lee las **normas** para saber cómo funciona todo\n"
+        "🎭 Elige tus **roles** para ver lo que te interesa\n"
+        "💬 Saluda en el **chat general**: ¡te estamos esperando!"
+    ),
+    "note": "",
+    "footer": "-# 🌙 Esperamos que disfrutes tu estancia en {server}.",
+    "color": "#BBA896",
+    "thumbnail": "avatar",
+    "buttons": "",
+    "json": "",
+    "json_name": "",
+}
+JOIN_VARS = "`{user}` `{nombre}` `{server}` `{numero}` `{miembros}` `{creada}` `{fecha}` `{tareas}` `{tareas_link}`"
+JOIN_SEEN = "join_cards"
+JOIN_COOLDOWN_HOURS = 24  # someone who leaves and comes back isn't welcomed again for a day (join/leave spam)
+
+SECTIONS = {"welcome": WELCOME, "board": BOARD, "overflow": OVERFLOW, "boost": BOOST, "join": JOIN}
 
 
 class Community:
