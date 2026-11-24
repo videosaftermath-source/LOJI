@@ -119,7 +119,7 @@ BOOST = {
     "json": "",  # when set, the card is this Components V2 JSON (with {variables}) instead of the simple design
     "json_name": "",
 }
-BOOST_VARS = "`{user}` `{nombre}` `{server}` `{fecha}` `{boosts}` `{multiplicador}` `{suerte}` `{premio}` `{tareas}` `{tareas_link}`"
+BOOST_VARS = "`{user}` `{nombre}` `{avatar}` `{server}` `{fecha}` `{boosts}` `{multiplicador}` `{suerte}` `{premio}` `{tareas}` `{tareas_link}`"
 BOOST_SEEN = "boost_cards"  # one card per boost (same start time = same boost)
 
 JOIN = {
@@ -141,7 +141,7 @@ JOIN = {
     "json": "",
     "json_name": "",
 }
-JOIN_VARS = "`{user}` `{nombre}` `{server}` `{numero}` `{miembros}` `{creada}` `{fecha}` `{tareas}` `{tareas_link}`"
+JOIN_VARS = "`{user}` `{nombre}` `{avatar}` `{server}` `{numero}` `{miembros}` `{creada}` `{fecha}` `{tareas}` `{tareas_link}`"
 JOIN_SEEN = "join_cards"
 JOIN_COOLDOWN_HOURS = 24  # someone who leaves and comes back isn't welcomed again for a day (join/leave spam)
 

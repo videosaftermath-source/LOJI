@@ -293,7 +293,7 @@ SETTINGS = {
     "card_look": ("Tarjeta: color, imagen y botones", "🎨"),
     "card_reset": ("Tarjeta: restaurar la de ejemplo", "♻️"),
 }
-CARD_VARS = "`{user}` `{nombre}` `{server}` `{cosa}` `{rol}` `{vanity}` `{tareas}` `{tareas_link}`"
+CARD_VARS = "`{user}` `{nombre}` `{avatar}` `{server}` `{cosa}` `{rol}` `{vanity}` `{tareas}` `{tareas_link}`"
 
 
 class VanityPanel(Owned):

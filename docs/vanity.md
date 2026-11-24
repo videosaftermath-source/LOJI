@@ -12,7 +12,7 @@ Se configura en `/config` → **🏷️ Vanity y tag (LOJI)**. Solo el Tenno o u
   - *Tarjeta: color, imagen y botones:* color, imagen (`avatar`, `servidor`, `ninguna` o un enlace) y hasta 3 botones,
     uno por línea: `Etiqueta | emoji | #canal o https://enlace`.
   - **👁️ Vista previa** te enseña las dos, solo a ti.
-  - Variables: `{user}` `{nombre}` `{server}` `{cosa}` `{rol}` `{vanity}` `{tareas}` `{tareas_link}`. Una línea con `{rol}` o `{tareas}` vacíos no se muestra.
+  - Variables: `{user}` `{nombre}` `{avatar}` `{server}` `{cosa}` `{rol}` `{vanity}` `{tareas}` `{tareas_link}`. Una línea con `{rol}` o `{tareas}` vacíos no se muestra.
   - No se repite para la misma persona en 12 horas.
 - **Detección:** al momento, cuando alguien cambia su estado o su tag, más una revisión de todo el servidor cada 20 minutos. El botón **🔄 Revisar ahora** lo aplica al instante.
 - **Privacidad:** el texto del estado solo se lee para buscar la vanity y **nunca se guarda**; solo se guarda si cumple o no, y desde cuándo. Cualquiera puede dejar de participar con `/privacidad`.

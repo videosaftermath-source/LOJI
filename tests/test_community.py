@@ -220,3 +220,17 @@ def test_join_card_and_cooldown(monkeypatch):
     assert not run(cc.AnnounceJoin(Member))  # left and came back: not welcomed again today
     assert not run(cc.AnnounceJoin(N(**{**Member.__dict__, "id": 6, "bot": True})))  # bots: no
     assert Posted == [5]
+
+
+def test_avatar_variable_in_every_card():
+    import datetime
+    from cogs.Modules.Community.community import BoostValues, JoinValues, WelcomeValues
+    from core.community import FillJson
+
+    Guild = N(id=9, name="S", icon=None, member_count=3, members=[], premium_subscription_count=1, get_channel=lambda i: None)
+    Member = N(id=5, guild=Guild, mention="<@5>", display_name="X", display_avatar=N(url="https://cdn/av.png"),
+               created_at=datetime.datetime(2024, 1, 1, tzinfo=datetime.timezone.utc), joined_at=None, premium_since=None)
+    for Values in (JoinValues(Member, {}), BoostValues(Member, Merge(DEFAULT_CONFIG, {}), {}), WelcomeValues(Member, [], False, True, "x", {})):
+        assert Values["avatar"] == "https://cdn/av.png"
+    Json = [{"type": 9, "components": [{"type": 10, "content": "hola"}], "accessory": {"type": 11, "media": {"url": "{avatar}"}}}]
+    assert FillJson(Json, JoinValues(Member, {}))[0]["accessory"]["media"]["url"] == "https://cdn/av.png"

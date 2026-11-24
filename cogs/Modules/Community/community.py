@@ -27,7 +27,7 @@ def WelcomeValues(member: discord.Member, roles: list, vanity: bool, tag: bool, 
     Thing = "nuestro **TAG**" if tag else "nuestra **vanity**"  # one card per reason; both counts as the TAG
     BoardChannel = member.guild.get_channel(board.get("channel") or 0)
     return {
-        "user": member.mention, "nombre": member.display_name, "server": member.guild.name, "cosa": Thing,
+        "user": member.mention, "nombre": member.display_name, "avatar": member.display_avatar.url, "server": member.guild.name, "cosa": Thing,
         "rol": " ".join(R.mention for R in roles), "vanity": f"`.gg/{Slug(vanity_text)}`",
         "tareas": BoardChannel.mention if BoardChannel else "",
         "tareas_link": BoardChannel.jump_url if BoardChannel else "",
@@ -103,7 +103,7 @@ def BoostValues(member: discord.Member, eco: dict, board: dict) -> dict:
     BoardChannel = member.guild.get_channel(board.get("channel") or 0)
     Extra = round((float(Booster["multiplier"]) - 1) * 100)
     return {
-        "user": member.mention, "nombre": member.display_name, "server": member.guild.name,
+        "user": member.mention, "nombre": member.display_name, "avatar": member.display_avatar.url, "server": member.guild.name,
         "fecha": discord.utils.format_dt(Since, "D"), "boosts": str(member.guild.premium_subscription_count or 0),
         "multiplicador": f"+{Extra} %" if On and Extra > 0 else "",
         "suerte": f"+{round(float(Booster['gacha_luck']) * 100)} %" if On and Booster["gacha_luck"] > 0 else "",
@@ -155,7 +155,7 @@ def JoinValues(member: discord.Member, board: dict) -> dict:
     Count = member.guild.member_count or len(member.guild.members)
     Joined = getattr(member, "joined_at", None) or discord.utils.utcnow()
     return {
-        "user": member.mention, "nombre": member.display_name, "server": member.guild.name,
+        "user": member.mention, "nombre": member.display_name, "avatar": member.display_avatar.url, "server": member.guild.name,
         "numero": f"{Count:,}".replace(",", "."), "miembros": f"{Count:,}".replace(",", "."),
         "creada": discord.utils.format_dt(member.created_at, "D"), "fecha": discord.utils.format_dt(Joined, "D"),
         "tareas": BoardChannel.mention if BoardChannel else "",

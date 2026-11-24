@@ -36,7 +36,7 @@ Cuando alguien boostea, LOJI publica una tarjeta (Components V2) en el canal ele
 - Las ventajas por defecto son **solo las de la economía** y salen de `/config` → Economía → Boosters:
   `{multiplicador}` (ganancias), `{suerte}` (gacha) y `{premio}` (lo que se regala al boostear, una vez).
   Si están apagadas, esas líneas no se muestran.
-- Variables: `{user}` `{nombre}` `{server}` `{fecha}` `{boosts}` `{multiplicador}` `{suerte}` `{premio}` `{tareas}` `{tareas_link}`.
+- Variables: `{user}` `{nombre}` `{avatar}` (enlace a su avatar, p. ej. para la miniatura de un JSON) `{server}` `{fecha}` `{boosts}` `{multiplicador}` `{suerte}` `{premio}` `{tareas}` `{tareas_link}`.
 
 ### Tarjeta de boost en JSON
 En 💎 Boosts → **📄 Subir JSON** subes un archivo `.json` de Components V2 (`{"components": [...]}`, el mensaje entero
@@ -62,6 +62,6 @@ premio, y cualquiera que lleve un icono sin boostear lo pierde. La primera revis
 ## 👋 Bienvenidas
 Igual que la tarjeta de boost, pero cuando alguien **entra al servidor**: diseño sencillo (título, línea bajo el título,
 cuerpo, pie, color, imagen y hasta 3 botones de enlace) o **📄 JSON** con vista previa.
-- Variables: `{user}` `{nombre}` `{server}` `{numero}` (miembro número…) `{miembros}` `{creada}` (fecha de la cuenta)
+- Variables: `{user}` `{nombre}` `{avatar}` (enlace a su avatar, p. ej. para la miniatura de un JSON) `{server}` `{numero}` (miembro número…) `{miembros}` `{creada}` (fecha de la cuenta)
   `{fecha}` (fecha de entrada) `{tareas}` `{tareas_link}`.
 - No se da la bienvenida a bots, ni otra vez en 24 h a quien sale y vuelve, ni a quien vuelve estando en cuarentena.
