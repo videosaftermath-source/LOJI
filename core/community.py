@@ -371,3 +371,26 @@ def IconSwap(member_role_ids: set[int], icon_role_ids: set[int], clicked: int) -
 def BoostChanges(known: set[int], current: set[int]) -> tuple[set[int], set[int]]:
     """(new boosters, boosters who stopped) between what LOJI remembered and who boosts now."""
     return current - known, known - current
+
+
+# ---------------- booster gradient colors ----------------
+
+MAX_COLORS = 20  # 4 rows of 5 buttons (+ the ✖ one) keep the message within Discord's 40 components
+COLORS = {
+    "banner": "https://cdn.imgchest.com/files/e8f7a1c79afd.png",
+    "title": "## <:ESS_pin_jap:1573211465580814336> Colores Boosters",
+    "text": "Un degradado exclusivo para quienes boostean **{server}** ✦\n-# Elige el tuyo y lúcelo en tu nombre.",
+    "heading": "### <:ESS_texto:1573224502534348923> Colección · {total} degradados",
+    "footer": "-# ✦ Un degradado a la vez: pulsa otro para cambiarlo o el tuyo para quitarlo. Si dejas de boostear, se retira solo ✦",
+    "color": "#BBA896",
+    "roles": [],  # in panel order
+    "channel": None,
+    "message_id": None,
+}
+COLOR_EMOJIS = "color_emojis"  # role id -> the bot emoji made from its gradient
+SECTIONS["colors"] = COLORS
+
+
+def ColorKey(first: int, second: int | None) -> str:
+    """Identifies a gradient: when the role's colors change, its emoji is redrawn."""
+    return f"{first:06x}-{(second if second is not None else first):06x}"

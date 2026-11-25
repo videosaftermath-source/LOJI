@@ -65,3 +65,14 @@ cuerpo, pie, color, imagen y hasta 3 botones de enlace) o **📄 JSON** con vist
 - Variables: `{user}` `{nombre}` `{avatar}` (enlace a su avatar, p. ej. para la miniatura de un JSON) `{server}` `{numero}` (miembro número…) `{miembros}` `{creada}` (fecha de la cuenta)
   `{fecha}` (fecha de entrada) `{tareas}` `{tareas_link}`.
 - No se da la bienvenida a bots, ni otra vez en 24 h a quien sale y vuelve, ni a quien vuelve estando en cuarentena.
+
+## 🌈 Colores boosters
+Un solo mensaje (Components V2) con los roles de **color degradado** que hiciste en Discord.
+- **Roles de colores:** se eligen en el menú, en el orden del panel (hasta 20). LOJI **lee el degradado de cada rol**:
+  dibuja el **muestrario** (va dentro del mensaje, no caduca) y un **emoji de degradado** por botón (emojis propios del bot).
+  Los nombres salen del rol (sin decoración): si renombras o cambias un color en Discord, pulsa **Publicar / actualizar**.
+- Botones neutros `01`, `02`… en filas de 5, más **✖** para quitarse el color.
+- Solo boosters, **un color a la vez** (independiente de los iconos); pulsar el tuyo lo quita. Al dejar de boostear se
+  retira junto con el icono (MD y revisión de cada hora incluidos).
+- **Textos y banner** (título, texto con `{server}`/`{booster}`, título de la colección con `{total}`, pie, banner) y **color de la línea**.
+- El panel avisa si un rol está por encima de LOJI o no tiene degradado.

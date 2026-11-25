@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 CHECK_MINUTES = 60
 LOST_DM = (
     "💔 Has dejado de boostear **{server}**, así que has perdido tus beneficios de booster "
-    "(icono, ventajas en la economía…).\n¡Gracias por el apoyo que nos diste! Si vuelves a boostear, los recuperas al momento."
+    "(icono, color degradado, ventajas en la economía…).\n¡Gracias por el apoyo que nos diste! Si vuelves a boostear, los recuperas al momento."
 )
 
 
@@ -79,6 +79,12 @@ async def SavePanel(guild_id: int, panel_id: str, changes: dict):
 
 async def IconRoles(guild_id: int) -> set[int]:
     return {I["role"] for P in await Panels(guild_id) for I in P.get("items", [])}
+
+
+async def BoosterRoles(guild_id: int) -> set[int]:
+    """Everything only boosters keep: icons and gradient colors (taken away together when the boost ends)."""
+    Colors = (await Store().Get(guild_id)).get("colors", {}).get("roles") or []
+    return await IconRoles(guild_id) | set(Colors)
 
 
 def PanelView(guild: discord.Guild, panel: dict, number: int, total: int, heading: str) -> ui.LayoutView:
@@ -240,11 +246,11 @@ class BoosterIcons(commands.Cog):
         await self.Log(guild, f"💔 <@{user_id}> dejó de boostear" + (f" · se le quitó {', '.join(R.mention for R in Removed)}" if Removed else ""))
 
     async def StripIcons(self, member: discord.Member) -> list:
-        Icons = await IconRoles(member.guild.id)
+        Icons = await BoosterRoles(member.guild.id)
         Wearing = [R for R in member.roles if R.id in Icons]
         if Wearing:
             try:
-                await member.remove_roles(*Wearing, reason="Ya no boostea: se retira el icono de booster")
+                await member.remove_roles(*Wearing, reason="Ya no boostea: se retiran el icono y el color de booster")
             except discord.HTTPException as e:
                 logger.warning(f"[Icons] Couldn't remove icons from {member.id}: {e}")
                 return []
@@ -298,8 +304,8 @@ class BoosterIcons(commands.Cog):
             for Id in New:
                 await self.Remember(guild.id, Id)
                 await self.Missed(guild.get_member(Id))
-        # Anyone wearing an icon without boosting (given by hand, or missed events) loses it.
-        Icons = await IconRoles(guild.id)
+        # Anyone wearing an icon or a gradient without boosting (given by hand, or missed events) loses it.
+        Icons = await BoosterRoles(guild.id)
         for RoleId in Icons:
             Role = guild.get_role(RoleId)
             for Member in list(Role.members) if Role else []:

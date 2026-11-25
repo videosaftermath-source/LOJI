@@ -69,6 +69,14 @@ async def MainEmbed(guild: discord.Guild) -> discord.Embed:
         value=f"{Count_} panel{'es' if Count_ != 1 else ''}\n-# Roles con icono que solo los boosters pueden ponerse (uno a la vez).",
         inline=False,
     )
+    Colors = C["colors"]
+    embed.add_field(
+        name="🌈 Colores boosters",
+        value=f"{len(Colors['roles'] or [])} degradado{'s' if len(Colors['roles'] or []) != 1 else ''} · "
+        + (f"publicado en <#{Colors['channel']}>" if Colors.get("message_id") else "*sin publicar*")
+        + "\n-# Colores degradados que solo los boosters pueden ponerse (uno a la vez).",
+        inline=False,
+    )
     embed.add_field(
         name="💬 Chat extra (General 2)",
         value=(("🟢 Abierto ahora" if O["is_open"] else "✅ Activado") if O["enabled"] else "⏸️ Desactivado")
@@ -96,6 +104,12 @@ class MainPanel(Owned):
         from cogs.Modules.Community.icons_panel import IconsHome
 
         await IconsHome.Open(interaction, self.author)
+
+    @discord.ui.button(label="Colores boosters", emoji="🌈", style=discord.ButtonStyle.blurple)
+    async def Colors(self, interaction: discord.Interaction, _):
+        from cogs.Modules.Community.colors import ColorsPanel
+
+        await ColorsPanel.Open(interaction, self.author)
 
     @discord.ui.button(label="Chat extra", emoji="💬", style=discord.ButtonStyle.blurple)
     async def Overflow(self, interaction: discord.Interaction, _):
