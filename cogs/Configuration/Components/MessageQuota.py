@@ -35,6 +35,12 @@ class QuotaOptions(discord.ui.Select):
                     emoji=f"{Emojis.log}",
                     description="Logs message quota resets.",
                 ),
+                discord.SelectOption(
+                    label="Anti-spam",
+                    value="Anti-spam",
+                    emoji="🛡️",
+                    description="Que escribir rápido o hacer spam no infle la cuota (2 niveles).",
+                ),
             ]
         )
         self.author = author
@@ -109,6 +115,10 @@ class QuotaOptions(discord.ui.Select):
             await interaction.followup.send(view=view, embed=embeds[0], ephemeral=True)
 
             return
+        if selection == "Anti-spam":
+            from cogs.Configuration.Components.QuotaSpam import Open as OpenAntiSpam
+
+            return await OpenAntiSpam(interaction, edit=False)
         if selection == "Audit Log":
             view.add_item(
                 LogChannel(
