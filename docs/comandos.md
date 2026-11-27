@@ -31,7 +31,7 @@ Todo se **configura en `/config`** y todo se **explica en `/ayuda`**.
 | `/config` | **Toda la configuración**: 📮 Mando Central, 🌸 Comunidad, 🏷️ Vanity y tag, 🪙 Economía y los módulos de Birb |
 | `/eco-admin …` | dar, quitar, tienda, códigos, misiones, mascotas, regalar-mascota, gacha, stats, hacienda, desbloquear, reiniciar, cancelar-marcha |
 | `/perfil sincronizar · fecha` | Crear perfiles del staff y corregir fechas |
-| `/anuncio` · `/embed` | Mensajes con diseño |
+| `/anuncio` · `/embed` | Mensajes con diseño. `/embed crear` y `/embed editar` aceptan un `.json` de embeds **o de Components V2** (se detecta solo: vista previa privada → Enviar / Guardar plantilla / Cancelar). `/embed exportar` saca también los mensajes V2. Las plantillas pueden ser V2 |
 
 ## Quitados en la organización
 - `/buzon config` y `/eco-admin config` → ahora en `/config`.

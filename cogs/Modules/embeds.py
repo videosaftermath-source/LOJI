@@ -83,6 +83,127 @@ def ParseLink(link: str):
     return tuple(int(x) for x in Match.groups()) if Match else None
 
 
+# ---------------- Components V2 ----------------
+
+V2_TYPES = {9, 10, 11, 12, 13, 14, 17}  # section, text, thumbnail, gallery, file, separator, container
+V2_FLAG = 1 << 15
+
+
+def Unwrap(Data):
+    """discohook backups/shares keep the message under messages[0].data."""
+    if isinstance(Data, dict) and isinstance(Data.get("messages"), list) and Data["messages"]:
+        return Data["messages"][0].get("data", {})
+    return Data
+
+
+def IsV2(Data) -> bool:
+    Data = Unwrap(Data)
+    if isinstance(Data, dict):
+        if int(Data.get("flags") or 0) & V2_FLAG:
+            return True
+        Data = Data.get("components") or []
+    return isinstance(Data, list) and any(isinstance(C, dict) and C.get("type") in V2_TYPES for C in Data)
+
+
+def V2Components(text: str) -> list | None:
+    """The components of a Components V2 JSON, or None if it's a normal embed JSON. Raises ValueError if it's broken."""
+    from core.community import ParseCardJson
+
+    try:
+        Data = json.loads(text)
+    except json.JSONDecodeError:
+        return None  # the classic parser gives the error message
+    if not IsV2(Data):
+        return None
+    return ParseCardJson(json.dumps(Unwrap(Data)))
+
+
+async def SendV2(client, channel_id: int, components: list) -> dict:
+    from cogs.Modules.Community.community import SendJson
+
+    return await SendJson(client.http, channel_id, components)
+
+
+async def EditV2(client, message: discord.Message, components: list):
+    """Replaces a bot message with Components V2 (a classic one too: its text and embeds go)."""
+    from discord.http import Route
+
+    Payload = {"components": components}
+    if not message.flags.components_v2:
+        Payload.update({"flags": V2_FLAG, "content": "", "embeds": []})
+    await client.http.request(
+        Route("PATCH", "/channels/{channel_id}/messages/{message_id}", channel_id=message.channel.id, message_id=message.id),
+        json=Payload,
+    )
+
+
+class V2Confirm(discord.ui.View):
+    """After the private preview: send it (or replace the message), save it as a template, or cancel."""
+
+    def __init__(self, author, components: list, channel=None, message: discord.Message | None = None):
+        super().__init__(timeout=900)
+        self.author, self.components, self.channel, self.message = author, components, channel, message
+        self.Send.label = f"Enviar a #{channel.name}" if channel else "Reemplazar el mensaje"
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.author.id:
+            await interaction.response.send_message(embed=NotYourPanel(), ephemeral=True)
+            return False
+        return True
+
+    @discord.ui.button(label="Enviar", emoji="📤", style=discord.ButtonStyle.green)
+    async def Send(self, interaction: discord.Interaction, _):
+        try:
+            if self.message:
+                await EditV2(interaction.client, self.message, self.components)
+                Done = f"{Emojis.tick} Mensaje reemplazado: {self.message.jump_url}"
+            else:
+                Sent = await SendV2(interaction.client, self.channel.id, self.components)
+                Done = f"{Emojis.tick} Enviado: https://discord.com/channels/{interaction.guild.id}/{self.channel.id}/{Sent['id']}"
+        except discord.HTTPException as e:
+            return await interaction.response.send_message(f"{Emojis.no} Discord no lo aceptó: {e.text or e}", ephemeral=True)
+        self.stop()
+        await interaction.response.edit_message(content=Done, view=None)
+
+    @discord.ui.button(label="Guardar plantilla", emoji="💾", style=discord.ButtonStyle.grey)
+    async def SaveTemplate(self, interaction: discord.Interaction, _):
+        Components = self.components
+
+        async def Apply(i, v):
+            if not v["name"]:
+                raise ValueError("Ponle un nombre.")
+            await i.client.db["EmbedTemplates"].update_one(
+                {"guild_id": i.guild.id, "name": v["name"]}, {"$set": {"data": {"v2": Components}, "author": i.user.id}}, upsert=True,
+            )
+            await i.response.send_message(
+                f"{Emojis.tick} Plantilla V2 **{v['name']}** guardada. Úsala con `/embed crear plantilla:{v['name']}`.", ephemeral=True,
+            )
+
+        await interaction.response.send_modal(TextModal("Guardar plantilla", [("name", "Nombre", None, 50, False)], Apply))
+
+    @discord.ui.button(label="Cancelar", style=discord.ButtonStyle.grey)
+    async def Cancel(self, interaction: discord.Interaction, _):
+        self.stop()
+        await interaction.response.edit_message(content="Cancelado.", view=None)
+
+
+async def OpenV2(ctx: commands.Context, components: list, channel=None, message=None):
+    """The confirm buttons, then a private preview of the V2 message right below them."""
+    from cogs.Modules.Community.community import SendJson
+
+    if not ctx.interaction:
+        return await ctx.send(f"{Emojis.no} Para Components V2 usa el comando con barra (`/embed …`).")
+    I = ctx.interaction
+    Where = f"en {channel.mention}" if channel else f"en lugar de {message.jump_url}"
+    View = V2Confirm(ctx.author, components, channel, message)
+    await I.response.send_message(f"👇 Vista previa (Components V2) justo debajo. ¿Lo publico {Where}?", view=View, ephemeral=True)
+    try:
+        await SendJson(ctx.bot.http, 0, components, ephemeral_token=(I.application_id, I.token))
+    except discord.HTTPException as e:
+        View.stop()
+        await I.edit_original_response(content=f"{Emojis.no} Discord no acepta ese JSON: {e.text or e}", view=None)
+
+
 async def FetchBotMessage(ctx: commands.Context, link: str):
     Parsed = ParseLink(link)
     if not Parsed or Parsed[0] != ctx.guild.id:
@@ -460,10 +581,15 @@ class Embeds(commands.Cog):
         self.client = client
 
     async def LoadData(self, ctx, archivo, plantilla):
+        """A classic message dict, or {"v2": components} for a Components V2 JSON / template."""
         if archivo:
             if archivo.size > 100_000:
                 raise ValueError("El archivo es demasiado grande.")
-            return ParseJSON((await archivo.read()).decode("utf-8"))
+            Text = (await archivo.read()).decode("utf-8-sig")
+            Components = V2Components(Text)
+            if Components is not None:
+                return {"v2": Components}
+            return ParseJSON(Text)
         if plantilla:
             T = await self.client.db["EmbedTemplates"].find_one({"guild_id": ctx.guild.id, "name": plantilla})
             if not T:
@@ -483,7 +609,7 @@ class Embeds(commands.Cog):
     @embed.command(name="crear", description="Crear un embed nuevo y enviarlo a un canal")
     @app_commands.describe(
         canal="Dónde se enviará",
-        archivo="Opcional: un .json de message.style o discohook",
+        archivo="Opcional: un .json (embeds de message.style/discohook, o Components V2)",
         plantilla="Opcional: empezar desde una plantilla guardada",
     )
     @app_commands.autocomplete(plantilla=TemplateAutocomplete)
@@ -499,6 +625,8 @@ class Embeds(commands.Cog):
             Data = await self.LoadData(ctx, archivo, plantilla)
         except (ValueError, UnicodeDecodeError, json.JSONDecodeError) as e:
             return await ctx.send(f"{Emojis.no} {e}", ephemeral=True)
+        if Data and Data.get("v2"):
+            return await OpenV2(ctx, Data["v2"], channel=canal)
         await self.Open(
             ctx,
             Data or {"content": "", "embeds": [{"title": "Título", "description": "Descripción", "color": 0x5865F2}]},
@@ -508,7 +636,7 @@ class Embeds(commands.Cog):
     @embed.command(name="editar", description="Editar un mensaje que ya envió el bot")
     @app_commands.describe(
         enlace="Enlace del mensaje (clic derecho → Copiar enlace del mensaje)",
-        archivo="Opcional: reemplazarlo por un .json de message.style o discohook",
+        archivo="Opcional: reemplazarlo por un .json (embeds o Components V2)",
     )
     @Permissions("Admin")
     async def editar(self, ctx: commands.Context, enlace: str, archivo: discord.Attachment = None):
@@ -516,10 +644,22 @@ class Embeds(commands.Cog):
         if Error:
             return await ctx.send(f"{Emojis.no} {Error}", ephemeral=True)
         try:
-            Data = await self.LoadData(ctx, archivo, None) or FromMessage(Message)
+            Data = await self.LoadData(ctx, archivo, None)
         except (ValueError, UnicodeDecodeError, json.JSONDecodeError) as e:
             return await ctx.send(f"{Emojis.no} {e}", ephemeral=True)
-        await self.Open(ctx, Data, message=Message)
+        if Data and Data.get("v2"):
+            return await OpenV2(ctx, Data["v2"], message=Message)
+        if Message.flags.components_v2:
+            if Data:
+                return await ctx.send(
+                    f"{Emojis.no} Ese mensaje es Components V2: súbele un JSON V2 (sácalo con `/embed exportar`).", ephemeral=True,
+                )
+            return await ctx.send(
+                f"{Emojis.no} Ese mensaje es Components V2 y el editor es de embeds. Sácalo con `/embed exportar`, "
+                "edítalo (discohook.app) y vuelve a usar `/embed editar` con el archivo.",
+                ephemeral=True,
+            )
+        await self.Open(ctx, Data or FromMessage(Message), message=Message)
 
     @embed.command(name="exportar", description="Sacar el JSON de un mensaje para editarlo en message.style")
     @app_commands.describe(enlace="Enlace del mensaje")
@@ -533,6 +673,15 @@ class Embeds(commands.Cog):
             Message = None
         if not Message:
             return await ctx.send(f"{Emojis.no} No encuentro ese mensaje.", ephemeral=True)
+        if Message.flags.components_v2:
+            Raw = await self.client.http.get_message(Message.channel.id, Message.id)
+            Text = json.dumps({"flags": V2_FLAG, "components": Raw.get("components", [])}, indent=2, ensure_ascii=False)
+            return await ctx.send(
+                "Es un mensaje **Components V2**. Edita este JSON (por ejemplo en https://discohook.app) y súbelo con `/embed editar` "
+                "(o `/embed crear` para mandar uno nuevo).",
+                file=discord.File(io.BytesIO(Text.encode()), "componentes.json"),
+                ephemeral=True,
+            )
         await ctx.send(
             "Pega este JSON en https://message.style o https://discohook.org, edítalo y luego usa `/embed editar` con el archivo.",
             file=discord.File(io.BytesIO(ToJSON(FromMessage(Message)).encode()), "embed.json"),
