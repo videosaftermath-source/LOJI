@@ -153,6 +153,8 @@ def TicketStaff(ticket: dict) -> int | None:
     Claimer = (ticket.get("claimed") or {}).get("claimer")
     if Claimer and Claimer != ticket.get("UserID"):
         return Claimer
+    if (ticket.get("afk") or {}).get("autoclosed"):  # LOJI closed it: nobody from staff to rate
+        return None
     Closer = (ticket.get("closed") or {}).get("closer") if isinstance(ticket.get("closed"), dict) else None
     return Closer if Closer and Closer != ticket.get("UserID") else None
 

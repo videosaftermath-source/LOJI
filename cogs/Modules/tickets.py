@@ -444,6 +444,28 @@ class TicketsPub(commands.Cog):
         ):
             if not DefaultEmbed and content:
                 embed = None
+        # LOJI: a Components V2 design (/config → Tickets → panel → Diseño V2). Only the look changes: the
+        # open buttons are the same ones. If anything fails, the usual embed below is sent instead.
+        V2Note = ""
+        if (Panel.get("V2") or {}).get("json"):
+            from core.ticket_v2 import Build, PanelButtons
+            from cogs.Modules.Community.community import SendJson
+
+            try:
+                Components = Build(Panel["V2"]["json"], await PanelButtons(interaction.client.db, interaction.guild.id, Panel))
+                Sent = await SendJson(interaction.client.http, interaction.channel.id, Components)
+                MsgId = int(Sent["id"])
+                interaction.client.add_view(view, message_id=MsgId)  # the buttons work now, not only after a restart
+                await interaction.client.db["Panels"].update_one(
+                    {"guild": interaction.guild.id, "name": panel},
+                    {"$set": {"MsgID": MsgId, "ChannelID": interaction.channel.id}},
+                )
+                return await interaction.followup.send(
+                    f"{Emojis.tick} **{interaction.user.display_name},** panel enviado con su diseño V2.", ephemeral=True,
+                )
+            except (ValueError, discord.HTTPException, KeyError) as e:
+                logging.warning(f"[Tickets] V2 panel {panel} failed, sending the classic one: {e!r}")
+                V2Note = f"\n⚠️ El diseño V2 falló ({getattr(e, 'text', None) or e}); se envió el embed de siempre."
         try:
             msg = await interaction.channel.send(
                 embed=embed,
@@ -472,7 +494,7 @@ class TicketsPub(commands.Cog):
                 embed=embed if Debug else None,
             )
         await interaction.followup.send(
-            f"{Emojis.tick} **{interaction.user.display_name},** I've sent the panel.",
+            f"{Emojis.tick} **{interaction.user.display_name},** I've sent the panel." + V2Note,
             ephemeral=True,
         )
 

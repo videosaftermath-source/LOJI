@@ -622,6 +622,24 @@ class SingelPanelCustomisation(discord.ui.View):
 
         await interaction.response.edit_message(view=self)
 
+    @discord.ui.button(label="Autocierre", style=discord.ButtonStyle.blurple, emoji="⏳")
+    async def AutoClose(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """Closes tickets whose user stops answering (warning at 24 h, closed at 36 h). On by default."""
+        if interaction.user.id != self.author.id:
+            return await interaction.response.send_message(embed=NotYourPanel(), ephemeral=True)
+        Query = {"guild": interaction.guild.id, "type": "single", "name": self.name}
+        custom = await interaction.client.db["Panels"].find_one(Query)
+        if not custom:
+            return await interaction.response.send_message(f"{Emojis.no} Este panel no existe.", ephemeral=True)
+        On = not custom.get("AutoClose", True)
+        await interaction.client.db["Panels"].update_one(Query, {"$set": {"AutoClose": On}})
+        await interaction.response.send_message(
+            ("⏳ **Autocierre activado** en este panel: si el usuario no responde, se le avisa a las **24 h** y el ticket se "
+             "cierra solo a las **36 h** (con transcripción). Solo cuenta cuando el staff fue el último en escribir.")
+            if On else "⏸️ **Autocierre desactivado** en este panel: sus tickets no se cierran solos.",
+            ephemeral=True,
+        )
+
     @discord.ui.button(label="Pregunta previa", style=discord.ButtonStyle.blurple, emoji="📝")
     async def PreQuestion(self, interaction: discord.Interaction, button: discord.ui.Button):
         if interaction.user.id != self.author.id:
@@ -749,6 +767,30 @@ class MultiPanelCustomisation(discord.ui.View):
         view = discord.ui.View()
         view.add_item(EmbedSelection(interaction.user, "Multi", self.name))
         await interaction.response.send_message(view=view)
+
+    @discord.ui.button(label="Diseño V2", emoji="📄", style=discord.ButtonStyle.blurple, row=1)
+    async def DesignV2(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user.id != self.author.id:
+            return await interaction.response.send_message(embed=NotYourPanel(), ephemeral=True)
+        from cogs.Configuration.Components.TicketsV2 import UploadButton
+
+        await UploadButton(interaction, self.name)
+
+    @discord.ui.button(label="Vista previa V2", emoji="👁️", style=discord.ButtonStyle.grey, row=1)
+    async def PreviewV2(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user.id != self.author.id:
+            return await interaction.response.send_message(embed=NotYourPanel(), ephemeral=True)
+        from cogs.Configuration.Components.TicketsV2 import PreviewButton
+
+        await PreviewButton(interaction, self.name)
+
+    @discord.ui.button(label="Quitar V2", emoji="🧹", style=discord.ButtonStyle.grey, row=1)
+    async def ClearV2(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user.id != self.author.id:
+            return await interaction.response.send_message(embed=NotYourPanel(), ephemeral=True)
+        from cogs.Configuration.Components.TicketsV2 import ClearButton
+
+        await ClearButton(interaction, self.name)
 
     @discord.ui.button(label="Manage Panels", emoji=f"{Emojis.multi_panel}")
     async def ManagePanels(

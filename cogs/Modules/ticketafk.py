@@ -65,6 +65,7 @@ class TicketAfk(commands.Cog):
         try:
             Tickets = await self.client.db[TICKETS].find({"closed": None, "ChannelID": {"$ne": None}}).to_list(length=None)
             Enabled: dict[int, bool] = {}
+            AutoClose: dict[tuple[int, str], bool] = {}
             for T in Tickets:
                 Guild = self.client.get_guild(T.get("GuildID") or 0)
                 Channel = Guild.get_channel(T.get("ChannelID") or 0) if Guild else None
@@ -72,9 +73,13 @@ class TicketAfk(commands.Cog):
                     continue
                 if Guild.id not in Enabled:
                     Enabled[Guild.id] = (await Mail().Get(Guild.id)).get("ticket_afk", True)
-                if not Enabled[Guild.id]:
+                Key = (Guild.id, T.get("panel") or "")
+                if Key not in AutoClose:  # per panel, on unless turned off
+                    Panel = await self.client.db["Panels"].find_one({"guild": Guild.id, "name": Key[1], "type": "single"}) or {}
+                    AutoClose[Key] = Panel.get("AutoClose", True)
+                if not Enabled[Guild.id] and not AutoClose[Key]:
                     continue
-                Action = Decide(T, Now())
+                Action = Decide(T, Now(), autoclose=AutoClose[Key], afk=Enabled[Guild.id])
                 if Action:
                     try:
                         await self.Act(Action, T, Guild, Channel)
@@ -90,6 +95,25 @@ class TicketAfk(commands.Cog):
     async def Act(self, action: str, ticket: dict, guild: discord.Guild, channel):
         User, Claimer = ticket.get("UserID"), (ticket.get("claimed") or {}).get("claimer")
         Col = self.client.db[TICKETS]
+        if action == "autoclose_warn":
+            Done = await Col.update_one(
+                {"_id": ticket["_id"], "closed": None, "afk.autoclose_warned": None},
+                {"$set": {"afk.autoclose_warned": Now()}},
+            )
+            if Done.modified_count:
+                await channel.send(
+                    f"<@{User}> ⏳ Este ticket lleva **24 h** esperando tu respuesta. Si no respondes en **12 h**, "
+                    "se cerrará automáticamente. Si ya está resuelto, avísanos y lo cerramos.",
+                    allowed_mentions=discord.AllowedMentions(users=[discord.Object(User)]),
+                )
+            return
+        if action == "autoclose":
+            Done = await Col.update_one(
+                {"_id": ticket["_id"], "closed": None, "afk.autoclosed": {"$ne": True}}, {"$set": {"afk.autoclosed": True}},
+            )
+            if Done.modified_count:  # the normal close: transcript, DM to the user, channel deleted
+                self.client.dispatch("pticket_close", ticket["_id"], "Cerrado automáticamente: el usuario no respondió en 36 h.", guild.me)
+            return
         if action == "remind_user":
             await Col.update_one({"_id": ticket["_id"]}, {"$set": {"afk.reminded_at": Now()}})
             await channel.send(

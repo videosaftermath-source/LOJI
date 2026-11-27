@@ -608,6 +608,14 @@ class TicketsPublic(commands.Cog):
             text=((Footer + " · ") if Footer else "") + TRANSCRIPT_NOTICE,
             icon_url=Embed.footer.icon_url if Embed.footer else None,
         )
+        try:  # so staff see at a glance whether this person has been here before
+            Before = await self.client.db["Tickets"].count_documents(
+                {"GuildID": guild.id, "UserID": author.id, "_id": {"$ne": objectID}, "closed": {"$ne": None}}
+            )
+            if Before:
+                Embed.add_field(name="📂 Tickets anteriores", value=f"{Before} ticket{'s' if Before != 1 else ''} cerrado{'s' if Before != 1 else ''}", inline=False)
+        except Exception as e:
+            logging.warning(f"[on_pticket_open] Couldn't count previous tickets: {e!r}")
         CategoryID = P.get("Category")
         if not CategoryID:
             await self.client.db["Tickets"].update_one(
