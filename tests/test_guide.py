@@ -110,9 +110,16 @@ def test_the_key_chooses_the_provider():
     assert run(Complete("sk-abc", "sys json", "user", max_tokens=300, json_mode=True, session=Deep, temperature=0.9)) == ('{"ok": 1}', 42)
     url, body, headers = Deep.sent
     assert url == "https://api.deepseek.com/chat/completions" and body["model"] == "deepseek-chat"
+    assert body["thinking"] == {"type": "disabled"}
     assert body["max_tokens"] == 300 and "reasoning_effort" not in body and "max_completion_tokens" not in body
     assert body["response_format"] == {"type": "json_object"} and body["temperature"] == 0.9
     Groq = FakeSession(FakeResponse(200, {"choices": [{"message": {"content": "x"}}]}))
+    class Picky(FakeSession):  # a model that refuses the thinking switch: asked again without it
+        def post(self, url, json=None, headers=None):
+            super().post(url, json, headers)
+            return FakeResponse(400, {"error": {"message": "unknown thinking"}}) if "thinking" in json else FakeResponse(200, {"choices": [{"message": {"content": "ok"}}]})
+    P = Picky(None)
+    assert run(Complete("sk-abc", "s", "u", session=P))[0] == "ok" and P.calls == 2 and "thinking" not in P.sent[1]
     Empty = FakeSession(FakeResponse(200, {"choices": [{"message": {"content": ""}}]}))
     with pytest.raises(GuideError, match="vacía"):  # tried 3 times, the last one without JSON mode
         run(Complete("sk-abc", "s", "u", max_tokens=100, json_mode=True, session=Empty))

@@ -218,6 +218,7 @@ def Body(key: str, messages: list[dict], temperature: float, max_tokens: int, ef
         Data.update(max_completion_tokens=max_tokens, reasoning_effort=effort)
     else:
         Data["max_tokens"] = max_tokens
+        Data["thinking"] = {"type": "disabled"}  # DeepSeek: no thinking (faster, cheaper, never an empty answer for running out of room)
     if json_mode:
         Data["response_format"] = {"type": "json_object"}
     return Data
@@ -229,6 +230,7 @@ async def Post(key: str, body: dict, session: aiohttp.ClientSession | None, retr
     Headers = {"Authorization": f"Bearer {key}", "Content-Type": "application/json"}
     Own = session is None
     Session = session or aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=90))
+    Retry = False
     try:
         async with Session.post(P["url"], json=body, headers=Headers) as R:
             Data = await R.json(content_type=None)
@@ -244,9 +246,12 @@ async def Post(key: str, body: dict, session: aiohttp.ClientSession | None, retr
                 )
             if R.status >= 400:
                 Message = (Data or {}).get("error", {}).get("message", "") if isinstance(Data, dict) else ""
-                if "model" in Message.lower() and ("exist" in Message.lower() or "not found" in Message.lower() or "invalid" in Message.lower()):
+                if R.status == 400 and "thinking" in body:  # a model/API that doesn't take the switch: ask again without it
+                    Retry = True
+                elif "model" in Message.lower() and ("exist" in Message.lower() or "not found" in Message.lower() or "invalid" in Message.lower()):
                     raise GuideError(f"{P['name']} no reconoce el modelo «{body.get('model')}». Revisa el nombre en `/config` → Mando Central → Guía de sanciones → Key de la IA.")
-                raise GuideError(f"{P['name']} respondió con un error ({R.status}). {Message[:200]}".strip())
+                else:
+                    raise GuideError(f"{P['name']} respondió con un error ({R.status}). {Message[:200]}".strip())
     except aiohttp.ClientError:
         raise GuideError(f"No pude conectar con {P['name']}. Inténtalo en un momento.{retry_note}")
     except TimeoutError:
@@ -254,6 +259,8 @@ async def Post(key: str, body: dict, session: aiohttp.ClientSession | None, retr
     finally:
         if Own:
             await Session.close()
+    if Retry:
+        return await Post(key, {K: V for K, V in body.items() if K != "thinking"}, session, retry_note)
     return Data
 
 
