@@ -83,3 +83,34 @@ def test_schedule_image():
     Png = Schedule([{"title": "One Piece", "day": 0, "hour": 22, "minute": 30, "streamer": 1, "episode": 1101},
                     {"title": "Dandadan", "day": 5, "hour": 20, "minute": 0, "streamer": 2, "episode": 1, "total": 12}], "S", {1: "A"})
     assert Png[:8] == b"\x89PNG\r\n\x1a\n" and len(Png) > 10_000
+
+
+def test_the_minute_loop_runs(monkeypatch):
+    """The background loop itself (it broke in production with an import error the other tests didn't reach)."""
+    import cogs.Modules.Growth.anime as an
+    from core.anime import NextAt as Next
+    from tests.economy.fakes import DB
+
+    D = DB()
+    monkeypatch.setattr(an, "Db", lambda: D)
+
+    async def Settings(g):
+        return {"staff_minutes": 60, "remind_minutes": 15, "channel": None, "staff_channel": None, "stage": None, "ping_role": None}
+
+    async def Offset(g):
+        return 0
+    monkeypatch.setattr(an, "Settings", Settings)
+    monkeypatch.setattr(an, "Offset", Offset)
+    Start = an.Now() + timedelta(minutes=30)
+    asyncio.run(D[an.SHOWS].insert_one({"_id": "ABCDEFGH", "guild_id": 1, "title": "X", "day": Start.weekday(), "hour": Start.hour,
+                                         "minute": Start.minute, "streamer": 5, "episode": 1, "done": {}}))
+    Acts = []
+    Cog = an.Anime.__new__(an.Anime)
+    Cog.client = N(get_guild=lambda g: N(id=1))
+
+    async def Act(guild, show, s, what, key, start):
+        Acts.append(what)
+    Cog.Act = Act
+    asyncio.run(an.Anime.Tick.coro(Cog))
+    asyncio.run(an.Anime.Tick.coro(Cog))  # the same step never twice
+    assert Acts == ["staff"]

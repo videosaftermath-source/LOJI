@@ -9,7 +9,7 @@ from discord import app_commands, ui
 from discord.ext import commands, tasks
 
 from cogs.Modules.Community.panel import Field, Owned, Show
-from core.anime import DAYS, SHOWS, EpisodeText, Finished, NextAt, ParseTime, Stage
+from core.anime import DAYS, SHOWS, EpisodeText, Finished, NextAt, Now, ParseTime, Stage
 from core.community import Store as Community
 
 logger = logging.getLogger(__name__)
@@ -242,8 +242,6 @@ class Anime(commands.Cog):
 
     @tasks.loop(minutes=1)
     async def Tick(self):
-        from core.anime import Now
-
         Now_ = Now()
         try:
             All = await Db()[SHOWS].find({}).to_list(length=None)

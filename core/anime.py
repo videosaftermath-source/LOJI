@@ -24,6 +24,10 @@ DAY_KEYS = {D.lower(): I for I, D in enumerate(DAYS)} | {"miercoles": 2, "sabado
                                                          "jue": 3, "vie": 4, "sab": 5, "sáb": 5, "dom": 6}
 
 
+def Now() -> datetime:
+    return datetime.now(timezone.utc)
+
+
 def ParseDay(text: str) -> int:
     Key = (text or "").strip().lower()
     if Key not in DAY_KEYS:
