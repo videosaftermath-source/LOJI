@@ -114,3 +114,11 @@ def test_buttons_resolve_once(monkeypatch):
     assert Replies[0][0] == "edit" and "Se actuará" in Replies[0][1]["embed"].fields[-1].value and Replies[0][1]["view"] is None
     assert Replies[1] == ("msg", "Este reporte ya lo resolvió otra persona.")
     assert asyncio.run(D[ar.REPORTS].find_one({"_id": "ABCDEFGH"}))["status"] == "act"
+
+
+def test_several_channels_and_the_old_single_one():
+    from core.autoreport import Settings
+
+    assert Settings({"autoreport": {"channel": 5}})["channels"] == [5]  # configs from before keep working
+    assert Settings({"autoreport": {"channel": None, "channels": [6, 7]}})["channels"] == [6, 7]
+    assert Settings(None)["channels"] == []

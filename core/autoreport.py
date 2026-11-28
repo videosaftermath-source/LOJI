@@ -18,7 +18,8 @@ CONTEXT_MESSAGES = 6
 
 DEFAULTS = {
     "enabled": False,
-    "channel": None,  # the chat that is watched
+    "channel": None,  # old single watched chat (kept for configs made before "channels")
+    "channels": [],  # the chats that are watched
     "emoji": "🚩",
     "threshold": 2,  # reactions from different people
     "staff_channel": None,  # where the report cards go
@@ -53,8 +54,16 @@ def Aware(dt):
     return dt.replace(tzinfo=timezone.utc) if dt is not None and dt.tzinfo is None else dt
 
 
+MAX_CHANNELS = 25
+
+
 def Settings(doc: dict | None) -> dict:
-    return {**DEFAULTS, **((doc or {}).get("autoreport") or {})}
+    S = {**DEFAULTS, **((doc or {}).get("autoreport") or {})}
+    Channels = list(S.get("channels") or [])
+    if S.get("channel") and S["channel"] not in Channels:  # the old single channel still counts
+        Channels.insert(0, S["channel"])
+    S["channels"] = Channels
+    return S
 
 
 def UserPrompt(reported: dict, context: list[dict]) -> str:

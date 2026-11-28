@@ -1,7 +1,7 @@
 # 🚩 Autoreporte (reporte rápido)
 `/config` → Mando Central → 📚 Guía de sanciones → **🚩 Autoreporte**. Usa la misma key de Groq que `/guia`.
 
-1. Un mensaje del **canal vigilado** recibe **2× 🚩** de personas distintas (sin contar al autor ni bots).
+1. Un mensaje de uno de los **canales vigilados** (hasta 25) recibe **2× 🚩** de personas distintas (sin contar al autor ni bots).
 2. LOJI envía a la IA **solo ese mensaje** y los 6 anteriores (para entender el contexto), con vuestras **normas** (`.txt`/`.docx`, como la guía).
 3. Al **canal del staff** llega una ficha, sea sancionable o no:
    veredicto (⚠️ parece sancionable / ✅ no parece sancionable), norma, motivo, sugerencia, quién reportó,

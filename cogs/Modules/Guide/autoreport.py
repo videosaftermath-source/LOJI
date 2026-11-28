@@ -9,7 +9,7 @@ import discord
 from discord import ui
 from discord.ext import commands
 
-from core.autoreport import CONTEXT_MESSAGES, DAY, MAX_RULES_CHARS, REPORTS, SYSTEM, Abuse, Now, ParseVerdict, Settings, UserPrompt
+from core.autoreport import CONTEXT_MESSAGES, DAY, MAX_CHANNELS, MAX_RULES_CHARS, REPORTS, SYSTEM, Abuse, Now, ParseVerdict, Settings, UserPrompt
 from core.guide import ALLOWED, ExtractText, GuideError
 
 logger = logging.getLogger(__name__)
@@ -137,7 +137,7 @@ class AutoReport(commands.Cog):
         if not payload.guild_id or (payload.member and payload.member.bot):
             return
         Doc, S = await Config(payload.guild_id)
-        if not S["enabled"] or payload.channel_id != S["channel"] or str(payload.emoji) != S["emoji"]:
+        if not S["enabled"] or payload.channel_id not in S["channels"] or str(payload.emoji) != S["emoji"]:
             return
         Lock = self.locks.setdefault(payload.message_id, asyncio.Lock())
         async with Lock:
@@ -252,10 +252,12 @@ async def PanelEmbed(guild: discord.Guild) -> discord.Embed:
     embed = discord.Embed(title="🚩 Autoreporte", color=LOJI_RED)
     embed.description = (
         ("✅ **Activado.**" if S["enabled"] else "⏸️ **Desactivado.**")
-        + f" Cuando un mensaje del canal vigilado recibe **{S['threshold']}× {S['emoji']}** de personas distintas, LOJI lo revisa "
+        + f" Cuando un mensaje de los canales vigilados recibe **{S['threshold']}× {S['emoji']}** de personas distintas, LOJI lo revisa "
         "con la IA según vuestras normas y manda la ficha al staff (sea sancionable o no). Solo se envía a la IA el mensaje reportado y un poco de contexto."
     )
-    embed.add_field(name="👁️ Canal vigilado", value=f"<#{S['channel']}>" if S["channel"] else "*sin elegir*", inline=True)
+    embed.add_field(
+        name=f"👁️ Canales vigilados ({len(S['channels'])})", value=" ".join(f"<#{C}>" for C in S["channels"])[:1024] or "*sin elegir*", inline=True,
+    )
     embed.add_field(name="📥 Fichas al staff", value=f"<#{S['staff_channel']}>" if S["staff_channel"] else "*sin elegir*", inline=True)
     embed.add_field(name="🔔 Avisar a", value=f"<@&{S['ping_role']}>" if S.get("ping_role") else "*nadie*", inline=True)
     Rules = Doc.get("rules_text")
@@ -270,13 +272,19 @@ async def PanelEmbed(guild: discord.Guild) -> discord.Embed:
 
 
 class AutoReportPanel(ui.View):
-    def __init__(self, author, back=None):
+    def __init__(self, author, back=None, channels: list | None = None):
         super().__init__(timeout=600)
         self.author, self.back = author, back
-        for Key, Placeholder, Row in (("channel", "👁️ Canal vigilado (donde se reporta)", 0), ("staff_channel", "📥 Canal del staff (fichas)", 1)):
-            Pick = ui.ChannelSelect(placeholder=Placeholder, channel_types=[discord.ChannelType.text], row=Row)
-            Pick.callback = self.Saver(Key)
-            self.add_item(Pick)
+        Watched = ui.ChannelSelect(
+            placeholder="👁️ Canales vigilados (marca o desmarca)", channel_types=[discord.ChannelType.text],
+            min_values=0, max_values=MAX_CHANNELS, row=0,
+            default_values=[discord.SelectDefaultValue(id=C, type=discord.SelectDefaultValueType.channel) for C in (channels or [])][:MAX_CHANNELS],
+        )
+        Watched.callback = self.PickWatched
+        self.add_item(Watched)
+        Pick = ui.ChannelSelect(placeholder="📥 Canal del staff (fichas)", channel_types=[discord.ChannelType.text], row=1)
+        Pick.callback = self.Saver("staff_channel")
+        self.add_item(Pick)
         Role = ui.RoleSelect(placeholder="🔔 Rol a avisar con cada ficha (opcional)", min_values=0, max_values=1, row=2)
         Role.callback = self.PickRole
         self.add_item(Role)
@@ -290,7 +298,7 @@ class AutoReportPanel(ui.View):
     async def Refresh(self, interaction: discord.Interaction, note: str | None = None):
         Edit = interaction.edit_original_response if interaction.response.is_done() else interaction.response.edit_message
         _, S = await Config(interaction.guild.id)
-        View = AutoReportPanel(self.author, self.back)
+        View = AutoReportPanel(self.author, self.back, S["channels"])
         View.Toggle.label = "Desactivar" if S["enabled"] else "Activar"
         await Edit(content=note, embed=await PanelEmbed(interaction.guild), view=View)
 
@@ -300,6 +308,12 @@ class AutoReportPanel(ui.View):
             await self.Refresh(interaction, "✅ Guardado.")
         return Save
 
+    async def PickWatched(self, interaction: discord.Interaction):
+        # The menu shows the current ones already ticked: what comes back is the whole new list.
+        Channels = [int(V) for V in interaction.data.get("values") or []]
+        await SaveSettings(interaction.guild.id, {"channels": Channels, "channel": None})
+        await self.Refresh(interaction, f"✅ {len(Channels)} canal{'es' if len(Channels) != 1 else ''} vigilado{'s' if len(Channels) != 1 else ''}.")
+
     async def PickRole(self, interaction: discord.Interaction):
         Values = interaction.data.get("values") or []
         await SaveSettings(interaction.guild.id, {"ping_role": int(Values[0]) if Values else None})
@@ -308,8 +322,8 @@ class AutoReportPanel(ui.View):
     @ui.button(label="Activar", emoji="⏯️", style=discord.ButtonStyle.green, row=3)
     async def Toggle(self, interaction: discord.Interaction, _):
         Doc, S = await Config(interaction.guild.id)
-        if not S["enabled"] and not (S["channel"] and S["staff_channel"]):
-            return await self.Refresh(interaction, "❌ Elige primero el canal vigilado y el canal del staff.")
+        if not S["enabled"] and not (S["channels"] and S["staff_channel"]):
+            return await self.Refresh(interaction, "❌ Elige primero los canales vigilados y el canal del staff.")
         await SaveSettings(interaction.guild.id, {"enabled": not S["enabled"]})
         Tip = "" if Doc.get("rules_text") else "\n⚠️ Aún no hay normas: las fichas llegarán sin la opinión de la IA."
         await self.Refresh(interaction, ("✅ Activado." + Tip) if not S["enabled"] else "⏸️ Desactivado.")
@@ -342,7 +356,7 @@ class AutoReportPanel(ui.View):
 
 async def OpenPanel(interaction: discord.Interaction, author, back=None):
     _, S = await Config(interaction.guild.id)
-    View = AutoReportPanel(author, back)
+    View = AutoReportPanel(author, back, S["channels"])
     View.Toggle.label = "Desactivar" if S["enabled"] else "Activar"
     await interaction.response.edit_message(content=None, embed=await PanelEmbed(interaction.guild), view=View)
 
