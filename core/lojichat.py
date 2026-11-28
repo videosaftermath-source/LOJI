@@ -1,6 +1,6 @@
 """
 LOJI chat: in one channel, when the chat goes quiet LOJI wakes up and talks (personality from a .txt, the /guia
-Groq key); when it fills up again she says goodbye and goes back to sleep.
+AI key); when it fills up again she says goodbye and goes back to sleep.
 
 - Quiet: fewer than `dead_people` people AND fewer than `dead_messages` messages in the last `window` minutes,
   for `sustain` minutes in a row, and at least `cooldown` minutes since she last left.

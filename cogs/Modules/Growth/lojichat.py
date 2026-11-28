@@ -170,7 +170,7 @@ class LojiChat(commands.Cog):
         System, User = BuildPrompt(Personality, [{"name": N["name"], "text": N["text"]} for N in Notes], list(reversed(Past)), Live,
                                    int(s["context_tokens"]), guild.name, opening)
         try:
-            Text, _ = await Complete(Key, System, User, max_tokens=500, json_mode=True)
+            Text, _ = await Complete(Key, System, User, max_tokens=500, json_mode=True, temperature=0.9)  # chatting: a bit livelier
             Answer = ParseReply(Text)
         except (GuideError, ValueError) as e:
             return logger.warning(f"[LojiChat] {guild.id}: {e}")

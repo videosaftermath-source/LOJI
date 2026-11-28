@@ -1,5 +1,5 @@
 # 🤖 LOJI (chat)
-`/config` → **🎉 Crecimiento y Entretenimiento** → **🤖 LOJI (chat)**. Usa la key de Groq de `/guia`.
+`/config` → **🎉 Crecimiento y Entretenimiento** → **🤖 LOJI (chat)**. Usa la key de IA de `/guia` (DeepSeek o Groq).
 
 - **Canal** donde conversa (uno) y **canal de alertas** del staff (opcional).
 - **📤 Subir personalidad:** el `.txt` / `.md` / `.docx` con quién es LOJI y cómo habla (hasta ~10.000 tokens).

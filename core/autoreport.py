@@ -1,6 +1,6 @@
 """
 Quick reports: in one chosen channel, when a message gets enough 🚩 reactions from different people, LOJI asks
-the /guia model (same Groq key) whether it breaks the server rules (uploaded as a .txt, like the guide) and posts a
+the /guia model (same AI key) whether it breaks the server rules (uploaded as a .txt, like the guide) and posts a
 report card to staff, sancionable or not, with "Falsa alarma" / "Se actuará". Only reported messages are sent.
 
 - Daily cap on AI reviews (cost); past it, reports still arrive, without the AI's opinion.

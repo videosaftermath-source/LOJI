@@ -195,7 +195,7 @@ class AutoReport(commands.Cog):
         if not Rules:
             return None, "no hay normas cargadas (`/config` → Mando Central → Guía → Autoreporte)", False
         if not Key:
-            return None, "falta la key de Groq", False
+            return None, "falta la key de la IA", False
         Used = await Db()[REPORTS].count_documents({"guild_id": guild.id, "ai": True, "at": {"$gte": Now() - DAY}})
         if Used >= int(s["daily_limit"]):
             return None, f"límite diario de revisiones con IA alcanzado ({s['daily_limit']})", False

@@ -1,11 +1,11 @@
 """
 Sanctions guide Q&A (/guia): the whole guide goes to the model with each question, so a new upload
-applies at once. Model: openai/gpt-oss-120b on Groq (OpenAI-compatible API).
+applies at once. Model: DeepSeek (deepseek-chat) or Groq (openai/gpt-oss-120b), chosen by the key.
 
 - The guide is uploaded as .docx, .txt or .md from /config → Mando Central → Guía de sanciones.
 - Who can ask: one configurable role; 2 questions per person per rolling 24 h.
 - No memory: each question is independent. Only the time of each question is stored (for the limit).
-- The Groq key: set in /config (stored in the database) or GROQ_API_KEY in .env.
+- The AI key: set in /config (stored in the database) or DEEPSEEK_API_KEY / GROQ_API_KEY in .env.
 """
 
 import io
@@ -168,7 +168,7 @@ class Guide:
 
     async def Key(self, guild_id: int) -> str | None:
         Doc = await self.Get(guild_id) or {}
-        return Doc.get("groq_key") or os.getenv("GROQ_API_KEY")
+        return Doc.get("groq_key") or os.getenv("DEEPSEEK_API_KEY") or os.getenv("GROQ_API_KEY")
 
     async def Used(self, guild_id: int, user_id: int, now: datetime | None = None) -> list[datetime]:
         Since = (now or Now()) - WINDOW
@@ -192,88 +192,93 @@ def MaskKey(key: str | None) -> str:
 
 
 # ---------------- asking ----------------
+# Two OpenAI-compatible providers; which one is decided by the key itself:
+#   Groq     (keys "gsk_…") -> openai/gpt-oss-120b
+#   DeepSeek (keys "sk-…")  -> deepseek-chat (cheaper; repeated prompts like the guide are cached and cost less)
+
+PROVIDERS = {
+    "groq": {"name": "Groq", "url": GROQ_URL, "model": MODEL, "reasoning": True},
+    "deepseek": {"name": "DeepSeek", "url": "https://api.deepseek.com/chat/completions", "model": "deepseek-chat", "reasoning": False},
+}
+
+
+def Provider(key: str | None) -> dict:
+    return PROVIDERS["deepseek" if (key or "").startswith("sk-") else "groq"]
+
+
+def ValidKey(key: str) -> bool:
+    return key.startswith(("gsk_", "sk-"))
+
+
+def Body(key: str, messages: list[dict], temperature: float, max_tokens: int, effort: str, json_mode: bool) -> dict:
+    P = Provider(key)
+    Data = {"model": P["model"], "messages": messages, "temperature": temperature}
+    if P["reasoning"]:  # gpt-oss thinks first: its limit counts the thinking too
+        Data.update(max_completion_tokens=max_tokens, reasoning_effort=effort)
+    else:
+        Data["max_tokens"] = max_tokens
+    if json_mode:
+        Data["response_format"] = {"type": "json_object"}
+    return Data
+
+
+async def Post(key: str, body: dict, session: aiohttp.ClientSession | None, retry_note: str = "") -> dict:
+    """Sends one request; every failure becomes a GuideError with a message that can be shown on Discord."""
+    P = Provider(key)
+    Headers = {"Authorization": f"Bearer {key}", "Content-Type": "application/json"}
+    Own = session is None
+    Session = session or aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=90))
+    try:
+        async with Session.post(P["url"], json=body, headers=Headers) as R:
+            Data = await R.json(content_type=None)
+            if R.status == 401:
+                raise GuideError(f"La key de {P['name']} no es válida. Revísala en `/config` → Mando Central → Guía de sanciones.")
+            if R.status == 402:
+                raise GuideError(f"La cuenta de {P['name']} no tiene saldo. Recárgala.{retry_note}")
+            if R.status == 429:
+                Wait = R.headers.get("retry-after")
+                raise GuideError(
+                    f"{P['name']} está al límite de uso ahora mismo. Inténtalo "
+                    + (f"en unos {int(float(Wait)) + 1} segundos." if Wait else "en un minuto.") + retry_note
+                )
+            if R.status >= 400:
+                Message = (Data or {}).get("error", {}).get("message", "") if isinstance(Data, dict) else ""
+                raise GuideError(f"{P['name']} respondió con un error ({R.status}). {Message[:200]}".strip())
+    except aiohttp.ClientError:
+        raise GuideError(f"No pude conectar con {P['name']}. Inténtalo en un momento.{retry_note}")
+    except TimeoutError:
+        raise GuideError(f"{P['name']} tardó demasiado en responder.{retry_note}")
+    finally:
+        if Own:
+            await Session.close()
+    return Data
+
+
+def Text(data: dict, key: str, retry_note: str = "") -> str:
+    try:
+        Answer = (data["choices"][0]["message"]["content"] or "").strip()
+    except (KeyError, IndexError, TypeError):
+        Answer = ""
+    if not Answer:
+        raise GuideError(f"{Provider(key)['name']} devolvió una respuesta vacía. Inténtalo de nuevo.{retry_note}")
+    return Answer
 
 
 async def Ask(key: str, guide: str, question: str, server: str, session: aiohttp.ClientSession | None = None) -> str:
     """One question, no memory. Raises GuideError with a message for the user."""
-    Body = {
-        "model": MODEL,
-        "messages": [
-            {"role": "system", "content": SYSTEM.format(server=server, guide=guide)},
-            {"role": "user", "content": question},
-        ],
-        "temperature": 0.2,
-        "max_completion_tokens": 2000,
-        "reasoning_effort": "medium",
-    }
-    Headers = {"Authorization": f"Bearer {key}", "Content-Type": "application/json"}
-    Own = session is None
-    Session = session or aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=60))
-    try:
-        async with Session.post(GROQ_URL, json=Body, headers=Headers) as R:
-            Data = await R.json(content_type=None)
-            if R.status == 401:
-                raise GuideError("La key de Groq no es válida. Revísala en `/config` → Mando Central → Guía de sanciones.")
-            if R.status == 429:
-                Wait = R.headers.get("retry-after")
-                raise GuideError(
-                    "Groq está al límite de uso por minuto (varias preguntas a la vez). Inténtalo "
-                    + (f"en unos {int(float(Wait)) + 1} segundos." if Wait else "en un minuto.")
-                    + " No se te ha descontado la pregunta."
-                )
-            if R.status >= 400:
-                Message = (Data or {}).get("error", {}).get("message", "") if isinstance(Data, dict) else ""
-                raise GuideError(f"Groq respondió con un error ({R.status}). {Message[:200]}".strip())
-    except aiohttp.ClientError:
-        raise GuideError("No pude conectar con Groq. Inténtalo en un momento; no se te ha descontado la pregunta.")
-    finally:
-        if Own:
-            await Session.close()
-    try:
-        Answer = Data["choices"][0]["message"]["content"] or ""
-    except (KeyError, IndexError, TypeError):
-        raise GuideError("Groq devolvió una respuesta vacía. Inténtalo de nuevo; no se te ha descontado la pregunta.")
-    Answer = Answer.strip()
-    if not Answer:
-        raise GuideError("Groq devolvió una respuesta vacía. Inténtalo de nuevo; no se te ha descontado la pregunta.")
-    return Answer
+    Messages = [
+        {"role": "system", "content": SYSTEM.format(server=server, guide=guide)},
+        {"role": "user", "content": question},
+    ]
+    Note = " No se te ha descontado la pregunta."
+    Data = await Post(key, Body(key, Messages, 0.2, 2000, "medium", False), session, Note)
+    return Text(Data, key, Note)
 
 
 async def Complete(key: str, system: str, user: str, max_tokens: int = 900, json_mode: bool = False,
-                   session: aiohttp.ClientSession | None = None) -> tuple[str, int]:
-    """One call to the same Groq model (used by the quick reports). Returns (text, tokens used).
+                   session: aiohttp.ClientSession | None = None, temperature: float = 0.1) -> tuple[str, int]:
+    """One call to the same model (quick reports, LOJI chat). Returns (text, tokens used).
     Raises GuideError with a message that can be shown to staff."""
-    Body = {
-        "model": MODEL,
-        "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}],
-        "temperature": 0.1,
-        "max_completion_tokens": max_tokens,
-        "reasoning_effort": "low",
-    }
-    if json_mode:
-        Body["response_format"] = {"type": "json_object"}
-    Headers = {"Authorization": f"Bearer {key}", "Content-Type": "application/json"}
-    Own = session is None
-    Session = session or aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=60))
-    try:
-        async with Session.post(GROQ_URL, json=Body, headers=Headers) as R:
-            Data = await R.json(content_type=None)
-            if R.status == 401:
-                raise GuideError("La key de Groq no es válida.")
-            if R.status == 429:
-                raise GuideError("Groq está al límite de uso ahora mismo.")
-            if R.status >= 400:
-                Message = (Data or {}).get("error", {}).get("message", "") if isinstance(Data, dict) else ""
-                raise GuideError(f"Groq respondió con un error ({R.status}). {Message[:200]}".strip())
-    except aiohttp.ClientError:
-        raise GuideError("No pude conectar con Groq.")
-    finally:
-        if Own:
-            await Session.close()
-    try:
-        Text = (Data["choices"][0]["message"]["content"] or "").strip()
-    except (KeyError, IndexError, TypeError):
-        raise GuideError("Groq devolvió una respuesta vacía.")
-    if not Text:
-        raise GuideError("Groq devolvió una respuesta vacía.")
-    return Text, int((Data.get("usage") or {}).get("total_tokens") or 0)
+    Messages = [{"role": "system", "content": system}, {"role": "user", "content": user}]
+    Data = await Post(key, Body(key, Messages, temperature, max_tokens, "low", json_mode), session)
+    return Text(Data, key), int((Data.get("usage") or {}).get("total_tokens") or 0)

@@ -8,7 +8,7 @@ from discord import app_commands
 from discord.ext import commands
 
 from core.guide import (
-    ALLOWED, MODEL, PER_DAY, QUESTION_MAX, ApproxTokens, Ask, Aware, ExtractText, Guide, GuideError, MaskKey,
+    ALLOWED, PER_DAY, QUESTION_MAX, ApproxTokens, Ask, Aware, ExtractText, Guide, GuideError, MaskKey, Provider, ValidKey,
 )
 
 logger = logging.getLogger(__name__)
@@ -50,11 +50,11 @@ async def PanelEmbed(guild: discord.Guild) -> discord.Embed:
         embed.add_field(name="📄 Guía", value="❌ Todavía no hay guía. Pulsa **Subir guía**.", inline=False)
     embed.add_field(name="🎭 Quién puede preguntar", value=Role.mention if Role else "❌ *sin configurar*", inline=True)
     embed.add_field(
-        name="🔑 Key de Groq",
+        name=f"🔑 Key de la IA · {Provider(Key)['name']}" if Key else "🔑 Key de la IA",
         value=MaskKey(Key) + (" *(del .env)*" if Key and not Doc.get("groq_key") else ""),
         inline=True,
     )
-    embed.set_footer(text=f"Modelo: {MODEL} (Groq)")
+    embed.set_footer(text=f"Modelo: {Provider(Key)['model']} ({Provider(Key)['name']}) · también lo usan el autoreporte y LOJI (chat)")
     return embed
 
 
@@ -97,7 +97,7 @@ class GuidePanel(discord.ui.View):
             "📥 Esto es exactamente lo que lee el bot (el texto que sacó de tu archivo).", file=File, ephemeral=True,
         )
 
-    @discord.ui.button(label="Key de Groq", emoji="🔑", style=discord.ButtonStyle.blurple, row=1)
+    @discord.ui.button(label="Key de la IA", emoji="🔑", style=discord.ButtonStyle.blurple, row=1)
     async def SetKey(self, interaction: discord.Interaction, _):
         await interaction.response.send_modal(KeyModal(self))
 
@@ -141,21 +141,21 @@ class UploadModal(discord.ui.Modal, title="Subir guía de sanciones"):
         )
 
 
-class KeyModal(discord.ui.Modal, title="Key de Groq"):
+class KeyModal(discord.ui.Modal, title="Key de la IA (DeepSeek o Groq)"):
     def __init__(self, panel: GuidePanel):
         super().__init__()
         self.panel = panel
         self.key = discord.ui.TextInput(
-            label="Key (vacío = usar la del .env)", placeholder="gsk_...", required=False, max_length=200,
+            label="Key (vacío = usar la del .env)", placeholder="DeepSeek: sk-...   ·   Groq: gsk_...", required=False, max_length=200,
         )
         self.add_item(self.key)
 
     async def on_submit(self, interaction: discord.Interaction):
         Key = self.key.value.strip()
-        if Key and not Key.startswith("gsk_"):
-            return await interaction.response.send_message("❌ Las keys de Groq empiezan por `gsk_`.", ephemeral=True)
+        if Key and not ValidKey(Key):
+            return await interaction.response.send_message("❌ Las keys de DeepSeek empiezan por `sk-` y las de Groq por `gsk_`.", ephemeral=True)
         await Store().SetKey(interaction.guild.id, Key or None)
-        await self.panel.Refresh(interaction, "🔑 Key guardada." if Key else "🔑 Key borrada: se usará `GROQ_API_KEY` del .env si existe.")
+        await self.panel.Refresh(interaction, f"🔑 Key de **{Provider(Key)['name']}** guardada: `/guia`, el autoreporte y LOJI (chat) la usan desde ya." if Key else "🔑 Key borrada: se usará la del .env (`DEEPSEEK_API_KEY` o `GROQ_API_KEY`) si existe.")
 
 
 # ---------------- /guia ----------------
@@ -180,7 +180,7 @@ class GuideCog(commands.Cog):
             return await interaction.response.send_message("❌ Todavía no hay guía cargada.", ephemeral=True)
         Key = await Store().Key(interaction.guild.id)
         if not Key:
-            return await interaction.response.send_message("❌ Falta la key de Groq (`/config` → Mando Central → Guía de sanciones).", ephemeral=True)
+            return await interaction.response.send_message("❌ Falta la key de la IA (`/config` → Mando Central → Guía de sanciones).", ephemeral=True)
         Left, Free = await Store().Remaining(interaction.guild.id, interaction.user.id)
         if not Left:
             return await interaction.response.send_message(

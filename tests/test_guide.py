@@ -99,3 +99,21 @@ def test_ask_sends_the_guide_and_handles_errors():
             run(Ask("k", "g", "q", "L", FakeSession(FakeResponse(status, {"error": {"message": "x"}}, {"retry-after": "7"}))))
     with pytest.raises(GuideError, match="vacía"):
         run(Ask("k", "g", "q", "L", FakeSession(FakeResponse(200, {"choices": []}))))
+
+
+def test_the_key_chooses_the_provider():
+    from core.guide import Complete, Provider, ValidKey
+
+    assert Provider("sk-abc")["name"] == "DeepSeek" and Provider("gsk_abc")["name"] == "Groq"
+    assert ValidKey("sk-1") and ValidKey("gsk_1") and not ValidKey("hola")
+    Deep = FakeSession(FakeResponse(200, {"choices": [{"message": {"content": '{"ok": 1}'}}], "usage": {"total_tokens": 42}}))
+    assert run(Complete("sk-abc", "sys json", "user", max_tokens=300, json_mode=True, session=Deep, temperature=0.9)) == ('{"ok": 1}', 42)
+    url, body, headers = Deep.sent
+    assert url == "https://api.deepseek.com/chat/completions" and body["model"] == "deepseek-chat"
+    assert body["max_tokens"] == 300 and "reasoning_effort" not in body and "max_completion_tokens" not in body
+    assert body["response_format"] == {"type": "json_object"} and body["temperature"] == 0.9
+    Groq = FakeSession(FakeResponse(200, {"choices": [{"message": {"content": "x"}}]}))
+    run(Ask("gsk_x", "g", "q", "L", Groq))
+    assert Groq.sent[0].startswith("https://api.groq.com") and Groq.sent[1]["reasoning_effort"] == "medium"
+    with pytest.raises(GuideError, match="DeepSeek no tiene saldo"):
+        run(Ask("sk-x", "g", "q", "L", FakeSession(FakeResponse(402, {"error": {"message": "Insufficient Balance"}}))))
