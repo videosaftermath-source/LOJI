@@ -236,7 +236,7 @@ def test_several_tags_get_the_rest_text(monkeypatch):
 
     async def Complete(key, system, user, **kw):
         Models.append(kw.get("model"))
-        assert "Luis te ha hablado a ti (mensaje [1]" in user
+        assert "Luis (mensaje [1]: «loji hola») te ha hablado a ti" in user
         return '{"mensajes": ["holi Luis", "esto sobra"], "responder_a": 0, "recordar": [], "alerta": ""}', 10  # Luis wins anyway
     monkeypatch.setattr(core.guide, "Complete", Complete)
 
@@ -267,6 +267,39 @@ def test_several_tags_get_the_rest_text(monkeypatch):
     Cog.state = {1: {"awake": True, "woke_at": T0}}
     Cog.live = {1: deque([{"author": "Ana", "author_id": 1, "content": "loji!", "to_loji": True, "id": 11},
                           {"author": "Luis", "author_id": 2, "content": "loji hola", "to_loji": True, "id": 12}], maxlen=40)}
+    Cog.used_phrases = {}
+    from core.lojichat_phrases import REST_PHRASES
+
+    class Dice:  # answers only 1 person, and doesn't ignore the rest
+        randint = staticmethod(lambda a, b: 1)
+        random = staticmethod(lambda: 0.9)
+        choice = staticmethod(lambda xs: xs[0])
+        uniform = staticmethod(lambda a, b: a)
+    monkeypatch.setattr(lc, "random", Dice)
     asyncio.run(Cog.Reply(N(id=1, name="S"), Channel(), dict(S), opening=False))
-    assert Sent == [("holi Luis", 12), (S["rest_text"], None)]  # one reply to Luis, then the note for the rest
+    assert Sent == [("holi Luis", 12), (REST_PHRASES[0], None)]  # one reply to Luis, then a phrase for the rest
     assert Models == ["deepseek-v4-flash"]
+
+
+def test_she_answers_a_few_and_the_rest_gets_a_phrase():
+    import random
+
+    from core.lojichat import BuildPrompt, PickTargets, RestPhrase, RestPhrases
+
+    Lines = [{"author": N, "author_id": I, "content": f"loji {N}", "to_loji": True, "id": 10 + I} for I, N in enumerate("ABCDE")]
+    Lines.insert(2, {"author": "A", "author_id": 0, "content": "loji otra vez", "to_loji": True, "id": 99})
+    Targets, Rest = PickTargets(Lines, most=3)
+    assert [T["author"] for T in Targets] == ["C", "D", "E"] and Rest == 2  # the 3 newest people; A and B are "the rest"
+    Targets, Rest = PickTargets(Lines, most=10)
+    assert [T["author"] for T in Targets] == ["B", "A", "C", "D", "E"] and Rest == 0 and Targets[1]["id"] == 99  # A's newest
+    _, User = BuildPrompt("x", [], [], Lines, 6000, "S", False, Targets[-2:])
+    assert "exactamente 2" in User and "D (mensaje [4]" in User
+    assert ParseReply('{"mensajes": ["a", "b", "c"]}', most=2)["messages"] == ["a", "b"]
+    # the phrase: never one of the last ones, sometimes nothing at all, "nada" turns it off, own phrases one per line
+    R, Recent = random.Random(1), []
+    Said = [RestPhrase({**S, "rest_ignore": 0}, Recent, R) for _ in range(40)]
+    assert all(Said[I] not in Said[max(0, I - 20):I] for I in range(40))
+    Ignored = sum(RestPhrase(S, [], random.Random(I)) is None for I in range(300))
+    assert 60 < Ignored < 140  # ~33 %
+    assert RestPhrases({"rest_text": "nada"}) == [] and RestPhrases({"rest_text": "uno\n\n dos "}) == ["uno", "dos"]
+    assert len(RestPhrases({"rest_text": "No respondo al resto porque me canso lol"})) == 110  # the old default = LOJI's list

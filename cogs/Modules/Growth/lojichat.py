@@ -13,7 +13,7 @@ from discord.ext import commands, tasks
 
 from cogs.Modules.Community.panel import Field, Owned, Show
 from core.community import Store as Community
-from core.lojichat import LOG, NOTES, OBSERVED, OPTOUT, Activity, AddressesLoji, Aware, BuildPrompt, Decide, Now, ParseReply, PickTarget
+from core.lojichat import LOG, NOTES, OBSERVED, OLD_REST, OPTOUT, Activity, AddressesLoji, Aware, BuildPrompt, Decide, Now, ParseReply, PickTargets, RestPhrase
 
 logger = logging.getLogger(__name__)
 LOJI_RED = discord.Color.from_rgb(150, 12, 18)
@@ -46,6 +46,7 @@ class LojiChat(commands.Cog):
         self.live: dict[int, deque] = {}  # guild -> recent lines while awake
         self.pending: dict[int, asyncio.Task] = {}
         self.last_reply: dict = {}
+        self.used_phrases: dict[int, list[str]] = {}  # guild -> phrases for "the rest" said lately (no repeats)
         self.ticks = 0
         self.Check.start()
 
@@ -173,34 +174,39 @@ class LojiChat(commands.Cog):
         Live = list(self.live.get(guild.id) or [])
         if not opening and Live and Live[-1]["author"] == "LOJI":
             return  # never twice in a row without an answer
-        Target, Others = (None, []) if opening else PickTarget(Live, only_addressed=bool(State.get("forced")))
-        if not opening and not Target:
+        Most = random.randint(1, max(1, int(s.get("max_answers", 3))))  # how many of those who tagged her she answers this time
+        Targets, Rest = ([], 0) if opening else PickTargets(Live, only_addressed=bool(State.get("forced")), most=Most)
+        if not opening and not Targets:
             return
+        Addressed = bool(Targets) and bool(Targets[0].get("to_loji"))
         WokeAt = (self.state.get(guild.id) or {}).get("woke_at") or Now()
         Past = await Db()[LOG].find({"guild_id": guild.id, "at": {"$lt": WokeAt}}).sort("at", -1).to_list(length=40)
         Present = {L["author_id"] for L in Live if L.get("author_id")}
         Notes = await Db()[NOTES].find({"guild_id": guild.id, "user_id": {"$in": list(Present)}}).sort("at", -1).to_list(length=30)
         System, User = BuildPrompt(Personality, [{"name": N["name"], "text": N["text"]} for N in Notes], list(reversed(Past)), Live,
-                                   int(s["context_tokens"]), guild.name, opening, Target)
+                                   int(s["context_tokens"]), guild.name, opening, Targets)
         try:
             Text, _ = await Complete(Key, System, User, max_tokens=900, json_mode=True, temperature=1.0,  # chatting: livelier
                                      model=Doc.get("ai_model"))
-            Answer = ParseReply(Text)
+            Answer = ParseReply(Text, most=len(Targets) if Addressed else 1)
         except (GuideError, ValueError) as e:
             return logger.warning(f"[LojiChat] {guild.id}: {e}")
         if not (self.state.get(guild.id) or {}).get("awake"):
             return  # the chat filled up while she was thinking
-        if not (Target and Target.get("to_loji")):  # nobody spoke to her: she picks who to answer (or the whole chat)
+        if Addressed:  # one message for each person who talked to her, in order
+            Outgoing = list(zip(Answer["messages"], Targets))
+        else:  # nobody spoke to her: she picks who to answer (or the whole chat)
             I = Answer["reply_to"]
             Chosen = Live[I] if I is not None and 0 <= I < len(Live) else None
-            Target = Chosen if Chosen and Chosen["author"] != "LOJI" and Chosen.get("id") else None
-        Outgoing = Answer["messages"][:1]
-        if Outgoing and Others and s.get("rest_text", "").strip():
-            Outgoing.append(s["rest_text"].strip())  # several people tagged her: she answers one
-        for I, Message in enumerate(Outgoing):
+            Outgoing = [(M, Chosen if Chosen and Chosen["author"] != "LOJI" and Chosen.get("id") else None) for M in Answer["messages"][:1]]
+        if Outgoing and Rest:  # more people tagged her than she answers
+            Phrase = RestPhrase(s, self.used_phrases.setdefault(guild.id, []), random)
+            if Phrase:
+                Outgoing.append((Phrase, None))
+        for I, (Message, Target) in enumerate(Outgoing):
             async with channel.typing():
-                await asyncio.sleep(min(1.5 + len(Message) / 25, 7) if I == 0 else 1.2)
-            if not await self.Send(channel, Message, Target if I == 0 else None):
+                await asyncio.sleep(min(1.5 + len(Message) / 25, 7) if I == 0 else min(1 + len(Message) / 30, 4))
+            if not await self.Send(channel, Message, Target):
                 break
             Line = {"author": "LOJI", "author_id": self.client.user.id, "content": Message}
             self.live.setdefault(guild.id, deque(maxlen=LIVE)).append(Line)
@@ -535,13 +541,23 @@ class GoodbyeModal(ui.Modal, title="Textos fijos de LOJI"):
     def __init__(self, author, s: dict):
         super().__init__()
         self.author = author
+        Rest = s.get("rest_text", "")
         self.text = Field("Lo que dice al irse (vacío = nada)", s["goodbye"], 300, required=False)
-        self.rest = Field("Si la etiquetan varios (vacío = nada)", s.get("rest_text", ""), 300, required=False)
-        self.add_item(self.text)
-        self.add_item(self.rest)
+        self.rest = Field("Frases si la etiquetan muchos", "" if Rest == OLD_REST else Rest, 4000, required=False,
+                          placeholder="Vacío = las 110 frases de LOJI · «nada» = no decir nada · o las tuyas, una por línea")
+        self.most = Field("A cuántos responde como mucho (1-5)", str(s.get("max_answers", 3)), 1, long=False, required=True)
+        self.ignore = Field("% de veces que ignora al resto (0-100)", str(s.get("rest_ignore", 33)), 3, long=False, required=True)
+        for Item in (self.text, self.rest, self.most, self.ignore):
+            self.add_item(Item)
 
     async def on_submit(self, interaction: discord.Interaction):
-        await Community().Set(interaction.guild.id, "lojichat", {"goodbye": self.text.value.strip(), "rest_text": self.rest.value.strip()})
+        try:
+            Most, Ignore = int(self.most.value), int(self.ignore.value)
+            assert 1 <= Most <= 5 and 0 <= Ignore <= 100
+        except (ValueError, AssertionError):
+            return await interaction.response.send_message("❌ «A cuántos» va de 1 a 5 y el % de 0 a 100.", ephemeral=True)
+        await Community().Set(interaction.guild.id, "lojichat", {"goodbye": self.text.value.strip(), "rest_text": self.rest.value.strip(),
+                                                                 "max_answers": Most, "rest_ignore": Ignore})
         await ChatPanel.Open(interaction, self.author, "✅ Textos guardados.")
 
 

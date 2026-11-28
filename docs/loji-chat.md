@@ -10,8 +10,10 @@
   persona** con la función de *responder* de Discord (le llega la notificación): la última que le habló (mención, respuesta
   o "loji"). Si nadie le habló, ella elige: contestar a alguien (como respuesta de Discord) o comentar al chat en general,
   siguiendo el hilo (sabe quién responde a quién). Si DeepSeek devuelve una respuesta vacía, lo reintenta solo (hasta 3 veces).
-  Si la etiquetaron varios, añade un segundo mensaje
-  ("No respondo al resto porque me canso lol", editable en **👋 Textos fijos**). Nunca dos veces seguidas sin respuesta.
+  Si la etiquetaron varios, responde a **entre 1 y 3** (al azar; los más recientes), cada uno como respuesta de Discord,
+  y al resto le dice **una frase al azar** de su lista de 110 (nunca una de las últimas que usó). Un **33 %** de las veces
+  simplemente ignora al resto. Todo se cambia en **👋 Textos fijos**: frases propias (una por línea; vacío = las de LOJI;
+  «nada» = no decir nada), a cuántos responde como mucho (1-5) y el % de veces que ignora. Nunca dos veces seguidas sin respuesta.
   Cuando la mandas a hablar con el chat activo, solo contesta a quien se dirige a ella.
 - **🧠 Límites y memoria:** mensajes al día (150), tokens de contexto (10.000), días que recuerda las conversaciones (7)
   y las cosas de la gente (14).
