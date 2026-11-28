@@ -403,3 +403,6 @@ SECTIONS["events"] = _EVENT_SETTINGS
 from core.anime import SETTINGS as _ANIME_SETTINGS  # noqa: E402
 
 SECTIONS["anime"] = _ANIME_SETTINGS
+from core.lojichat import SETTINGS as _CHAT_SETTINGS  # noqa: E402
+
+SECTIONS["lojichat"] = _CHAT_SETTINGS

@@ -29,6 +29,13 @@ async def MainEmbed(guild: discord.Guild) -> discord.Embed:
         + "\n-# `/anime añadir · editar · quitar` · `/horario anime`",
         inline=False,
     )
+    C = (await Store().Get(guild.id))["lojichat"]
+    embed.add_field(
+        name="🤖 LOJI (chat)",
+        value=(("💬 Activo" if C["mode"] == "active" else "👀 Observando") if C["enabled"] else "⏸️ Desactivado")
+        + (f" · <#{C['channel']}>" if C["channel"] else "") + "\n-# Conversa cuando el chat se queda tranquilo",
+        inline=False,
+    )
     return embed
 
 
@@ -36,6 +43,12 @@ class GrowthPanel(Owned):
     @discord.ui.button(label="Eventos", emoji="🎉", style=discord.ButtonStyle.blurple)
     async def Events(self, interaction: discord.Interaction, _):
         await EventsPanel.Open(interaction, self.author)
+
+    @discord.ui.button(label="LOJI (chat)", emoji="🤖", style=discord.ButtonStyle.blurple)
+    async def Chat(self, interaction: discord.Interaction, _):
+        from cogs.Modules.Growth.lojichat import ChatPanel
+
+        await ChatPanel.Open(interaction, self.author)
 
     @discord.ui.button(label="Anime", emoji="📺", style=discord.ButtonStyle.blurple)
     async def Anime(self, interaction: discord.Interaction, _):

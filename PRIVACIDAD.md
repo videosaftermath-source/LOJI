@@ -1,6 +1,6 @@
 # Política de privacidad de LOJI · LOJI Privacy Policy
 
-*Última actualización / Last updated: 28/11/2026*
+*Última actualización / Last updated: 30/11/2026*
 
 [Español](#español) · [English](#english)
 
@@ -27,6 +27,7 @@ En una base de datos privada (MongoDB) que solo usa el bot:
   1. **Transcripciones de tickets:** al cerrar un ticket, la conversación de ese canal se sube como archivo `.html` a un canal privado del staff dentro de Discord. No se copia a nuestra base de datos ni a ningún servidor externo.
   2. **Respuestas automáticas:** el bot compara el mensaje con unas frases configuradas y, si coincide, responde. El mensaje no se guarda.
   3. **Filtro anti-spam de la economía:** compara tus mensajes recientes **en memoria** para no pagar mensajes repetidos. No se guarda y se borra al reiniciar.
+  5. **LOJI (chat):** en el canal donde está activada, cuando el chat se queda tranquilo LOJI conversa con una IA (Groq). Para responder envía a Groq los mensajes recientes de ese canal. Lo que se habla **mientras LOJI está en la conversación** se guarda **7 días**, y LOJI puede apuntar cosas pequeñas e inofensivas que le cuentes durante **14 días** (nunca datos sensibles). Con **`/loji olvidame`** se borra todo lo tuyo y deja de guardarse.
   4. **Reporte rápido:** si varios usuarios reportan un mensaje con 🚩 en el canal donde está activado, ese mensaje y unos pocos mensajes anteriores de la conversación se envían a **Groq** (IA) para valorar si rompe las normas, y el resultado va a un canal privado del staff. Solo se envían mensajes reportados, y su texto no se guarda en nuestra base de datos.
 - **Tus actividades, juegos o estado**, salvo comprobar si tu estado contiene la vanity del servidor.
 
@@ -73,6 +74,7 @@ In a private MongoDB database used only by the bot:
   1. **Ticket transcripts:** when a ticket is closed, that channel's conversation is uploaded as an `.html` file to a private staff channel inside Discord. It is not copied to our database or to any external server.
   2. **Auto-responses:** the bot compares a message with configured trigger phrases and replies when it matches. The message is not stored.
   3. **Economy anti-spam:** recent messages are compared **in memory** so repeated messages aren't rewarded. They are not stored and are cleared on restart.
+  5. **LOJI chat:** in the channel where it's enabled, when the chat goes quiet LOJI talks using an AI (Groq), sending it that channel's recent messages. What is said **while LOJI is in the conversation** is kept for **7 days**, and LOJI may note small, harmless things you tell her for **14 days** (never sensitive data). **`/loji olvidame`** deletes everything about you and stops storing it.
   4. **Quick reports:** when several users flag a message with 🚩 in the channel where this is enabled, that message and a few earlier messages of the conversation are sent to **Groq** (AI) to judge whether it breaks the rules, and the result goes to a private staff channel. Only reported messages are sent, and their text is not stored in our database.
 - **Your activities, games or status**, except for checking whether your custom status contains the server's vanity link.
 
