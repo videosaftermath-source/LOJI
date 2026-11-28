@@ -19,6 +19,7 @@ logger = logging.getLogger(__name__)
 LOJI_RED = discord.Color.from_rgb(150, 12, 18)
 MAX_PERSONALITY = 40_000
 LIVE = 40  # lines of the current conversation kept in memory
+FORCED_GAP = 15  # seconds between her messages when she was told to talk in a busy chat
 
 
 def Db():
@@ -44,6 +45,7 @@ class LojiChat(commands.Cog):
         self.state: dict[int, dict] = {}  # guild -> {"awake", "quiet_since", "left_at", "woke_at"}
         self.live: dict[int, deque] = {}  # guild -> recent lines while awake
         self.pending: dict[int, asyncio.Task] = {}
+        self.last_reply: dict = {}
         self.ticks = 0
         self.Check.start()
 
@@ -57,24 +59,27 @@ class LojiChat(commands.Cog):
         if not message.guild or message.author.bot or message.webhook_id:
             return
         S = await Settings(message.guild.id)
-        if not S["enabled"] or message.channel.id != S["channel"]:
+        State = self.state.get(message.guild.id) or {}
+        Forced = State.get("forced")
+        if message.channel.id != S["channel"] or not (S["enabled"] or Forced):
             return
         self.activity.Add(message.channel.id, message.author.id, Now())
-        State = self.state.get(message.guild.id) or {}
-        if not State.get("awake") or S["mode"] != "active":
+        if not State.get("awake") or (S["mode"] != "active" and not Forced):
             return
         Line = {"author": message.author.display_name, "author_id": message.author.id, "content": message.clean_content or "(imagen o archivo)"}
         self.live.setdefault(message.guild.id, deque(maxlen=LIVE)).append(Line)
         await self.Remember(message.guild.id, Line)
-        # Wait a little: people often write in several messages, and nobody answers instantly.
         Old = self.pending.get(message.guild.id)
         if Old and not Old.done():
-            Old.cancel()
-        self.pending[message.guild.id] = asyncio.create_task(self.ReplyLater(message.guild, message.channel, S))
+            if Forced:
+                return  # busy chat: the reply already on its way will read the newest lines (no endless waiting)
+            Old.cancel()  # quiet chat: wait a little, people often write in several messages
+        Gap = max(0.0, FORCED_GAP - (Now() - self.last_reply.get(message.guild.id, Now() - timedelta(hours=1))).total_seconds()) if Forced else 0
+        self.pending[message.guild.id] = asyncio.create_task(self.ReplyLater(message.guild, message.channel, S, Gap))
 
-    async def ReplyLater(self, guild: discord.Guild, channel, s: dict):
+    async def ReplyLater(self, guild: discord.Guild, channel, s: dict, at_least: float = 0):
         try:
-            await asyncio.sleep(random.uniform(4, 9))
+            await asyncio.sleep(max(at_least, random.uniform(4, 9)))
             await self.Reply(guild, channel, s, opening=False)
         except asyncio.CancelledError:
             pass
@@ -89,13 +94,13 @@ class LojiChat(commands.Cog):
         for Guild in self.client.guilds:
             try:
                 S = await Settings(Guild.id)
-                if not S["enabled"]:
+                State = self.state.setdefault(Guild.id, {})
+                if not S["enabled"] or State.get("forced"):  # woken up by hand: she stays until told to stop
                     continue
                 Channel = Guild.get_channel(S["channel"] or 0)
                 if not Channel:
                     continue
                 Messages, People = self.activity.Stats(Channel.id, Now(), int(S["window"]))
-                State = self.state.setdefault(Guild.id, {})
                 What = Decide(State, Messages, People, Now(), S)
                 if What:
                     await self.Act(Guild, Channel, S, What, People, Messages)
@@ -146,7 +151,8 @@ class LojiChat(commands.Cog):
     async def Reply(self, guild: discord.Guild, channel, s: dict, opening: bool):
         from core.guide import Complete, GuideError
 
-        if s["mode"] != "active" or not (self.state.get(guild.id) or {}).get("awake"):
+        State = self.state.get(guild.id) or {}
+        if not State.get("awake") or (s["mode"] != "active" and not State.get("forced")):
             return
         if await self.Used(guild.id) >= int(s["daily_limit"]):
             return
@@ -181,6 +187,7 @@ class LojiChat(commands.Cog):
             self.live.setdefault(guild.id, deque(maxlen=LIVE)).append(Line)
             await self.Remember(guild.id, Line)
             await Db()["lojichat_usage"].update_one({"_id": f"{guild.id}:{Now():%Y-%m-%d}"}, {"$inc": {"n": 1}}, upsert=True)
+            self.last_reply[guild.id] = Now()
         await self.Note(guild.id, Answer["notes"], Live)
         if Answer["alert"]:
             await self.Alert(guild, channel, s, Answer["alert"], Live)
@@ -226,9 +233,34 @@ class LojiChat(commands.Cog):
 
     loji = app_commands.Group(name="loji", description="LOJI", guild_only=True)
 
-    @loji.command(name="interruptor", description="Encender o apagar a LOJI en el chat (solo con la credencial del Tenno)")
+    @loji.command(name="interruptor", description="Hacer que LOJI hable ya, que se calle, o encender/apagar su modo automático (credencial del Tenno)")
     async def interruptor(self, interaction: discord.Interaction):
         await interaction.response.send_modal(TennoSwitch())
+
+    async def Wake(self, guild: discord.Guild) -> str:
+        """By hand (Tenno): she joins now, busy chat or not, and stays until told to stop."""
+        S = await Settings(guild.id)
+        Channel = guild.get_channel(S["channel"] or 0)
+        if not Channel:
+            return "❌ Elige primero el canal en `/config` → Crecimiento y Entretenimiento → LOJI (chat)."
+        State = self.state.setdefault(guild.id, {})
+        if State.get("awake") and State.get("forced"):
+            return "🗣️ LOJI ya está hablando."
+        State.update(awake=True, forced=True, woke_at=Now(), quiet_since=None)
+        await self.Act(guild, Channel, {**S, "mode": "active"}, "wake", 0, 0)
+        return f"🗣️ **LOJI está hablando en {Channel.mention}.** Se queda hasta que la mandes a callar (respeta el límite diario)."
+
+    async def Sleep(self, guild: discord.Guild) -> str:
+        S = await Settings(guild.id)
+        State = self.state.setdefault(guild.id, {})
+        if not State.get("awake"):
+            State["forced"] = False
+            return "😴 LOJI ya estaba callada."
+        State.update(awake=False, forced=False, left_at=Now(), quiet_since=None)
+        Channel = guild.get_channel(S["channel"] or 0)
+        if Channel:
+            await self.Act(guild, Channel, {**S, "mode": "active"}, "leave", 0, 0)
+        return "😴 **LOJI se ha callado.**" + (" Volverá sola cuando el chat se calme (el modo automático sigue encendido)." if S["enabled"] else "")
 
     async def Switch(self, guild: discord.Guild, on: bool):
         """Turns LOJI chat on/off; if she was in the conversation, she says goodbye first."""
@@ -236,7 +268,7 @@ class LojiChat(commands.Cog):
         await Community().Set(guild.id, "lojichat", {"enabled": on})
         State = self.state.get(guild.id) or {}
         if not on and State.get("awake"):
-            State.update(awake=False, left_at=Now(), quiet_since=None)
+            State.update(awake=False, forced=False, left_at=Now(), quiet_since=None)
             Task = self.pending.pop(guild.id, None)
             if Task and not Task.done():
                 Task.cancel()
@@ -364,11 +396,18 @@ class ChatPanel(Owned):
 
 
 class TennoSwitch(ui.Modal, title="Interruptor de LOJI"):
-    """On/off for LOJI chat: only with the Tenno's credential (not even admins without it)."""
+    """Only with the Tenno's credential (not even admins without it): make her talk now, make her stop,
+    or turn the automatic mode (joining when the chat goes quiet) on or off."""
 
     def __init__(self, panel: "ChatPanel | None" = None):
         super().__init__()
         self.panel = panel
+        self.action = ui.Select(options=[
+            discord.SelectOption(label="Que hable ya", value="talk", emoji="🗣️", description="Aunque el chat esté activo; se queda hasta que la calles", default=True),
+            discord.SelectOption(label="Que se calle ya", value="quiet", emoji="😴", description="Se despide y se va"),
+            discord.SelectOption(label="Encender / apagar el modo automático", value="toggle", emoji="⏯️", description="Entrar sola cuando el chat se calma"),
+        ])
+        self.add_item(ui.Label(text="¿Qué hago?", component=self.action))
         self.code = ui.TextInput(label="Credencial del Tenno", placeholder="Tu código", max_length=20)
         self.add_item(self.code)
 
@@ -380,20 +419,30 @@ class TennoSwitch(ui.Modal, title="Interruptor de LOJI"):
         except MailError as e:
             return await interaction.response.send_message(f"🔒 {e}", ephemeral=True)
         S = await Settings(interaction.guild.id)
-        if not S["enabled"] and not S["channel"]:
+        if not S["channel"]:
             return await interaction.response.send_message("❌ Elige primero el canal en `/config` → Crecimiento y Entretenimiento → LOJI (chat).", ephemeral=True)
-        On = not S["enabled"]
         Cog = interaction.client.get_cog("LojiChat")
-        if Cog:
-            await Cog.Switch(interaction.guild, On)
-        else:
-            await Community().Set(interaction.guild.id, "lojichat", {"enabled": On})
+        Action = (self.action.values or ["talk"])[0]
         Doc = await Guide().Get(interaction.guild.id) or {}
-        Tip = "" if Doc.get("personality_text") or not On else "\n⚠️ Falta subir la personalidad: no hablará hasta que la subas."
-        Note = ("🟢 **LOJI encendida.** Entrará cuando el chat se calme." + Tip) if On else "🔴 **LOJI apagada.**"
+        if Action in ("talk", "quiet") and not Cog:
+            return await interaction.response.send_message("❌ El módulo no está cargado.", ephemeral=True)
+        if Action == "talk" and not Doc.get("personality_text"):
+            return await interaction.response.send_message("❌ Falta subir la personalidad: sin ella no puede hablar.", ephemeral=True)
+        await interaction.response.defer(ephemeral=True)
+        if Action == "talk":
+            Note = await Cog.Wake(interaction.guild)
+        elif Action == "quiet":
+            Note = await Cog.Sleep(interaction.guild)
+        else:
+            On = not S["enabled"]
+            if Cog:
+                await Cog.Switch(interaction.guild, On)
+            else:
+                await Community().Set(interaction.guild.id, "lojichat", {"enabled": On})
+            Note = "🟢 **Modo automático encendido:** entrará sola cuando el chat se calme." if On else "🔴 **Modo automático apagado.**"
         if self.panel:
             return await ChatPanel.Open(interaction, self.panel.author, Note)
-        await interaction.response.send_message(Note, ephemeral=True)
+        await interaction.followup.send(Note, ephemeral=True)
 
 
 def Number(text: str, low: int, high: int) -> int:

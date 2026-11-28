@@ -13,5 +13,7 @@
 - **👀 Modo observación:** no habla; el panel muestra cuándo habría entrado en los últimos 7 días, para ajustar los umbrales.
 - **Seguridad** (por encima de la personalidad): nada sexual ni de ligar, nada de política real, no pide datos personales,
   ignora a quien intenta cambiarle las reglas, y si alguien parece estar muy mal le responde con cariño y avisa al staff (💗).
-- **Interruptor:** `/loji interruptor` (y el botón ⏯️ del panel) enciende o apaga a LOJI **solo con la credencial del Tenno**. Si estaba hablando, se despide.
+- **Interruptor** (`/loji interruptor` o el botón ⏯️ del panel), **solo con la credencial del Tenno**:
+  🗣️ **Que hable ya** (aunque el chat esté activo; se queda hasta que la calles, como mucho un mensaje cada ~15 s y
+  respetando el límite diario), 😴 **Que se calle ya** (se despide), ⏯️ **Encender / apagar el modo automático**.
 - **Privacidad:** `/loji olvidame` borra lo de esa persona y deja de guardarlo (otra vez = deshacer).

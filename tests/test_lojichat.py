@@ -89,6 +89,7 @@ def test_a_conversation(monkeypatch):
 
     Cog = lc.LojiChat.__new__(lc.LojiChat)
     Cog.client = N(user=N(id=999))
+    Cog.last_reply = {}
     Cog.state = {1: {"awake": True, "woke_at": T0}}
     Cog.live = {1: deque([{"author": "Ana", "author_id": 5, "content": "odio los lunes"}], maxlen=40)}
     Guild = N(id=1, name="Sótano")
@@ -124,30 +125,69 @@ def test_only_the_tenno_code_switches_her(monkeypatch):
         async def Get(self, g):
             return {"personality_text": "x"}
     monkeypatch.setattr(lc, "Guide", lambda: G())
-    asyncio.run(Store.Set(1, "lojichat", {"channel": 7, "enabled": True}))
-    Said, Sent = [], []
+    asyncio.run(Store.Set(1, "lojichat", {"channel": 7, "enabled": False}))
+    Said, Sent, Acts = [], [], []
 
     class Channel:
+        mention = "<#7>"
+
         async def send(self, text, **kw):
             Sent.append(text)
 
     Cog = lc.LojiChat.__new__(lc.LojiChat)
-    Cog.state = {1: {"awake": True}}
-    Cog.pending = {}
+    Cog.state, Cog.pending = {}, {}
+
+    async def Act(guild, channel, s, what, people, messages):
+        Acts.append(what)
+    Cog.Act = Act
     Guild = N(id=1, get_channel=lambda i: Channel() if i == 7 else None)
 
-    def Submit(code, uid):
+    def Submit(code, action, uid=60):
         M = lc.TennoSwitch()
         M.code._value = code
+        M.action._values = [action]
 
         async def send_message(text, **kw):
             Said.append(text)
-        return M.on_submit(N(guild=Guild, user=N(id=uid), client=N(get_cog=lambda n: Cog), response=N(send_message=send_message)))
 
-    asyncio.run(Submit("M-0000", 50))  # an admin without the code
-    assert "incorrecta" in Said[-1] and asyncio.run(Store.Get(1))["lojichat"]["enabled"] is True
-    asyncio.run(Submit("T-1234", 60))
-    assert "apagada" in Said[-1] and asyncio.run(Store.Get(1))["lojichat"]["enabled"] is False
-    assert Sent == [S["goodbye"]] and Cog.state[1]["awake"] is False  # she was talking: says goodbye
-    asyncio.run(Submit("T-1234", 60))
-    assert "encendida" in Said[-1]
+        async def defer(**kw):
+            pass
+
+        async def followup_send(text, **kw):
+            Said.append(text)
+        return M.on_submit(N(guild=Guild, user=N(id=uid), client=N(get_cog=lambda n: Cog),
+                             response=N(send_message=send_message, defer=defer), followup=N(send=followup_send)))
+
+    asyncio.run(Submit("M-0000", "talk", uid=50))  # an admin without the code
+    assert "incorrecta" in Said[-1] and Acts == []
+    asyncio.run(Submit("T-1234", "talk"))  # talk now, even with the automatic mode off
+    assert "está hablando" in Said[-1] and Acts == ["wake"] and Cog.state[1]["forced"] and Cog.state[1]["awake"]
+    asyncio.run(Submit("T-1234", "quiet"))
+    assert "se ha callado" in Said[-1] and Acts == ["wake", "leave"] and not Cog.state[1]["awake"]
+    asyncio.run(Submit("T-1234", "toggle"))
+    assert "encendido" in Said[-1] and asyncio.run(Store.Get(1))["lojichat"]["enabled"] is True
+
+
+def test_forced_she_stays_even_if_the_chat_is_busy(monkeypatch):
+    import cogs.Modules.Growth.lojichat as lc
+
+    async def Settings(g):
+        return {**S, "enabled": True, "channel": 7}
+    monkeypatch.setattr(lc, "Settings", Settings)
+    Cog = lc.LojiChat.__new__(lc.LojiChat)
+    Cog.client = N(guilds=[N(id=1, get_channel=lambda i: N(id=7))])
+    Cog.state = {1: {"awake": True, "forced": True}}
+    Cog.activity = Activity()
+    for I in range(40):
+        Cog.activity.Add(7, I, datetime.now(timezone.utc))  # very busy chat
+    Cog.ticks = 1
+    Acts = []
+
+    async def Act(*a):
+        Acts.append(a[3])
+    Cog.Act = Act
+    asyncio.run(lc.LojiChat.Check.coro(Cog))
+    assert Acts == [] and Cog.state[1]["awake"]  # told to talk: she doesn't leave on her own
+    Cog.state[1]["forced"] = False
+    asyncio.run(lc.LojiChat.Check.coro(Cog))
+    assert Acts == ["leave"]  # automatic mode: a busy chat sends her away
