@@ -8,7 +8,9 @@
   Todo en **⚙️ Umbrales**.
 - Mientras está: espera unos segundos a que la gente termine de escribir, "está escribiendo…" y **responde a una sola
   persona** con la función de *responder* de Discord (le llega la notificación): la última que le habló (mención, respuesta
-  o "loji"), o si nadie le habló, el último mensaje. Si la etiquetaron varios, añade un segundo mensaje
+  o "loji"). Si nadie le habló, ella elige: contestar a alguien (como respuesta de Discord) o comentar al chat en general,
+  siguiendo el hilo (sabe quién responde a quién). Si DeepSeek devuelve una respuesta vacía, lo reintenta solo (hasta 3 veces).
+  Si la etiquetaron varios, añade un segundo mensaje
   ("No respondo al resto porque me canso lol", editable en **👋 Textos fijos**). Nunca dos veces seguidas sin respuesta.
   Cuando la mandas a hablar con el chat activo, solo contesta a quien se dirige a ella.
 - **🧠 Límites y memoria:** mensajes al día (150), tokens de contexto (10.000), días que recuerda las conversaciones (7)

@@ -81,10 +81,10 @@ class FakeResponse:
 
 class FakeSession:
     def __init__(self, response):
-        self.response, self.sent = response, None
+        self.response, self.sent, self.calls = response, None, 0
 
     def post(self, url, json=None, headers=None):
-        self.sent = (url, json, headers)
+        self.sent, self.calls = (url, json, headers), self.calls + 1
         return self.response
 
 
@@ -113,6 +113,10 @@ def test_the_key_chooses_the_provider():
     assert body["max_tokens"] == 300 and "reasoning_effort" not in body and "max_completion_tokens" not in body
     assert body["response_format"] == {"type": "json_object"} and body["temperature"] == 0.9
     Groq = FakeSession(FakeResponse(200, {"choices": [{"message": {"content": "x"}}]}))
+    Empty = FakeSession(FakeResponse(200, {"choices": [{"message": {"content": ""}}]}))
+    with pytest.raises(GuideError, match="vacía"):  # tried 3 times, the last one without JSON mode
+        run(Complete("sk-abc", "s", "u", max_tokens=100, json_mode=True, session=Empty))
+    assert Empty.sent[1]["max_tokens"] == 300 and "response_format" not in Empty.sent[1] and Empty.calls == 3
     run(Ask("gsk_x", "g", "q", "L", Groq))
     assert Groq.sent[0].startswith("https://api.groq.com") and Groq.sent[1]["reasoning_effort"] == "medium"
     with pytest.raises(GuideError, match="DeepSeek no tiene saldo"):

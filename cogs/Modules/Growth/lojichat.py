@@ -69,10 +69,12 @@ class LojiChat(commands.Cog):
         Ref = message.reference.resolved if message.reference else None
         ToLoji = AddressesLoji(message.content, self.client.user in message.mentions,
                                bool(Ref and getattr(Ref, "author", None) and Ref.author.id == self.client.user.id))
+        RefAuthor = getattr(Ref, "author", None)
         Line = {"author": message.author.display_name, "author_id": message.author.id, "content": message.clean_content or "(imagen o archivo)",
-                "id": message.id, "to_loji": ToLoji}
+                "id": message.id, "to_loji": ToLoji,
+                "reply_to": ("LOJI" if RefAuthor.id == self.client.user.id else RefAuthor.display_name) if RefAuthor else None}
         self.live.setdefault(message.guild.id, deque(maxlen=LIVE)).append(Line)
-        await self.Remember(message.guild.id, {K: V for K, V in Line.items() if K not in ("id", "to_loji")})
+        await self.Remember(message.guild.id, {K: V for K, V in Line.items() if K not in ("id", "to_loji", "reply_to")})
         if Forced and not ToLoji:
             return  # told to talk in a busy chat: she only answers whoever talks to her
         Old = self.pending.get(message.guild.id)
@@ -133,8 +135,10 @@ class LojiChat(commands.Cog):
             try:
                 async for M in channel.history(limit=15):
                     if not M.author.bot or M.author.id == self.client.user.id:
+                        RefAuthor = getattr(M.reference.resolved if M.reference else None, "author", None)
                         Live.appendleft({"author": "LOJI" if M.author.id == self.client.user.id else M.author.display_name,
-                                         "author_id": M.author.id, "content": M.clean_content or "(imagen o archivo)"})
+                                         "author_id": M.author.id, "content": M.clean_content or "(imagen o archivo)", "id": M.id,
+                                         "reply_to": ("LOJI" if RefAuthor.id == self.client.user.id else RefAuthor.display_name) if RefAuthor else None})
             except discord.HTTPException:
                 pass
             await self.Reply(guild, channel, s, opening=True)
@@ -179,13 +183,17 @@ class LojiChat(commands.Cog):
         System, User = BuildPrompt(Personality, [{"name": N["name"], "text": N["text"]} for N in Notes], list(reversed(Past)), Live,
                                    int(s["context_tokens"]), guild.name, opening, Target)
         try:
-            Text, _ = await Complete(Key, System, User, max_tokens=500, json_mode=True, temperature=0.9,  # chatting: a bit livelier
+            Text, _ = await Complete(Key, System, User, max_tokens=900, json_mode=True, temperature=1.0,  # chatting: livelier
                                      model=Doc.get("ai_model"))
             Answer = ParseReply(Text)
         except (GuideError, ValueError) as e:
             return logger.warning(f"[LojiChat] {guild.id}: {e}")
         if not (self.state.get(guild.id) or {}).get("awake"):
             return  # the chat filled up while she was thinking
+        if not (Target and Target.get("to_loji")):  # nobody spoke to her: she picks who to answer (or the whole chat)
+            I = Answer["reply_to"]
+            Chosen = Live[I] if I is not None and 0 <= I < len(Live) else None
+            Target = Chosen if Chosen and Chosen["author"] != "LOJI" and Chosen.get("id") else None
         Outgoing = Answer["messages"][:1]
         if Outgoing and Others and s.get("rest_text", "").strip():
             Outgoing.append(s["rest_text"].strip())  # several people tagged her: she answers one

@@ -43,6 +43,8 @@ def test_prompt_stays_within_budget():
 
 
 def test_reply_parsing():
+    assert ParseReply('{"mensajes": ["a"], "responder_a": "[3]"}')["reply_to"] == 3
+    assert ParseReply('{"mensajes": ["a"], "responder_a": null}')["reply_to"] is None
     R = ParseReply('ok {"mensajes": ["holi", "", "qué tal", "tres"], "recordar": [{"persona": "Ana", "dato": "examen el lunes"}], "alerta": ""}')
     assert R["messages"] == ["holi"] and R["notes"] == [{"name": "Ana", "text": "examen el lunes"}] and R["alert"] == ""
 
@@ -64,7 +66,7 @@ def test_a_conversation(monkeypatch):
     monkeypatch.setattr(lc, "Guide", lambda: G())
 
     async def Complete(key, system, user, **kw):
-        return '{"mensajes": ["jajaja eso es muy de lunes"], "recordar": [{"persona": "Ana", "dato": "odia los lunes"}], "alerta": ""}', 100
+        return '{"mensajes": ["jajaja eso es muy de lunes"], "responder_a": "[0]", "recordar": [{"persona": "Ana", "dato": "odia los lunes"}], "alerta": ""}', 100
     monkeypatch.setattr(core.guide, "Complete", Complete)
 
     async def NoSleep(*a):
@@ -99,7 +101,7 @@ def test_a_conversation(monkeypatch):
     Guild = N(id=1, name="Sótano")
     Settings = {**S, "daily_limit": 1}
     asyncio.run(Cog.Reply(Guild, Channel(), Settings, opening=False))
-    assert Sent == ["jajaja eso es muy de lunes"] and Replies == [501]  # a Discord reply to Ana's message
+    assert Sent == ["jajaja eso es muy de lunes"] and Replies == [501]  # nobody spoke to her: she chose to reply to Ana
     assert asyncio.run(D[lc.NOTES].find_one({}))["text"] == "odia los lunes"
     asyncio.run(Cog.Reply(Guild, Channel(), Settings, opening=False))  # her own message is last: she doesn't talk again
     Cog.live[1].append({"author": "Ana", "author_id": 5, "content": "jaja"})
@@ -234,8 +236,8 @@ def test_several_tags_get_the_rest_text(monkeypatch):
 
     async def Complete(key, system, user, **kw):
         Models.append(kw.get("model"))
-        assert "Respóndele SOLO a Luis" in user
-        return '{"mensajes": ["holi Luis", "esto sobra"], "recordar": [], "alerta": ""}', 10
+        assert "Luis te ha hablado a ti (mensaje [1]" in user
+        return '{"mensajes": ["holi Luis", "esto sobra"], "responder_a": 0, "recordar": [], "alerta": ""}', 10  # Luis wins anyway
     monkeypatch.setattr(core.guide, "Complete", Complete)
 
     async def NoSleep(*a):

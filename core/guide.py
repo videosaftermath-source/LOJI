@@ -283,5 +283,14 @@ async def Complete(key: str, system: str, user: str, max_tokens: int = 900, json
     """One call to the same model (quick reports, LOJI chat). Returns (text, tokens used).
     Raises GuideError with a message that can be shown to staff."""
     Messages = [{"role": "system", "content": system}, {"role": "user", "content": user}]
-    Data = await Post(key, Body(key, Messages, temperature, max_tokens, "low", json_mode, model), session)
-    return Text(Data, key), int((Data.get("usage") or {}).get("total_tokens") or 0)
+    Used = 0
+    for Attempt in range(3):
+        # DeepSeek sometimes answers with an empty "content" (JSON mode, or a model that thinks first and runs out
+        # of room). Try again with more room, and without JSON mode on the last try (the prompt still asks for JSON).
+        Data = await Post(key, Body(key, Messages, temperature, max_tokens * (Attempt + 1), "low", json_mode and Attempt < 2, model), session)
+        Used += int((Data.get("usage") or {}).get("total_tokens") or 0)
+        try:
+            return Text(Data, key), Used
+        except GuideError:
+            if Attempt == 2:
+                raise
