@@ -237,3 +237,43 @@ async def Ask(key: str, guide: str, question: str, server: str, session: aiohttp
     if not Answer:
         raise GuideError("Groq devolvió una respuesta vacía. Inténtalo de nuevo; no se te ha descontado la pregunta.")
     return Answer
+
+
+async def Complete(key: str, system: str, user: str, max_tokens: int = 900, json_mode: bool = False,
+                   session: aiohttp.ClientSession | None = None) -> tuple[str, int]:
+    """One call to the same Groq model (used by the quick reports). Returns (text, tokens used).
+    Raises GuideError with a message that can be shown to staff."""
+    Body = {
+        "model": MODEL,
+        "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}],
+        "temperature": 0.1,
+        "max_completion_tokens": max_tokens,
+        "reasoning_effort": "low",
+    }
+    if json_mode:
+        Body["response_format"] = {"type": "json_object"}
+    Headers = {"Authorization": f"Bearer {key}", "Content-Type": "application/json"}
+    Own = session is None
+    Session = session or aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=60))
+    try:
+        async with Session.post(GROQ_URL, json=Body, headers=Headers) as R:
+            Data = await R.json(content_type=None)
+            if R.status == 401:
+                raise GuideError("La key de Groq no es válida.")
+            if R.status == 429:
+                raise GuideError("Groq está al límite de uso ahora mismo.")
+            if R.status >= 400:
+                Message = (Data or {}).get("error", {}).get("message", "") if isinstance(Data, dict) else ""
+                raise GuideError(f"Groq respondió con un error ({R.status}). {Message[:200]}".strip())
+    except aiohttp.ClientError:
+        raise GuideError("No pude conectar con Groq.")
+    finally:
+        if Own:
+            await Session.close()
+    try:
+        Text = (Data["choices"][0]["message"]["content"] or "").strip()
+    except (KeyError, IndexError, TypeError):
+        raise GuideError("Groq devolvió una respuesta vacía.")
+    if not Text:
+        raise GuideError("Groq devolvió una respuesta vacía.")
+    return Text, int((Data.get("usage") or {}).get("total_tokens") or 0)

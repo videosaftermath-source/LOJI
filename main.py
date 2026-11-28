@@ -183,6 +183,7 @@ class Client(commands.AutoShardedBot):
             "cogs.Modules.Mail.tasks",
             "cogs.Modules.Profiles.profiles",
             "cogs.Modules.Guide.guide",
+            "cogs.Modules.Guide.autoreport",
             "cogs.Modules.Community.community",
             "cogs.Modules.Community.icons",
             "cogs.Modules.Community.colors",

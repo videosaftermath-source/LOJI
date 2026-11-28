@@ -105,6 +105,12 @@ class GuidePanel(discord.ui.View):
     async def Back(self, interaction: discord.Interaction, _):
         await self.back(interaction)
 
+    @discord.ui.button(label="Autoreporte", emoji="🚩", style=discord.ButtonStyle.blurple, row=2)
+    async def AutoReport(self, interaction: discord.Interaction, _):
+        from cogs.Modules.Guide.autoreport import OpenPanel
+
+        await OpenPanel(interaction, self.author, self.back)
+
 
 class UploadModal(discord.ui.Modal, title="Subir guía de sanciones"):
     def __init__(self, panel: GuidePanel):

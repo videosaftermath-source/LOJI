@@ -1,6 +1,6 @@
 # Política de privacidad de LOJI · LOJI Privacy Policy
 
-*Última actualización / Last updated: 19/11/2026*
+*Última actualización / Last updated: 28/11/2026*
 
 [Español](#español) · [English](#english)
 
@@ -27,12 +27,13 @@ En una base de datos privada (MongoDB) que solo usa el bot:
   1. **Transcripciones de tickets:** al cerrar un ticket, la conversación de ese canal se sube como archivo `.html` a un canal privado del staff dentro de Discord. No se copia a nuestra base de datos ni a ningún servidor externo.
   2. **Respuestas automáticas:** el bot compara el mensaje con unas frases configuradas y, si coincide, responde. El mensaje no se guarda.
   3. **Filtro anti-spam de la economía:** compara tus mensajes recientes **en memoria** para no pagar mensajes repetidos. No se guarda y se borra al reiniciar.
+  4. **Reporte rápido:** si varios usuarios reportan un mensaje con 🚩 en el canal donde está activado, ese mensaje y unos pocos mensajes anteriores de la conversación se envían a **Groq** (IA) para valorar si rompe las normas, y el resultado va a un canal privado del staff. Solo se envían mensajes reportados, y su texto no se guarda en nuestra base de datos.
 - **Tus actividades, juegos o estado**, salvo comprobar si tu estado contiene la vanity del servidor.
 
 ### Servicios de terceros
 
 - **Discord**, donde vive todo.
-- **Groq** (IA): cuando el staff usa `/guia`, la pregunta escrita en el comando y la guía de sanciones se envían a Groq para generar la respuesta. No se envían mensajes del servidor ni datos de otros usuarios, y **no se usan datos para entrenar modelos de IA**.
+- **Groq** (IA): cuando el staff usa `/guia`, la pregunta escrita en el comando y la guía de sanciones se envían a Groq para generar la respuesta. Con el **reporte rápido**, se envían el mensaje reportado y algunos mensajes anteriores (con el nombre visible de sus autores). No se envía nada más del servidor y **no se usan datos para entrenar modelos de IA**.
 - El bot se aloja en un servidor privado; la base de datos no es accesible públicamente.
 
 ### Tus opciones
@@ -72,12 +73,13 @@ In a private MongoDB database used only by the bot:
   1. **Ticket transcripts:** when a ticket is closed, that channel's conversation is uploaded as an `.html` file to a private staff channel inside Discord. It is not copied to our database or to any external server.
   2. **Auto-responses:** the bot compares a message with configured trigger phrases and replies when it matches. The message is not stored.
   3. **Economy anti-spam:** recent messages are compared **in memory** so repeated messages aren't rewarded. They are not stored and are cleared on restart.
+  4. **Quick reports:** when several users flag a message with 🚩 in the channel where this is enabled, that message and a few earlier messages of the conversation are sent to **Groq** (AI) to judge whether it breaks the rules, and the result goes to a private staff channel. Only reported messages are sent, and their text is not stored in our database.
 - **Your activities, games or status**, except for checking whether your custom status contains the server's vanity link.
 
 ### Third-party services
 
 - **Discord**, where everything lives.
-- **Groq** (AI): when staff use `/guia`, the question typed in the command and the server's sanctions guide are sent to Groq to generate the answer. No server messages or other users' data are sent, and **no data is used to train AI models**.
+- **Groq** (AI): when staff use `/guia`, the question typed in the command and the server's sanctions guide are sent to Groq to generate the answer. With **quick reports**, the reported message and a few earlier messages (with their authors' display names) are sent. Nothing else from the server is sent and **no data is used to train AI models**.
 - The bot is hosted on a private server; the database is not publicly reachable.
 
 ### Your choices
