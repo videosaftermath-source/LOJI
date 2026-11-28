@@ -188,6 +188,7 @@ class Client(commands.AutoShardedBot):
             "cogs.Modules.Community.icons",
             "cogs.Modules.Community.colors",
             "cogs.Modules.Growth.events",
+            "cogs.Modules.Growth.anime",
             "cogs.Modules.roleban",
             "cogs.Modules.Supporters.supporters",
             "cogs.Modules.Economy.basics",

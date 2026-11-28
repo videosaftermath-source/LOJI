@@ -19,7 +19,16 @@ async def MainEmbed(guild: discord.Guild) -> discord.Embed:
         + "\n-# `/evento crear · finalizar · cancelar · historial`",
         inline=False,
     )
-    embed.add_field(name="📺 Anime", value="*Próximamente*", inline=False)
+    A = (await Store().Get(guild.id))["anime"]
+    from cogs.Modules.Growth.anime import Shows
+
+    Count = len(await Shows(guild.id))
+    embed.add_field(
+        name="📺 Anime",
+        value=("✅ Listo" if A["team_role"] and A["channel"] else "⚙️ Falta configurar") + f" · {Count} anime{'s' if Count != 1 else ''} en el horario"
+        + "\n-# `/anime añadir · editar · quitar` · `/horario anime`",
+        inline=False,
+    )
     return embed
 
 
@@ -27,6 +36,12 @@ class GrowthPanel(Owned):
     @discord.ui.button(label="Eventos", emoji="🎉", style=discord.ButtonStyle.blurple)
     async def Events(self, interaction: discord.Interaction, _):
         await EventsPanel.Open(interaction, self.author)
+
+    @discord.ui.button(label="Anime", emoji="📺", style=discord.ButtonStyle.blurple)
+    async def Anime(self, interaction: discord.Interaction, _):
+        from cogs.Modules.Growth.anime import AnimePanel
+
+        await AnimePanel.Open(interaction, self.author)
 
     @classmethod
     async def Open(cls, interaction, author, note=None):

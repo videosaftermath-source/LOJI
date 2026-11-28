@@ -400,3 +400,6 @@ def ColorKey(first: int, second: int | None) -> str:
 from core.events import SETTINGS as _EVENT_SETTINGS  # noqa: E402
 
 SECTIONS["events"] = _EVENT_SETTINGS
+from core.anime import SETTINGS as _ANIME_SETTINGS  # noqa: E402
+
+SECTIONS["anime"] = _ANIME_SETTINGS
