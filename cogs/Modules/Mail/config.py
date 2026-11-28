@@ -9,7 +9,7 @@ PANEL_TIMEOUT = 600
 LOJI_RED = discord.Color.from_rgb(150, 12, 18)
 # What each wizard step is for, in plain words.
 HELP = {
-    "staff_role": "¿Qué rol tiene **todo el staff**? Quien lo tenga podrá usar `/mail` y `/tareas`.",
+    "staff_role": "¿Qué rol tiene **todo el staff**? Quien lo tenga podrá usar `/mail` y `/tareas ver`.",
     "suggestions_channel": "¿En qué canal **te llegan las sugerencias**? Pon uno privado del Mando Central.",
     "debate_channel": "¿Dónde va lo que **se debatirá**? El canal del Consejo Supremo.",
     "offices.tenno.role": "¿Cuál es el rol del **Tenno**?",

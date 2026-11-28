@@ -1,17 +1,19 @@
 """Tasks: posted in each department's channel, claimed and closed by its members; /tareas lists them."""
 
+import io
 import logging
+from datetime import datetime, timezone
 
 import discord
 from discord import app_commands
-from discord.ext import commands
+from discord.ext import commands, tasks
 
 from core.mail.config import (
     DECIDE_SUGGESTIONS, MANAGE_ANY_TASK, OFFICES, CheckCredential, Department, HasAny, InDepartment, IsStaff, Mail, MailError,
     OfficesOf,
 )
 from core.mail.suggestions import PRIORITIES
-from core.mail.tasks import ACTIVE, DONE_COLOR, LIST_LIMIT, PRIORITY_COLORS, TASK_STATUSES, Tasks
+from core.mail.tasks import ACTIVE, DONE_COLOR, LIST_LIMIT, PRIORITY_COLORS, TASK_STATUSES, ParseDeadline, Tasks
 
 logger = logging.getLogger(__name__)
 LIST_TIMEOUT = 300
@@ -25,8 +27,11 @@ ACTIONS = {
     "release": ("Soltar", "↩️", discord.ButtonStyle.grey),
     "done": ("Hecha", "✅", discord.ButtonStyle.green),
     "reopen": ("Reabrir", "🔄", discord.ButtonStyle.grey),
+    "join": ("Unirme", "➕", discord.ButtonStyle.grey),
 }
 BUTTONS_BY_STATUS = {"open": ("claim", "done"), "claimed": ("done", "release"), "done": ("reopen",)}
+MAX_ASSIGNEES = 10
+BANNER_MAX = 8 * 1024 * 1024
 _store: Tasks | None = None
 
 
@@ -55,27 +60,49 @@ def TaskEmbed(task: dict, config: dict) -> discord.embeds.Embed:
     embed.add_field(name="Departamento", value=Where if not task["department"] else f"🏢 {Where}", inline=True)
     embed.add_field(name="Prioridad", value=f"{P[0]} {P[1]}", inline=True)
     State = f"{Emoji} **{Label}**"
-    if task["status"] == "claimed":
+    People = task.get("assignees") or []
+    if task["status"] == "claimed" and not People:
         State += f" por <@{task['claimed_by']}>"
+    elif task["status"] == "claimed":
+        State = "🛠️ **En curso**"
     elif task["status"] == "done":
         State += f" por <@{task['done_by']}>"
     embed.add_field(name="Estado", value=State, inline=True)
+    if People:
+        embed.add_field(name=f"👥 Encargados ({len(People)})", value=" ".join(f"<@{P}>" for P in People)[:1024], inline=False)
+    Deadline = task.get("deadline")
+    if Deadline:
+        Deadline = Deadline if Deadline.tzinfo else Deadline.replace(tzinfo=timezone.utc)
+        Late = task["status"] != "done" and Deadline <= datetime.now(timezone.utc)
+        embed.add_field(
+            name="⌛ Vencida" if Late else "⏰ Fecha límite",
+            value=f"{discord.utils.format_dt(Deadline, 'F')} ({discord.utils.format_dt(Deadline, 'R')})", inline=False,
+        )
+        if Late:
+            embed.color = discord.Color.dark_red()
+    if task.get("banner"):
+        embed.set_image(url=f"attachment://{task['banner']}")
     embed.set_footer(text=f"De la sugerencia #{task['suggestion']} · Mando Central de LOJI" if task.get("suggestion") else "Tarea directa · Mando Central de LOJI")
     return embed
 
 
 def TaskView(task: dict) -> discord.ui.View:
     View = discord.ui.View(timeout=None)
-    for Action in BUTTONS_BY_STATUS[task["status"]]:
+    Actions = BUTTONS_BY_STATUS[task["status"]]
+    if task["status"] == "claimed" and task.get("assignees"):  # several people: others can join, each one can leave
+        Actions = ("done", "join", "release")
+    for Action in Actions:
         View.add_item(TaskButton(Action, task["number"]))
     return View
 
 
 async def CreateTask(guild: discord.Guild, suggestion: dict, decision: dict, config: dict) -> dict:
     """Turns an accepted suggestion into a task and posts it in the department's channel."""
+    Banner = decision.get("banner_file")  # (filename, bytes)
     Task = await Store().Create(
         guild.id, suggestion, decision.get("department"), decision["priority"], decision["by"],
         title=decision.get("title", ""), text=decision.get("text", ""), owner=decision.get("owner", "dept"),
+        assignees=decision.get("assignees"), deadline=decision.get("deadline"), banner=Banner[0] if Banner else None,
     )
     Dep = Department(config, Task["department"]) if Task["department"] else None
     # Department tasks go to the department's channel; the Mando Central's own ones to "Cosas por debatir".
@@ -88,9 +115,12 @@ async def CreateTask(guild: discord.Guild, suggestion: dict, decision: dict, con
         ) + " (`/config` → Mando Central)"
         return Task
     Ping = f"<@&{Dep['role']}> nueva tarea" if Dep and Dep.get("role") else None
+    if Task.get("assignees"):  # given to people: they're the ones called
+        Ping = " ".join(f"<@{P}>" for P in Task["assignees"]) + " · tenéis una tarea nueva"
+    Extra = {"file": discord.File(io.BytesIO(Banner[1]), filename=Banner[0])} if Banner else {}
     try:
         Message = await Channel.send(content=Ping, embed=TaskEmbed(Task, config), view=TaskView(Task),
-                                     allowed_mentions=discord.AllowedMentions(roles=True))
+                                     allowed_mentions=discord.AllowedMentions(roles=True, users=True), **Extra)
         await Store().SetMessage(guild.id, Task["number"], Channel.id, Message.id)
         Task["message"] = {"channel": Channel.id, "id": Message.id}
         Task["posted_in"] = Channel.id
@@ -105,7 +135,7 @@ def PostedText(task: dict) -> str:
     if task.get("posted_in"):
         return f" Publicada en <#{task['posted_in']}>."
     if task.get("post_problem"):
-        return f"\n⚠️ Guardada, pero **no se publicó**: {task['post_problem']}. Aparece igual en `/tareas`."
+        return f"\n⚠️ Guardada, pero **no se publicó**: {task['post_problem']}. Aparece igual en `/tareas ver`."
     return ""
 
 
@@ -115,16 +145,17 @@ def PostedText(task: dict) -> str:
 def AllowedByRole(member, action: str, task: dict, config: dict) -> bool:
     Manager = HasAny(member, MANAGE_ANY_TASK, config)
     Member = InDepartment(member, Department(config, task["department"]) or {}) if task.get("department") else False
-    if action == "claim":
-        return Member or Manager
+    Assigned = member.id in (task.get("assignees") or []) or task.get("claimed_by") == member.id
+    if action in ("claim", "join"):
+        return Member or Manager or (action == "join" and IsStaff(member, config))
     if action == "done":
-        return Member or Manager or task.get("claimed_by") == member.id
+        return Member or Manager or Assigned
     if action == "release":
-        return task.get("claimed_by") == member.id or Manager
+        return Assigned or Manager
     return Manager  # reopen
 
 
-class TaskButton(discord.ui.DynamicItem[discord.ui.Button], template=r"task:(?P<action>claim|release|done|reopen):(?P<number>\d+)"):
+class TaskButton(discord.ui.DynamicItem[discord.ui.Button], template=r"task:(?P<action>claim|release|done|reopen|join):(?P<number>\d+)"):
     def __init__(self, action: str, number: int):
         Label, Emoji, Style = ACTIONS[action]
         super().__init__(discord.ui.Button(label=Label, emoji=Emoji, style=Style, custom_id=f"task:{action}:{number}"))
@@ -173,10 +204,12 @@ class CredentialModal(discord.ui.Modal):
 async def Perform(interaction: discord.Interaction, action: str, number: int, config: dict, office: str | None, credential: bool = False) -> str:
     Guild, User = interaction.guild, interaction.user
     Store_ = Store()
-    if action == "claim":
+    if action in ("claim", "join"):
         Task = await Store_.Claim(Guild.id, number, User.id)
     elif action == "release":
-        Task = await Store_.Release(Guild.id, number)
+        Current = await Store_.Get(Guild.id, number) or {}
+        Mine = User.id in (Current.get("assignees") or []) or Current.get("claimed_by") == User.id
+        Task = await Store_.Release(Guild.id, number, User.id if Mine else None)  # a manager not on it frees it
     elif action == "done":
         Task = await Store_.Done(Guild.id, number, User.id)
     else:
@@ -333,7 +366,11 @@ def ListEmbed(tasks: list[dict], config: dict, guild: discord.Guild, status: str
     Lines = []
     for T in tasks[:LIST_LIMIT]:
         P = PRIORITIES[T["priority"]][0]
-        Who = f" · 🙋 <@{T['claimed_by']}>" if T["status"] == "claimed" else ""
+        People = T.get("assignees") or []
+        Who = (f" · 👥 {len(People)}" if len(People) > 1 else f" · 🙋 <@{T['claimed_by']}>") if T["status"] == "claimed" else ""
+        if T.get("deadline"):
+            D = T["deadline"] if T["deadline"].tzinfo else T["deadline"].replace(tzinfo=timezone.utc)
+            Who += f" · {'⌛' if D <= datetime.now(timezone.utc) else '⏰'} {discord.utils.format_dt(D, 'R')}"
         Ref = T.get("message")
         Link = f" · [ver](https://discord.com/channels/{guild.id}/{Ref['channel']}/{Ref['id']})" if Ref else ""
         Place = DepartmentName(config, T["department"])
@@ -398,14 +435,19 @@ class ListView(discord.ui.View):
 class TasksCog(commands.Cog):
     def __init__(self, client: commands.Bot):
         self.client = client
+        self.Deadlines.start()
 
     async def cog_load(self):
         self.client.add_dynamic_items(TaskButton)
         await Store().Setup()
 
-    @app_commands.command(name="tareas", description="Lista de tareas del staff, por prioridad")
-    @app_commands.guild_only()
-    async def tareas(self, interaction: discord.Interaction):
+    def cog_unload(self):
+        self.Deadlines.cancel()
+
+    tareas = app_commands.Group(name="tareas", description="Tareas del staff", guild_only=True)
+
+    @tareas.command(name="ver", description="Lista de tareas del staff, por prioridad")
+    async def ver(self, interaction: discord.Interaction):
         Config = await Mail().Get(interaction.guild.id)
         if not IsStaff(interaction.user, Config):
             return await interaction.response.send_message("❌ `/tareas` es solo para el staff.", ephemeral=True)
@@ -417,6 +459,116 @@ class TasksCog(commands.Cog):
             embed=ListEmbed(Tasks_, Config, interaction.guild, "active", Dep), view=ListView(interaction.user, Config, "active", Dep),
             ephemeral=True,
         )
+
+    async def DepartmentChoices(self, interaction: discord.Interaction, current: str):
+        Config = await Mail().Get(interaction.guild.id)
+        Options = [("👑 Mando Central", "central")] + [(f"🏢 {D['name']}", D["id"]) for D in Config["departments"]]
+        return [app_commands.Choice(name=N[:100], value=V) for N, V in Options if current.lower() in N.lower()][:25]
+
+    @tareas.command(name="crear", description="Crear una tarea: para una o varias personas, con fecha límite y banner (opcionales)")
+    @app_commands.describe(
+        titulo="Título de la tarea", descripcion="Qué hay que hacer",
+        encargados="Opcional: menciones o IDs de quienes la harán (varias personas)",
+        departamento="Opcional: departamento (si no, Mando Central)", prioridad="Por defecto: media",
+        limite="Opcional: 3d, 12h, 2d6h… o una fecha: 05/12, 05/12 18:00",
+        banner="Opcional: una imagen para la tarea", credencial="Si no tienes el rol: tu credencial de cargo",
+    )
+    @app_commands.choices(prioridad=[app_commands.Choice(name=f"{E} {L}", value=K) for K, (E, L) in PRIORITIES.items()])
+    @app_commands.autocomplete(departamento=DepartmentChoices)
+    async def crear(
+        self, interaction: discord.Interaction, titulo: app_commands.Range[str, 1, 100], descripcion: app_commands.Range[str, 1, 2000],
+        encargados: str | None = None, departamento: str | None = None, prioridad: str = "medium", limite: str | None = None,
+        banner: discord.Attachment | None = None, credencial: str | None = None,
+    ):
+        import re
+
+        Config = await Mail().Get(interaction.guild.id)
+        try:
+            if credencial:
+                CheckCredential(interaction.guild.id, interaction.user.id, credencial, DECIDE_SUGGESTIONS, Config)
+            elif not HasAny(interaction.user, DECIDE_SUGGESTIONS, Config):
+                raise MailError("Solo el Tenno y el Consejo Supremo crean tareas (o usa tu credencial de cargo).")
+        except MailError as e:
+            return await interaction.response.send_message(f"❌ {e}", ephemeral=True)
+        People = list(dict.fromkeys(int(I) for I in re.findall(r"\d{15,21}", encargados or "")))
+        Missing = [P for P in People if not interaction.guild.get_member(P)]
+        if Missing:
+            return await interaction.response.send_message(f"❌ No encuentro en el servidor a: {' '.join(f'<@{P}>' for P in Missing)}", ephemeral=True)
+        if len(People) > MAX_ASSIGNEES:
+            return await interaction.response.send_message(f"❌ Máximo {MAX_ASSIGNEES} encargados por tarea.", ephemeral=True)
+        Dep = None
+        if departamento and departamento != "central":
+            if not Department(Config, departamento):
+                return await interaction.response.send_message("❌ Elige un departamento de la lista.", ephemeral=True)
+            Dep = departamento
+        Deadline = None
+        if limite:
+            try:
+                from core.economy.config import EcoConfig
+
+                Offset = (await EcoConfig().Get(interaction.guild.id))["activity"].get("utc_offset", 0)
+            except Exception:
+                Offset = 0
+            try:
+                Deadline = ParseDeadline(limite, datetime.now(timezone.utc), Offset)
+            except ValueError:
+                return await interaction.response.send_message(
+                    "❌ No entiendo la fecha límite. Usa `3d`, `12h`, `2d6h`, `45m` o una fecha futura como `05/12` o `05/12 18:00`.", ephemeral=True,
+                )
+        BannerFile = None
+        if banner:
+            if not (banner.content_type or "").startswith("image/") or banner.size > BANNER_MAX:
+                return await interaction.response.send_message("❌ El banner tiene que ser una imagen de menos de 8 MB.", ephemeral=True)
+        await interaction.response.defer(ephemeral=True)
+        if banner:
+            Ext = (banner.filename.rsplit(".", 1)[-1] or "png").lower()[:4]
+            BannerFile = (f"tarea.{Ext}", await banner.read())  # sent with the task: it doesn't expire like a link
+        Decision = {
+            "by": interaction.user.id, "title": titulo.strip(), "text": descripcion.strip(), "priority": prioridad,
+            "owner": "dept", "department": Dep, "assignees": People, "deadline": Deadline, "banner_file": BannerFile,
+        }
+        Task = await CreateTask(interaction.guild, None, Decision, Config)
+        Who = f" · 👥 {' '.join(f'<@{P}>' for P in People)}" if People else ""
+        When = f" · ⏰ {discord.utils.format_dt(Deadline, 'R')}" if Deadline else ""
+        await interaction.followup.send(f"📋 Creada la **tarea #{Task['number']}** · {OwnerText(Task, Config)}{Who}{When}.{PostedText(Task)}", ephemeral=True)
+
+    @tasks.loop(minutes=10)
+    async def Deadlines(self):
+        """24 h before the deadline the people on it are reminded; when it passes, the task is marked overdue."""
+        Now_ = datetime.now(timezone.utc)
+        try:
+            Due = await Store().Due(Now_)
+        except Exception as e:
+            return logger.warning(f"[Mail] Deadline check failed: {e!r}")
+        for T in Due:
+            Guild = self.client.get_guild(T["guild_id"])
+            if not Guild:
+                continue
+            Deadline = T["deadline"] if T["deadline"].tzinfo else T["deadline"].replace(tzinfo=timezone.utc)
+            Stage = "overdue" if Deadline <= Now_ else "soon"
+            if T.get("deadline_warned") == Stage:
+                continue
+            await Store().col.update_one({"_id": T["_id"]}, {"$set": {"deadline_warned": Stage}})
+            T["deadline_warned"] = Stage
+            Config = await Mail().Get(Guild.id)
+            await RefreshTask(Guild, T, Config)
+            Ref = T.get("message")
+            Channel = Guild.get_channel(Ref["channel"]) if Ref else None
+            if not Channel:
+                continue
+            People = T.get("assignees") or ([T["claimed_by"]] if T.get("claimed_by") else [])
+            Ping = " ".join(f"<@{P}>" for P in People)
+            Text = (f"⏰ {Ping} la **tarea #{T['number']} · {T['title']}** vence {discord.utils.format_dt(Deadline, 'R')}."
+                    if Stage == "soon" else f"⌛ {Ping} la **tarea #{T['number']} · {T['title']}** ha **vencido** sin marcarse como hecha.")
+            try:
+                await Channel.send(Text.replace("  ", " "), reference=Channel.get_partial_message(Ref["id"]),
+                                   allowed_mentions=discord.AllowedMentions(users=True))
+            except discord.HTTPException:
+                pass
+
+    @Deadlines.before_loop
+    async def BeforeDeadlines(self):
+        await self.client.wait_until_ready()
 
 
 async def setup(client: commands.Bot) -> None:

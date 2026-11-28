@@ -74,7 +74,7 @@ Los beneficios duran mientras mantengas el boost."""),
 Herramientas del staff de LOJI:
 
 **`/mail`**: escribe al Tenno: sugerencias, peticiones, dudas o reportes. Recibes la respuesta por MD.
-**`/tareas`**: lo que hay que hacer, ordenado por prioridad y con filtros por departamento. Reclámalas y márcalas como hechas desde su mensaje.
+**`/tareas ver`**: lo que hay que hacer, ordenado por prioridad y con filtros por departamento. Reclámalas y márcalas como hechas desde su mensaje.
 -# Tenno y Consejo Supremo: botón **➕ Nueva tarea** para crearlas sin pasar por `/mail`.
 **`/perfil ver [usuario]`**: el perfil de staff: cargo, tiempo en el cargo, departamento, especialización y calificación.
 **`/perfil editar`**: escribe tu descripción y tu especialización.
