@@ -202,7 +202,7 @@ class MarchaView(discord.ui.View):
         if State == "playing":
             Boss = "bosses" in G and G["blind"] == len(M.BLINDS) - 1
             Blind = "👹 Jefe" if Boss else M.BLINDS[G["blind"]][0]
-            Text = f"**Ante {G['ante'] + 1}/{M.ANTES} · {Blind}**: llega a **{M.Target(G["ante"], G["blind"], G):,}** de señal.\n".replace(",", ".")
+            Text = f"**Ante {G['ante'] + 1}/{M.ANTES} · {Blind}**: llega a **{M.Target(G['ante'], G['blind'], G):,}** de señal.\n".replace(",", ".")
             if Boss:
                 Text += f"⚠️ {BossLine(G)}\n"
                 if (G.get("last") or {}).get("robbed"):

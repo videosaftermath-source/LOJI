@@ -394,3 +394,9 @@ SECTIONS["colors"] = COLORS
 def ColorKey(first: int, second: int | None) -> str:
     """Identifies a gradient: when the role's colors change, its emoji is redrawn."""
     return f"{first:06x}-{(second if second is not None else first):06x}"
+
+
+# ---------------- events (Crecimiento y Entretenimiento) ----------------
+from core.events import SETTINGS as _EVENT_SETTINGS  # noqa: E402
+
+SECTIONS["events"] = _EVENT_SETTINGS
