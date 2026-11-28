@@ -37,7 +37,8 @@ SETTINGS = {
     # When too many people tag her: she answers 1..max_answers of them (at random), then says one phrase to the rest,
     # except rest_ignore % of the times, when she just ignores them.
     "rest_text": "",  # empty = LOJI's own list (core/lojichat_phrases.py) · "nada" = never · else own phrases, one per line
-    "max_answers": 3,
+    "min_answers": 4,  # she answers between min and max of them (at random) per batch
+    "max_answers": 6,
     "rest_ignore": 33,  # %
 }
 OLD_REST = "No respondo al resto porque me canso lol"  # the old single phrase: now means "LOJI's list"
@@ -143,19 +144,50 @@ def Decide(state: dict, messages: int, people: int, now: datetime, s: dict) -> s
     return None
 
 
+# ---------------- waiting a little to answer several people at once ----------------
+# The first message that starts a batch opens the window. If someone else writes within the first QUICK_START s, it
+# turns "quick": she answers once nobody has written for QUICK_SILENCE s. If not, she answers after 7-10 s
+# (SLOW_WAIT). Never later than MAX_WAIT s, so a busy chat can't keep her waiting forever.
+QUICK_START, QUICK_SILENCE, SLOW_WAIT, MAX_WAIT = 4, 3, (7, 10), 20
+
+
+def NewBatch(now: datetime, slow: float) -> dict:
+    return {"first": now, "last": now, "count": 1, "quick": False, "slow": slow}
+
+
+def BatchAdd(batch: dict, now: datetime):
+    batch["count"] += 1
+    batch["last"] = now
+    if (now - batch["first"]).total_seconds() <= QUICK_START:
+        batch["quick"] = True
+
+
+def BatchReady(batch: dict, now: datetime) -> bool:
+    Since = (now - batch["first"]).total_seconds()
+    if Since >= MAX_WAIT:
+        return True
+    if batch["quick"]:
+        return (now - batch["last"]).total_seconds() >= QUICK_SILENCE
+    return Since >= batch["slow"]
+
+
 def AddressesLoji(content: str, mentions_bot: bool, replies_to_bot: bool) -> bool:
     return mentions_bot or replies_to_bot or "loji" in (content or "").lower()
 
 
-def PickTargets(lines: list[dict], only_addressed: bool = False, most: int = 1) -> tuple[list[dict], int]:
-    """Who she answers among what was said since her last message: the newest message of each person who talked
-    to her (up to `most` people, the newest ones), or else the newest line (unless only_addressed).
+def PickTargets(lines: list[dict], only_addressed: bool = False, most: int = 1, handled: set | None = None) -> tuple[list[dict], int]:
+    """Who she answers among what she hasn't dealt with yet (the lines not in `handled`; without it, what was said
+    since her last message): the newest message of each person who talked to her (up to `most` people, the newest
+    ones), or else the newest line (unless only_addressed).
     Returns (targets in chat order, how many other people talked to her and get no answer)."""
     Since = []
-    for L in reversed(lines):
-        if L["author"] == "LOJI":
-            break
-        Since.insert(0, L)
+    if handled is not None:
+        Since = [L for L in lines if L["author"] != "LOJI" and L.get("id") not in handled]
+    else:
+        for L in reversed(lines):
+            if L["author"] == "LOJI":
+                break
+            Since.insert(0, L)
     Newest = {}
     for L in Since:
         if L.get("to_loji"):

@@ -95,7 +95,7 @@ def test_a_conversation(monkeypatch):
 
     Cog = lc.LojiChat.__new__(lc.LojiChat)
     Cog.client = N(user=N(id=999))
-    Cog.last_reply = {}
+    Cog.last_reply, Cog.handled = {}, {}
     Cog.state = {1: {"awake": True, "woke_at": T0}}
     Cog.live = {1: deque([{"author": "Ana", "author_id": 5, "content": "odio los lunes", "id": 501}], maxlen=40)}
     Guild = N(id=1, name="Sótano")
@@ -141,7 +141,7 @@ def test_only_the_tenno_code_switches_her(monkeypatch):
             Sent.append(text)
 
     Cog = lc.LojiChat.__new__(lc.LojiChat)
-    Cog.state, Cog.pending = {}, {}
+    Cog.state, Cog.pending, Cog.batches = {}, {}, {}
 
     async def Act(guild, channel, s, what, people, messages):
         Acts.append(what)
@@ -263,7 +263,7 @@ def test_several_tags_get_the_rest_text(monkeypatch):
 
     Cog = lc.LojiChat.__new__(lc.LojiChat)
     Cog.client = N(user=N(id=999))
-    Cog.last_reply = {}
+    Cog.last_reply, Cog.handled = {}, {}
     Cog.state = {1: {"awake": True, "woke_at": T0}}
     Cog.live = {1: deque([{"author": "Ana", "author_id": 1, "content": "loji!", "to_loji": True, "id": 11},
                           {"author": "Luis", "author_id": 2, "content": "loji hola", "to_loji": True, "id": 12}], maxlen=40)}
@@ -271,7 +271,7 @@ def test_several_tags_get_the_rest_text(monkeypatch):
     from core.lojichat_phrases import REST_PHRASES
 
     class Dice:  # answers only 1 person, and doesn't ignore the rest
-        randint = staticmethod(lambda a, b: 1)
+        randint = staticmethod(lambda a, b: 1)  # (the real range is 4-6)
         random = staticmethod(lambda: 0.9)
         choice = staticmethod(lambda xs: xs[0])
         uniform = staticmethod(lambda a, b: a)
@@ -303,3 +303,31 @@ def test_she_answers_a_few_and_the_rest_gets_a_phrase():
     assert 60 < Ignored < 140  # ~33 %
     assert RestPhrases({"rest_text": "nada"}) == [] and RestPhrases({"rest_text": "uno\n\n dos "}) == ["uno", "dos"]
     assert len(RestPhrases({"rest_text": "No respondo al resto porque me canso lol"})) == 110  # the old default = LOJI's list
+
+
+def test_the_window_before_answering():
+    from core.lojichat import BatchAdd, BatchReady, NewBatch
+
+    def At(s):
+        return T0 + timedelta(seconds=s)
+    B = NewBatch(T0, 8)  # one person, nobody else in the first 4 s: she waits the slow 7-10 s
+    assert not BatchReady(B, At(7.9)) and BatchReady(B, At(8))
+    BatchAdd(B, At(6))  # after the first 4 s: joins the batch, but it stays slow
+    assert not B["quick"] and BatchReady(B, At(8))
+    B = NewBatch(T0, 8)
+    BatchAdd(B, At(2))  # someone else within 4 s: quick, 3 s of silence is enough
+    assert B["quick"] and not BatchReady(B, At(4.9)) and BatchReady(B, At(5))
+    for I in range(30):  # a never-ending stream: 20 s at most
+        BatchAdd(B, At(2 + I))
+    assert not BatchReady(B, At(19.9)) and BatchReady(B, At(20))
+
+
+def test_she_never_answers_the_same_message_twice():
+    from core.lojichat import PickTargets
+
+    Lines = [{"author": "Ana", "author_id": 1, "content": "loji", "to_loji": True, "id": 1},
+             {"author": "LOJI", "author_id": 999, "content": "dime"},
+             {"author": "Luis", "author_id": 2, "content": "loji yo tmb", "to_loji": True, "id": 2}]
+    Targets, _ = PickTargets(Lines, most=4, handled=set())
+    assert [T["id"] for T in Targets] == [1, 2]  # Ana wrote while she was sending: still answered
+    assert PickTargets(Lines, most=4, handled={1, 2}) == ([], 0)
