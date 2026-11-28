@@ -226,6 +226,27 @@ class LojiChat(commands.Cog):
 
     loji = app_commands.Group(name="loji", description="LOJI", guild_only=True)
 
+    @loji.command(name="interruptor", description="Encender o apagar a LOJI en el chat (solo con la credencial del Tenno)")
+    async def interruptor(self, interaction: discord.Interaction):
+        await interaction.response.send_modal(TennoSwitch())
+
+    async def Switch(self, guild: discord.Guild, on: bool):
+        """Turns LOJI chat on/off; if she was in the conversation, she says goodbye first."""
+        S = await Settings(guild.id)
+        await Community().Set(guild.id, "lojichat", {"enabled": on})
+        State = self.state.get(guild.id) or {}
+        if not on and State.get("awake"):
+            State.update(awake=False, left_at=Now(), quiet_since=None)
+            Task = self.pending.pop(guild.id, None)
+            if Task and not Task.done():
+                Task.cancel()
+            Channel = guild.get_channel(S["channel"] or 0)
+            if Channel and S["goodbye"].strip() and S["mode"] == "active":
+                try:
+                    await Channel.send(S["goodbye"][:2000])
+                except discord.HTTPException:
+                    pass
+
     @loji.command(name="olvidame", description="Que LOJI olvide lo que habló contigo y no te recuerde (o vuelva a hacerlo)")
     async def olvidame(self, interaction: discord.Interaction):
         Key = f"{interaction.guild.id}:{interaction.user.id}"
@@ -300,12 +321,9 @@ class ChatPanel(Owned):
     @ui.button(label="Activar", emoji="⏯️", style=discord.ButtonStyle.green, row=2)
     async def Toggle(self, interaction: discord.Interaction, _):
         S = await Settings(interaction.guild.id)
-        Doc = await Guide().Get(interaction.guild.id) or {}
         if not S["enabled"] and not S["channel"]:
             return await ChatPanel.Open(interaction, self.author, "❌ Elige primero el canal.")
-        await Community().Set(interaction.guild.id, "lojichat", {"enabled": not S["enabled"]})
-        Tip = "" if Doc.get("personality_text") else "\n⚠️ Falta subir la personalidad: no hablará hasta que la subas."
-        await ChatPanel.Open(interaction, self.author, ("✅ Activado." + Tip) if not S["enabled"] else "⏸️ Desactivado.")
+        await interaction.response.send_modal(TennoSwitch(panel=self))
 
     @ui.button(label="Modo observación", emoji="👀", style=discord.ButtonStyle.grey, row=2)
     async def Mode(self, interaction: discord.Interaction, _):
@@ -343,6 +361,39 @@ class ChatPanel(Owned):
         from cogs.Modules.Growth.panel import GrowthPanel
 
         await GrowthPanel.Open(interaction, self.author)
+
+
+class TennoSwitch(ui.Modal, title="Interruptor de LOJI"):
+    """On/off for LOJI chat: only with the Tenno's credential (not even admins without it)."""
+
+    def __init__(self, panel: "ChatPanel | None" = None):
+        super().__init__()
+        self.panel = panel
+        self.code = ui.TextInput(label="Credencial del Tenno", placeholder="Tu código", max_length=20)
+        self.add_item(self.code)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        from core.mail.config import CheckCredential, Mail, MailError
+
+        try:
+            CheckCredential(interaction.guild.id, interaction.user.id, self.code.value.strip(), ("tenno",), await Mail().Get(interaction.guild.id))
+        except MailError as e:
+            return await interaction.response.send_message(f"🔒 {e}", ephemeral=True)
+        S = await Settings(interaction.guild.id)
+        if not S["enabled"] and not S["channel"]:
+            return await interaction.response.send_message("❌ Elige primero el canal en `/config` → Crecimiento y Entretenimiento → LOJI (chat).", ephemeral=True)
+        On = not S["enabled"]
+        Cog = interaction.client.get_cog("LojiChat")
+        if Cog:
+            await Cog.Switch(interaction.guild, On)
+        else:
+            await Community().Set(interaction.guild.id, "lojichat", {"enabled": On})
+        Doc = await Guide().Get(interaction.guild.id) or {}
+        Tip = "" if Doc.get("personality_text") or not On else "\n⚠️ Falta subir la personalidad: no hablará hasta que la subas."
+        Note = ("🟢 **LOJI encendida.** Entrará cuando el chat se calme." + Tip) if On else "🔴 **LOJI apagada.**"
+        if self.panel:
+            return await ChatPanel.Open(interaction, self.panel.author, Note)
+        await interaction.response.send_message(Note, ephemeral=True)
 
 
 def Number(text: str, low: int, high: int) -> int:

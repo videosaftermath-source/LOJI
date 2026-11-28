@@ -100,3 +100,54 @@ def test_a_conversation(monkeypatch):
     Cog.live[1].append({"author": "Ana", "author_id": 5, "content": "jaja"})
     asyncio.run(Cog.Reply(Guild, Channel(), Settings, opening=False))  # daily limit (1) reached
     assert len(Sent) == 1
+
+
+def test_only_the_tenno_code_switches_her(monkeypatch):
+    import cogs.Modules.Growth.lojichat as lc
+    import core.mail.config as mc
+    from core.community import Community
+    from core.mail.config import DefaultConfig, Hash
+    from tests.economy.fakes import DB
+
+    D = DB()
+    Store = Community(D)
+    monkeypatch.setattr(lc, "Community", lambda: Store)
+    Config = DefaultConfig(1)
+    Config["offices"]["tenno"]["credential"] = Hash("T-1234")
+
+    class FakeMail:
+        async def Get(self, g):
+            return Config
+    monkeypatch.setattr(mc, "Mail", FakeMail)
+
+    class G:
+        async def Get(self, g):
+            return {"personality_text": "x"}
+    monkeypatch.setattr(lc, "Guide", lambda: G())
+    asyncio.run(Store.Set(1, "lojichat", {"channel": 7, "enabled": True}))
+    Said, Sent = [], []
+
+    class Channel:
+        async def send(self, text, **kw):
+            Sent.append(text)
+
+    Cog = lc.LojiChat.__new__(lc.LojiChat)
+    Cog.state = {1: {"awake": True}}
+    Cog.pending = {}
+    Guild = N(id=1, get_channel=lambda i: Channel() if i == 7 else None)
+
+    def Submit(code, uid):
+        M = lc.TennoSwitch()
+        M.code._value = code
+
+        async def send_message(text, **kw):
+            Said.append(text)
+        return M.on_submit(N(guild=Guild, user=N(id=uid), client=N(get_cog=lambda n: Cog), response=N(send_message=send_message)))
+
+    asyncio.run(Submit("M-0000", 50))  # an admin without the code
+    assert "incorrecta" in Said[-1] and asyncio.run(Store.Get(1))["lojichat"]["enabled"] is True
+    asyncio.run(Submit("T-1234", 60))
+    assert "apagada" in Said[-1] and asyncio.run(Store.Get(1))["lojichat"]["enabled"] is False
+    assert Sent == [S["goodbye"]] and Cog.state[1]["awake"] is False  # she was talking: says goodbye
+    asyncio.run(Submit("T-1234", 60))
+    assert "encendida" in Said[-1]
