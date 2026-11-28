@@ -6,7 +6,7 @@ El staff le pregunta dudas a la guía de sanciones. La responde la IA configurad
 - **📤 Subir guía:** Word (`.docx`), `.txt` o `.md`. Reemplaza a la anterior y se aplica al momento.
 - **📥 Descargar guía actual:** el texto exacto que lee el bot. Sirve para comprobar cómo quedaron las tablas.
 - **🎭 Rol:** quién puede preguntar.
-- **🔑 Key de la IA:** DeepSeek (`sk-…`) o Groq (`gsk_…`); LOJI reconoce cuál es. Se guarda en la base de datos; si la dejas vacía, se usa `DEEPSEEK_API_KEY` o `GROQ_API_KEY` del `.env`. La misma key la usan el autoreporte y LOJI (chat).
+- **🔑 Key de la IA:** DeepSeek (`sk-…`) o Groq (`gsk_…`); LOJI reconoce cuál es. Se guarda en la base de datos; si la dejas vacía, se usa `DEEPSEEK_API_KEY` o `GROQ_API_KEY` del `.env`. La misma key la usan el autoreporte y LOJI (chat). En el mismo formulario puedes elegir el **modelo** (vacío = `deepseek-chat` o `openai/gpt-oss-120b`); la key vacía la deja como está y `borrar` la quita.
 
 ## Uso
 - `/guia pregunta:...`: la respuesta solo la ve quien pregunta y cita la sección de la guía. Si la guía no cubre la duda, lo dice.

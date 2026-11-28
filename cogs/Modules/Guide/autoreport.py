@@ -214,7 +214,7 @@ class AutoReport(commands.Cog):
             Text, _ = await Complete(
                 Key, SYSTEM.format(server=guild.name, rules=Rules),
                 UserPrompt({"author": message.author.display_name, "content": message.content}, list(reversed(Context))),
-                json_mode=True,
+                json_mode=True, model=doc.get("ai_model"),
             )
             return ParseVerdict(Text), "", True
         except GuideError as e:

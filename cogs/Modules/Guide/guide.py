@@ -54,7 +54,7 @@ async def PanelEmbed(guild: discord.Guild) -> discord.Embed:
         value=MaskKey(Key) + (" *(del .env)*" if Key and not Doc.get("groq_key") else ""),
         inline=True,
     )
-    embed.set_footer(text=f"Modelo: {Provider(Key)['model']} ({Provider(Key)['name']}) · también lo usan el autoreporte y LOJI (chat)")
+    embed.set_footer(text=f"Modelo: {Doc.get('ai_model') or Provider(Key)['model']} ({Provider(Key)['name']}) · también lo usan el autoreporte y LOJI (chat)")
     return embed
 
 
@@ -99,6 +99,7 @@ class GuidePanel(discord.ui.View):
 
     @discord.ui.button(label="Key de la IA", emoji="🔑", style=discord.ButtonStyle.blurple, row=1)
     async def SetKey(self, interaction: discord.Interaction, _):
+        self.model = ((await Store().Get(interaction.guild.id)) or {}).get("ai_model")
         await interaction.response.send_modal(KeyModal(self))
 
     @discord.ui.button(label="Volver", emoji="⬅️", style=discord.ButtonStyle.grey, row=1)
@@ -146,16 +147,32 @@ class KeyModal(discord.ui.Modal, title="Key de la IA (DeepSeek o Groq)"):
         super().__init__()
         self.panel = panel
         self.key = discord.ui.TextInput(
-            label="Key (vacío = usar la del .env)", placeholder="DeepSeek: sk-...   ·   Groq: gsk_...", required=False, max_length=200,
+            label="Key (vacío = igual · «borrar» = quitarla)", placeholder="DeepSeek: sk-...   ·   Groq: gsk_...", required=False, max_length=200,
+        )
+        self.model = discord.ui.TextInput(
+            label="Modelo (vacío = el de por defecto)", placeholder="deepseek-chat · openai/gpt-oss-120b", required=False, max_length=80,
+            default=getattr(panel, "model", None) or None,
         )
         self.add_item(self.key)
+        self.add_item(self.model)
 
     async def on_submit(self, interaction: discord.Interaction):
         Key = self.key.value.strip()
-        if Key and not ValidKey(Key):
+        Model = self.model.value.strip() or None
+        if Key and Key.lower() != "borrar" and not ValidKey(Key):
             return await interaction.response.send_message("❌ Las keys de DeepSeek empiezan por `sk-` y las de Groq por `gsk_`.", ephemeral=True)
-        await Store().SetKey(interaction.guild.id, Key or None)
-        await self.panel.Refresh(interaction, f"🔑 Key de **{Provider(Key)['name']}** guardada: `/guia`, el autoreporte y LOJI (chat) la usan desde ya." if Key else "🔑 Key borrada: se usará la del .env (`DEEPSEEK_API_KEY` o `GROQ_API_KEY`) si existe.")
+        await Store().guides.update_one({"_id": interaction.guild.id}, {"$set": {"ai_model": Model}}, upsert=True)
+        if Key.lower() == "borrar":
+            await Store().SetKey(interaction.guild.id, None)
+            Note = "🔑 Key borrada: se usará la del .env (`DEEPSEEK_API_KEY` o `GROQ_API_KEY`) si existe."
+        elif Key:
+            await Store().SetKey(interaction.guild.id, Key)
+            Note = f"🔑 Key de **{Provider(Key)['name']}** guardada: `/guia`, el autoreporte y LOJI (chat) la usan desde ya."
+        else:
+            Note = "✅ Key sin cambios."
+        Current = await Store().Key(interaction.guild.id)
+        Note += f"\n-# Modelo: `{Model or Provider(Current)['model']}`" + ("" if Model else " (el de por defecto)")
+        await self.panel.Refresh(interaction, Note)
 
 
 # ---------------- /guia ----------------
@@ -198,7 +215,7 @@ class GuideCog(commands.Cog):
             await interaction.followup.send(text, ephemeral=True)
 
         try:
-            Answer = await Ask(Key, Doc["text"], pregunta, interaction.guild.name)
+            Answer = await Ask(Key, Doc["text"], pregunta, interaction.guild.name, model=Doc.get("ai_model"))
         except GuideError as e:
             return await Private(f"❌ {e}")
         except Exception as e:

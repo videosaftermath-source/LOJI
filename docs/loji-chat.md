@@ -6,8 +6,11 @@
 - **Cuándo entra:** menos de **4 personas** y menos de **10 mensajes** en **5 min**, durante **2 min** seguidos, y al menos
   **20 min** después de su última salida. **Cuándo se va:** con 4+ personas en 5 min, dice la **despedida** y se duerme.
   Todo en **⚙️ Umbrales**.
-- Mientras está: espera unos segundos a que la gente termine de escribir, "está escribiendo…", 1–2 mensajes cortos,
-  nunca dos veces seguidas sin respuesta. Al entrar lee lo último del canal para sumarse a la conversación.
+- Mientras está: espera unos segundos a que la gente termine de escribir, "está escribiendo…" y **responde a una sola
+  persona** con la función de *responder* de Discord (le llega la notificación): la última que le habló (mención, respuesta
+  o "loji"), o si nadie le habló, el último mensaje. Si la etiquetaron varios, añade un segundo mensaje
+  ("No respondo al resto porque me canso lol", editable en **👋 Textos fijos**). Nunca dos veces seguidas sin respuesta.
+  Cuando la mandas a hablar con el chat activo, solo contesta a quien se dirige a ella.
 - **🧠 Límites y memoria:** mensajes al día (150), tokens de contexto (10.000), días que recuerda las conversaciones (7)
   y las cosas de la gente (14).
 - **👀 Modo observación:** no habla; el panel muestra cuándo habría entrado en los últimos 7 días, para ajustar los umbrales.

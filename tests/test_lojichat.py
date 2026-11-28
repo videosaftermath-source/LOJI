@@ -44,7 +44,7 @@ def test_prompt_stays_within_budget():
 
 def test_reply_parsing():
     R = ParseReply('ok {"mensajes": ["holi", "", "qué tal", "tres"], "recordar": [{"persona": "Ana", "dato": "examen el lunes"}], "alerta": ""}')
-    assert R["messages"] == ["holi", "qué tal"] and R["notes"] == [{"name": "Ana", "text": "examen el lunes"}] and R["alert"] == ""
+    assert R["messages"] == ["holi"] and R["notes"] == [{"name": "Ana", "text": "examen el lunes"}] and R["alert"] == ""
 
 
 def test_a_conversation(monkeypatch):
@@ -70,10 +70,13 @@ def test_a_conversation(monkeypatch):
     async def NoSleep(*a):
         pass
     monkeypatch.setattr(lc.asyncio, "sleep", NoSleep)
-    Sent = []
+    Sent, Replies = [], []
 
     class Channel:
         id = 7
+
+        def get_partial_message(self, i):
+            return N(id=i)
 
         def typing(self):
             class T:
@@ -86,16 +89,17 @@ def test_a_conversation(monkeypatch):
 
         async def send(self, text, **kw):
             Sent.append(text)
+            Replies.append(getattr(kw.get("reference"), "id", None))
 
     Cog = lc.LojiChat.__new__(lc.LojiChat)
     Cog.client = N(user=N(id=999))
     Cog.last_reply = {}
     Cog.state = {1: {"awake": True, "woke_at": T0}}
-    Cog.live = {1: deque([{"author": "Ana", "author_id": 5, "content": "odio los lunes"}], maxlen=40)}
+    Cog.live = {1: deque([{"author": "Ana", "author_id": 5, "content": "odio los lunes", "id": 501}], maxlen=40)}
     Guild = N(id=1, name="Sótano")
     Settings = {**S, "daily_limit": 1}
     asyncio.run(Cog.Reply(Guild, Channel(), Settings, opening=False))
-    assert Sent == ["jajaja eso es muy de lunes"]
+    assert Sent == ["jajaja eso es muy de lunes"] and Replies == [501]  # a Discord reply to Ana's message
     assert asyncio.run(D[lc.NOTES].find_one({}))["text"] == "odia los lunes"
     asyncio.run(Cog.Reply(Guild, Channel(), Settings, opening=False))  # her own message is last: she doesn't talk again
     Cog.live[1].append({"author": "Ana", "author_id": 5, "content": "jaja"})
@@ -191,3 +195,76 @@ def test_forced_she_stays_even_if_the_chat_is_busy(monkeypatch):
     Cog.state[1]["forced"] = False
     asyncio.run(lc.LojiChat.Check.coro(Cog))
     assert Acts == ["leave"]  # automatic mode: a busy chat sends her away
+
+
+def test_she_answers_one_person():
+    from core.lojichat import AddressesLoji, PickTarget
+
+    Lines = [
+        {"author": "LOJI", "author_id": 999, "content": "holaa"},
+        {"author": "Ana", "author_id": 1, "content": "loji qué haces", "to_loji": True, "id": 11},
+        {"author": "Luis", "author_id": 2, "content": "@LOJI hola", "to_loji": True, "id": 12},
+        {"author": "Eva", "author_id": 3, "content": "jaja", "id": 13},
+    ]
+    Target, Others = PickTarget(Lines)
+    assert Target["author"] == "Luis" and Others == ["Ana"]  # the newest one talking to her; Ana is "the rest"
+    Target, Others = PickTarget(Lines[:1] + [Lines[3]])
+    assert Target["author"] == "Eva" and Others == []  # nobody tagged her: the newest message
+    assert PickTarget(Lines[:1] + [Lines[3]], only_addressed=True) == (None, [])  # busy chat, told to talk: only if spoken to
+    assert AddressesLoji("Hola LOJI", False, False) and AddressesLoji("x", True, False) and AddressesLoji("x", False, True)
+    assert not AddressesLoji("hola a todos", False, False)
+
+
+def test_several_tags_get_the_rest_text(monkeypatch):
+    import cogs.Modules.Growth.lojichat as lc
+    import core.guide
+    from tests.economy.fakes import DB
+
+    D = DB()
+    monkeypatch.setattr(lc, "Db", lambda: D)
+
+    class G:
+        async def Get(self, g):
+            return {"personality_text": "Eres LOJI.", "ai_model": "deepseek-v4-flash"}
+
+        async def Key(self, g):
+            return "sk-x"
+    monkeypatch.setattr(lc, "Guide", lambda: G())
+    Models = []
+
+    async def Complete(key, system, user, **kw):
+        Models.append(kw.get("model"))
+        assert "Respóndele SOLO a Luis" in user
+        return '{"mensajes": ["holi Luis", "esto sobra"], "recordar": [], "alerta": ""}', 10
+    monkeypatch.setattr(core.guide, "Complete", Complete)
+
+    async def NoSleep(*a):
+        pass
+    monkeypatch.setattr(lc.asyncio, "sleep", NoSleep)
+    Sent = []
+
+    class Channel:
+        def get_partial_message(self, i):
+            return N(id=i)
+
+        def typing(self):
+            class T:
+                async def __aenter__(s):
+                    pass
+
+                async def __aexit__(s, *a):
+                    pass
+            return T()
+
+        async def send(self, text, **kw):
+            Sent.append((text, getattr(kw.get("reference"), "id", None)))
+
+    Cog = lc.LojiChat.__new__(lc.LojiChat)
+    Cog.client = N(user=N(id=999))
+    Cog.last_reply = {}
+    Cog.state = {1: {"awake": True, "woke_at": T0}}
+    Cog.live = {1: deque([{"author": "Ana", "author_id": 1, "content": "loji!", "to_loji": True, "id": 11},
+                          {"author": "Luis", "author_id": 2, "content": "loji hola", "to_loji": True, "id": 12}], maxlen=40)}
+    asyncio.run(Cog.Reply(N(id=1, name="S"), Channel(), dict(S), opening=False))
+    assert Sent == [("holi Luis", 12), (S["rest_text"], None)]  # one reply to Luis, then the note for the rest
+    assert Models == ["deepseek-v4-flash"]

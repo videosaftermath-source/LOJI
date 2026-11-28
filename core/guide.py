@@ -210,9 +210,10 @@ def ValidKey(key: str) -> bool:
     return key.startswith(("gsk_", "sk-"))
 
 
-def Body(key: str, messages: list[dict], temperature: float, max_tokens: int, effort: str, json_mode: bool) -> dict:
+def Body(key: str, messages: list[dict], temperature: float, max_tokens: int, effort: str, json_mode: bool, model: str | None = None) -> dict:
+    """model: the admin's choice in /config (empty = the provider's default)."""
     P = Provider(key)
-    Data = {"model": P["model"], "messages": messages, "temperature": temperature}
+    Data = {"model": (model or "").strip() or P["model"], "messages": messages, "temperature": temperature}
     if P["reasoning"]:  # gpt-oss thinks first: its limit counts the thinking too
         Data.update(max_completion_tokens=max_tokens, reasoning_effort=effort)
     else:
@@ -243,6 +244,8 @@ async def Post(key: str, body: dict, session: aiohttp.ClientSession | None, retr
                 )
             if R.status >= 400:
                 Message = (Data or {}).get("error", {}).get("message", "") if isinstance(Data, dict) else ""
+                if "model" in Message.lower() and ("exist" in Message.lower() or "not found" in Message.lower() or "invalid" in Message.lower()):
+                    raise GuideError(f"{P['name']} no reconoce el modelo «{body.get('model')}». Revisa el nombre en `/config` → Mando Central → Guía de sanciones → Key de la IA.")
                 raise GuideError(f"{P['name']} respondió con un error ({R.status}). {Message[:200]}".strip())
     except aiohttp.ClientError:
         raise GuideError(f"No pude conectar con {P['name']}. Inténtalo en un momento.{retry_note}")
@@ -264,21 +267,21 @@ def Text(data: dict, key: str, retry_note: str = "") -> str:
     return Answer
 
 
-async def Ask(key: str, guide: str, question: str, server: str, session: aiohttp.ClientSession | None = None) -> str:
+async def Ask(key: str, guide: str, question: str, server: str, session: aiohttp.ClientSession | None = None, model: str | None = None) -> str:
     """One question, no memory. Raises GuideError with a message for the user."""
     Messages = [
         {"role": "system", "content": SYSTEM.format(server=server, guide=guide)},
         {"role": "user", "content": question},
     ]
     Note = " No se te ha descontado la pregunta."
-    Data = await Post(key, Body(key, Messages, 0.2, 2000, "medium", False), session, Note)
+    Data = await Post(key, Body(key, Messages, 0.2, 2000, "medium", False, model), session, Note)
     return Text(Data, key, Note)
 
 
 async def Complete(key: str, system: str, user: str, max_tokens: int = 900, json_mode: bool = False,
-                   session: aiohttp.ClientSession | None = None, temperature: float = 0.1) -> tuple[str, int]:
+                   session: aiohttp.ClientSession | None = None, temperature: float = 0.1, model: str | None = None) -> tuple[str, int]:
     """One call to the same model (quick reports, LOJI chat). Returns (text, tokens used).
     Raises GuideError with a message that can be shown to staff."""
     Messages = [{"role": "system", "content": system}, {"role": "user", "content": user}]
-    Data = await Post(key, Body(key, Messages, temperature, max_tokens, "low", json_mode), session)
+    Data = await Post(key, Body(key, Messages, temperature, max_tokens, "low", json_mode, model), session)
     return Text(Data, key), int((Data.get("usage") or {}).get("total_tokens") or 0)

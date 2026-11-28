@@ -13,7 +13,7 @@ from discord.ext import commands, tasks
 
 from cogs.Modules.Community.panel import Field, Owned, Show
 from core.community import Store as Community
-from core.lojichat import LOG, NOTES, OBSERVED, OPTOUT, Activity, Aware, BuildPrompt, Decide, Now, ParseReply
+from core.lojichat import LOG, NOTES, OBSERVED, OPTOUT, Activity, AddressesLoji, Aware, BuildPrompt, Decide, Now, ParseReply, PickTarget
 
 logger = logging.getLogger(__name__)
 LOJI_RED = discord.Color.from_rgb(150, 12, 18)
@@ -66,9 +66,15 @@ class LojiChat(commands.Cog):
         self.activity.Add(message.channel.id, message.author.id, Now())
         if not State.get("awake") or (S["mode"] != "active" and not Forced):
             return
-        Line = {"author": message.author.display_name, "author_id": message.author.id, "content": message.clean_content or "(imagen o archivo)"}
+        Ref = message.reference.resolved if message.reference else None
+        ToLoji = AddressesLoji(message.content, self.client.user in message.mentions,
+                               bool(Ref and getattr(Ref, "author", None) and Ref.author.id == self.client.user.id))
+        Line = {"author": message.author.display_name, "author_id": message.author.id, "content": message.clean_content or "(imagen o archivo)",
+                "id": message.id, "to_loji": ToLoji}
         self.live.setdefault(message.guild.id, deque(maxlen=LIVE)).append(Line)
-        await self.Remember(message.guild.id, Line)
+        await self.Remember(message.guild.id, {K: V for K, V in Line.items() if K not in ("id", "to_loji")})
+        if Forced and not ToLoji:
+            return  # told to talk in a busy chat: she only answers whoever talks to her
         Old = self.pending.get(message.guild.id)
         if Old and not Old.done():
             if Forced:
@@ -163,25 +169,30 @@ class LojiChat(commands.Cog):
         Live = list(self.live.get(guild.id) or [])
         if not opening and Live and Live[-1]["author"] == "LOJI":
             return  # never twice in a row without an answer
+        Target, Others = (None, []) if opening else PickTarget(Live, only_addressed=bool(State.get("forced")))
+        if not opening and not Target:
+            return
         WokeAt = (self.state.get(guild.id) or {}).get("woke_at") or Now()
         Past = await Db()[LOG].find({"guild_id": guild.id, "at": {"$lt": WokeAt}}).sort("at", -1).to_list(length=40)
         Present = {L["author_id"] for L in Live if L.get("author_id")}
         Notes = await Db()[NOTES].find({"guild_id": guild.id, "user_id": {"$in": list(Present)}}).sort("at", -1).to_list(length=30)
         System, User = BuildPrompt(Personality, [{"name": N["name"], "text": N["text"]} for N in Notes], list(reversed(Past)), Live,
-                                   int(s["context_tokens"]), guild.name, opening)
+                                   int(s["context_tokens"]), guild.name, opening, Target)
         try:
-            Text, _ = await Complete(Key, System, User, max_tokens=500, json_mode=True, temperature=0.9)  # chatting: a bit livelier
+            Text, _ = await Complete(Key, System, User, max_tokens=500, json_mode=True, temperature=0.9,  # chatting: a bit livelier
+                                     model=Doc.get("ai_model"))
             Answer = ParseReply(Text)
         except (GuideError, ValueError) as e:
             return logger.warning(f"[LojiChat] {guild.id}: {e}")
         if not (self.state.get(guild.id) or {}).get("awake"):
             return  # the chat filled up while she was thinking
-        for I, Message in enumerate(Answer["messages"]):
+        Outgoing = Answer["messages"][:1]
+        if Outgoing and Others and s.get("rest_text", "").strip():
+            Outgoing.append(s["rest_text"].strip())  # several people tagged her: she answers one
+        for I, Message in enumerate(Outgoing):
             async with channel.typing():
-                await asyncio.sleep(min(1.5 + len(Message) / 25, 7))
-            try:
-                await channel.send(Message, allowed_mentions=discord.AllowedMentions.none())
-            except discord.HTTPException:
+                await asyncio.sleep(min(1.5 + len(Message) / 25, 7) if I == 0 else 1.2)
+            if not await self.Send(channel, Message, Target if I == 0 else None):
                 break
             Line = {"author": "LOJI", "author_id": self.client.user.id, "content": Message}
             self.live.setdefault(guild.id, deque(maxlen=LIVE)).append(Line)
@@ -191,6 +202,22 @@ class LojiChat(commands.Cog):
         await self.Note(guild.id, Answer["notes"], Live)
         if Answer["alert"]:
             await self.Alert(guild, channel, s, Answer["alert"], Live)
+
+    async def Send(self, channel, text: str, target: dict | None) -> bool:
+        """As a Discord reply to that person's message (they get the ping); a plain message if there's no target."""
+        try:
+            if target and target.get("id"):
+                try:
+                    await channel.send(text, reference=channel.get_partial_message(target["id"]), mention_author=True,
+                                       allowed_mentions=discord.AllowedMentions(users=False, roles=False, everyone=False, replied_user=True))
+                    return True
+                except discord.HTTPException:  # the message was deleted: tag them instead
+                    await channel.send(f"<@{target['author_id']}> {text}", allowed_mentions=discord.AllowedMentions(users=[discord.Object(target["author_id"])]))
+                    return True
+            await channel.send(text, allowed_mentions=discord.AllowedMentions.none())
+            return True
+        except discord.HTTPException:
+            return False
 
     async def Remember(self, guild_id: int, line: dict):
         """What's said while she's awake is kept a few days (except for people who opted out)."""
@@ -384,9 +411,9 @@ class ChatPanel(Owned):
         await interaction.response.send_message("📥 La personalidad que usa LOJI:", ephemeral=True,
                                                 file=discord.File(io.BytesIO(Doc["personality_text"].encode()), filename="personalidad-loji.txt"))
 
-    @ui.button(label="Despedida", emoji="👋", style=discord.ButtonStyle.grey, row=3)
+    @ui.button(label="Textos fijos", emoji="👋", style=discord.ButtonStyle.grey, row=3)
     async def Goodbye(self, interaction: discord.Interaction, _):
-        await interaction.response.send_modal(GoodbyeModal(self.author, (await Settings(interaction.guild.id))["goodbye"]))
+        await interaction.response.send_modal(GoodbyeModal(self.author, await Settings(interaction.guild.id)))
 
     @ui.button(label="Volver", emoji="⬅️", style=discord.ButtonStyle.grey, row=3)
     async def Back(self, interaction: discord.Interaction, _):
@@ -496,16 +523,18 @@ class LimitsModal(ui.Modal, title="Límites y memoria"):
         await ChatPanel.Open(interaction, self.author, "✅ Guardado.")
 
 
-class GoodbyeModal(ui.Modal, title="Despedida de LOJI"):
-    def __init__(self, author, current):
+class GoodbyeModal(ui.Modal, title="Textos fijos de LOJI"):
+    def __init__(self, author, s: dict):
         super().__init__()
         self.author = author
-        self.text = Field("Lo que dice al irse (vacío = nada)", current, 300, required=False)
+        self.text = Field("Lo que dice al irse (vacío = nada)", s["goodbye"], 300, required=False)
+        self.rest = Field("Si la etiquetan varios (vacío = nada)", s.get("rest_text", ""), 300, required=False)
         self.add_item(self.text)
+        self.add_item(self.rest)
 
     async def on_submit(self, interaction: discord.Interaction):
-        await Community().Set(interaction.guild.id, "lojichat", {"goodbye": self.text.value.strip()})
-        await ChatPanel.Open(interaction, self.author, "✅ Despedida guardada.")
+        await Community().Set(interaction.guild.id, "lojichat", {"goodbye": self.text.value.strip(), "rest_text": self.rest.value.strip()})
+        await ChatPanel.Open(interaction, self.author, "✅ Textos guardados.")
 
 
 class PersonalityModal(ui.Modal, title="Personalidad de LOJI"):

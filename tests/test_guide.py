@@ -117,3 +117,12 @@ def test_the_key_chooses_the_provider():
     assert Groq.sent[0].startswith("https://api.groq.com") and Groq.sent[1]["reasoning_effort"] == "medium"
     with pytest.raises(GuideError, match="DeepSeek no tiene saldo"):
         run(Ask("sk-x", "g", "q", "L", FakeSession(FakeResponse(402, {"error": {"message": "Insufficient Balance"}}))))
+
+
+def test_model_can_be_chosen():
+    from core.guide import Body
+
+    assert Body("sk-x", [], 0.2, 100, "low", False, "deepseek-v4-flash")["model"] == "deepseek-v4-flash"
+    assert Body("sk-x", [], 0.2, 100, "low", False, " ")["model"] == "deepseek-chat"
+    with pytest.raises(GuideError, match="no reconoce el modelo"):
+        run(Ask("sk-x", "g", "q", "L", FakeSession(FakeResponse(400, {"error": {"message": "Model Not Exist"}})), model="deepseek-V4-flash"))
