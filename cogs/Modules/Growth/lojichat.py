@@ -13,7 +13,7 @@ from discord.ext import commands, tasks
 
 from cogs.Modules.Community.panel import Field, Owned, Show
 from core.community import Store as Community
-from core.lojichat import LOG, NOTES, OBSERVED, OLD_REST, OPTOUT, SLOW_WAIT, Activity, AddressesLoji, Aware, BatchAdd, BatchReady, BuildPrompt, Decide, NewBatch, Now, ParseReply, PickTargets, RestPhrase
+from core.lojichat import LOG, NOTES, OBSERVED, OLD_REST, OPTOUT, SLOW_WAIT, Activity, AddressesLoji, Aware, BatchAdd, BatchReady, BuildPrompt, Decide, Ignored, NewBatch, Now, ParseReply, PickFresh, PickTargets, RestPhrase, SpamCheck, Strike
 
 logger = logging.getLogger(__name__)
 LOJI_RED = discord.Color.from_rgb(150, 12, 18)
@@ -48,6 +48,8 @@ class LojiChat(commands.Cog):
         self.locks: dict[int, asyncio.Lock] = {}  # one answer at a time per server
         self.handled: dict[int, set] = {}  # guild -> ids of messages she already dealt with
         self.last_reply: dict = {}
+        self.spam: dict[tuple, deque] = {}  # (guild, user) -> their recent messages to LOJI
+        self.trolls: dict[tuple, dict] = {}  # (guild, user) -> {"warned_at", "ignored_until"}
         self.used_phrases: dict[int, list[str]] = {}  # guild -> phrases for "the rest" said lately (no repeats)
         self.ticks = 0
         self.Check.start()
@@ -69,6 +71,8 @@ class LojiChat(commands.Cog):
         self.activity.Add(message.channel.id, message.author.id, Now())
         if not State.get("awake") or (S["mode"] != "active" and not Forced):
             return
+        if S.get("antitroll", True) and Ignored(self.trolls.get((message.guild.id, message.author.id)), Now()):
+            return  # reported a moment ago: she ignores them for a while
         Ref = message.reference.resolved if message.reference else None
         ToLoji = AddressesLoji(message.content, self.client.user in message.mentions,
                                bool(Ref and getattr(Ref, "author", None) and Ref.author.id == self.client.user.id))
@@ -78,6 +82,13 @@ class LojiChat(commands.Cog):
                 "reply_to": ("LOJI" if RefAuthor.id == self.client.user.id else RefAuthor.display_name) if RefAuthor else None}
         self.live.setdefault(message.guild.id, deque(maxlen=LIVE)).append(Line)
         await self.Remember(message.guild.id, {K: V for K, V in Line.items() if K not in ("id", "to_loji", "reply_to")})
+        if ToLoji and S.get("antitroll", True):
+            Why = SpamCheck(self.spam.setdefault((message.guild.id, message.author.id), deque()), Now(), message.content, S)
+            if Why:
+                self.spam[(message.guild.id, message.author.id)].clear()
+                Mine = {L.get("id") for L in self.live[message.guild.id] if L.get("author_id") == message.author.id and L.get("id")}
+                self.handled.setdefault(message.guild.id, set()).update(Mine)  # their spam gets no normal answers
+                return await self.Troll(message.guild, message.channel, S, Line, Why)
         if Forced and not ToLoji:
             return  # told to talk in a busy chat: she only answers whoever talks to her
         Gid = message.guild.id
@@ -203,12 +214,21 @@ class LojiChat(commands.Cog):
             return logger.warning(f"[LojiChat] {guild.id}: {e}")
         if not (self.state.get(guild.id) or {}).get("awake"):
             return  # the chat filled up while she was thinking
+        Trolls = {}
+        if s.get("antitroll", True):
+            for Name in Answer["trolls"]:
+                Last = next((L for L in reversed(Live) if L["author"] != "LOJI" and L["author"].lower() == Name.lower() and L.get("id")), None)
+                if Last:
+                    Trolls[Last["author_id"]] = Last
         if Addressed:  # one message for each person who talked to her, in order
             Outgoing = list(zip(Answer["messages"], Targets))
         else:  # nobody spoke to her: she picks who to answer (or the whole chat)
             I = Answer["reply_to"]
             Chosen = Live[I] if I is not None and 0 <= I < len(Live) else None
             Outgoing = [(M, Chosen if Chosen and Chosen["author"] != "LOJI" and Chosen.get("id") else None) for M in Answer["messages"][:1]]
+        Outgoing = [(M, T) for M, T in Outgoing if not (T and T.get("author_id") in Trolls)]  # no normal answer for them
+        for Line in Trolls.values():
+            await self.Troll(guild, channel, s, Line, "insultos o acoso a LOJI (según la IA)")
         if Outgoing and Rest:  # more people tagged her than she answers
             Phrase = RestPhrase(s, self.used_phrases.setdefault(guild.id, []), random)
             if Phrase:
@@ -226,6 +246,54 @@ class LojiChat(commands.Cog):
         await self.Note(guild.id, Answer["notes"], Live)
         if Answer["alert"]:
             await self.Alert(guild, channel, s, Answer["alert"], Live)
+
+    # ---------------- anti-troll ----------------
+
+    async def Troll(self, guild: discord.Guild, channel, s: dict, line: dict, why: str):
+        """Spam or insults aimed at her: a warning the first time; if they keep going, reported to staff and ignored."""
+        from core.lojichat_phrases import REPORTED_PHRASES, WARN_PHRASES
+
+        What = Strike(self.trolls.setdefault((guild.id, line["author_id"]), {}), Now(), s)
+        if What == "ignore":
+            return
+        Phrase = PickFresh(WARN_PHRASES if What == "warn" else REPORTED_PHRASES, self.used_phrases.setdefault(f"{guild.id}:{What}", []), random)
+        if await self.Send(channel, Phrase, line):
+            Said = {"author": "LOJI", "author_id": self.client.user.id, "content": Phrase}
+            self.live.setdefault(guild.id, deque(maxlen=LIVE)).append(Said)
+            await self.Remember(guild.id, Said)
+        if What == "report":
+            try:
+                await self.TrollReport(guild, channel, s, line, why)
+            except Exception as e:
+                logger.warning(f"[LojiChat] Troll report failed in {guild.id}: {e!r}")
+
+    async def TrollReport(self, guild: discord.Guild, channel, s: dict, line: dict, why: str):
+        """The quick-report card (same buttons), sent by LOJI herself, without a ping."""
+        from cogs.Modules.Guide.autoreport import REPORTS, CardView, Config, Quote
+        from core.economy.shop import NewId
+
+        _, R = await Config(guild.id)
+        Staff = guild.get_channel(R.get("staff_channel") or 0) or guild.get_channel(s.get("alert_channel") or 0)
+        if not Staff:
+            return logger.warning(f"[LojiChat] No staff channel for troll reports in {guild.id}")
+        Theirs = [L for L in (self.live.get(guild.id) or []) if L.get("author_id") == line["author_id"]][-8:] or [line]
+        Jump = f"https://discord.com/channels/{guild.id}/{channel.id}/{line['id']}"
+        Member = guild.get_member(line["author_id"])
+        Report = {
+            "_id": NewId(8), "guild_id": guild.id, "message_id": line["id"], "channel_id": channel.id, "jump": Jump,
+            "author_id": line["author_id"], "author_name": line["author"], "reporters": [self.client.user.id],
+            "at": Now(), "status": None, "verdict": None, "ai": False, "note": why, "source": "lojichat",
+        }
+        embed = discord.Embed(title="🤖 LOJI: me están molestando", url=Jump, color=LOJI_RED, timestamp=Now())
+        embed.set_author(name=f"{line['author']} ({line['author_id']})", icon_url=Member.display_avatar.url if Member else None)
+        embed.description = Quote("\n".join(L["content"][:200] for L in Theirs), 1500) + f"\n\n🔗 [Ir al último mensaje]({Jump}) · {channel.mention}"
+        embed.add_field(name="⚠️ Motivo", value=why[:1024], inline=False)
+        embed.add_field(name="📋 Qué pasó", value=f"LOJI le avisó y siguió en menos de {s['troll_followup']} min. "
+                                                    f"Lo ignora durante {s['troll_ignore']} min.", inline=False)
+        embed.set_footer(text=f"Reportado por LOJI · revisa el contexto · ID {Report['_id']}", icon_url=guild.me.display_avatar.url if guild.me else None)
+        await Db()[REPORTS].insert_one(Report)
+        Sent = await Staff.send(embed=embed, view=CardView(Report["_id"]), allowed_mentions=discord.AllowedMentions.none())
+        await Db()[REPORTS].update_one({"_id": Report["_id"]}, {"$set": {"card": {"channel": Staff.id, "id": Sent.id}}})
 
     async def Send(self, channel, text: str, target: dict | None) -> bool:
         """As a Discord reply to that person's message (they get the ping); a plain message if there's no target."""

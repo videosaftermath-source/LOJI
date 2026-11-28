@@ -331,3 +331,122 @@ def test_she_never_answers_the_same_message_twice():
     Targets, _ = PickTargets(Lines, most=4, handled=set())
     assert [T["id"] for T in Targets] == [1, 2]  # Ana wrote while she was sending: still answered
     assert PickTargets(Lines, most=4, handled={1, 2}) == ([], 0)
+
+
+def test_spam_and_strikes():
+    from core.lojichat import SpamCheck, Strike
+
+    def At(s):
+        return T0 + timedelta(seconds=s)
+    H = deque()
+    assert [SpamCheck(H, At(I * 4), f"loji {I}", S) for I in range(5)] == [None] * 5  # 5 in 30 s: fine
+    assert "6 mensajes" in SpamCheck(H, At(20), "loji?", S)
+    H = deque()
+    assert [SpamCheck(H, At(I * 20), "LOJI!!", S) for I in range(3)] == [None] * 3
+    assert "mismo mensaje 4" in SpamCheck(H, At(60), "loji", S)  # "LOJI!!" and "loji" are the same message
+    R = {}
+    assert Strike(R, T0, S) == "warn"
+    assert Strike(R, T0 + timedelta(minutes=9), S) == "report"  # kept going within 10 min
+    assert Strike(R, T0 + timedelta(minutes=20), S) == "ignore"  # ignored for 30 min
+    assert Strike(R, T0 + timedelta(minutes=40), S) == "warn"  # afterwards: a fresh start
+    assert Strike(R, T0 + timedelta(minutes=55), S) == "warn"  # too long after the warning: another warning
+    assert ParseReply('{"mensajes": ["a"], "molestan": ["Pepe", ""]}')["trolls"] == ["Pepe"]
+
+
+def test_a_troll_is_warned_then_reported_without_ping(monkeypatch):
+    import cogs.Modules.Growth.lojichat as lc
+    import cogs.Modules.Guide.autoreport as ar
+    from core.lojichat_phrases import REPORTED_PHRASES, WARN_PHRASES
+    from tests.economy.fakes import DB
+
+    D = DB()
+    monkeypatch.setattr(lc, "Db", lambda: D)
+
+    async def Config(g):
+        return {}, {"staff_channel": 50}
+    monkeypatch.setattr(ar, "Config", Config)
+    Sent, Staff = [], []
+
+    class Channel:
+        id, mention = 7, "<#7>"
+
+        def get_partial_message(self, i):
+            return N(id=i)
+
+        async def send(self, text, **kw):
+            Sent.append((text, getattr(kw.get("reference"), "id", None)))
+
+    class StaffChannel:
+        id = 50
+
+        async def send(self, **kw):
+            Staff.append(kw)
+            return N(id=777)
+    Guild = N(id=1, get_channel=lambda i: StaffChannel() if i == 50 else None, get_member=lambda i: None, me=None)
+    Cog = lc.LojiChat.__new__(lc.LojiChat)
+    Cog.client = N(user=N(id=999))
+    Cog.trolls, Cog.used_phrases, Cog.live = {}, {}, {1: deque(maxlen=40)}
+    Line = {"author": "Pepe", "author_id": 5, "content": "loji idiota", "id": 70}
+    Cog.live[1].append(Line)
+    asyncio.run(Cog.Troll(Guild, Channel(), dict(S), Line, "insultos"))
+    assert Sent[-1][0] in WARN_PHRASES and Sent[-1][1] == 70 and not Staff  # first: a warning, as a reply
+    asyncio.run(Cog.Troll(Guild, Channel(), dict(S), Line, "insultos"))
+    assert Sent[-1][0] in REPORTED_PHRASES and len(Staff) == 1
+    assert Staff[0].get("content") is None and Staff[0]["allowed_mentions"].roles is False  # no ping
+    Report = asyncio.run(D[ar.REPORTS].find_one({}))
+    assert Report["author_id"] == 5 and Report["source"] == "lojichat" and Report["card"]["id"] == 777
+    asyncio.run(Cog.Troll(Guild, Channel(), dict(S), Line, "insultos"))
+    assert len(Sent) == 2  # now ignored
+
+
+def test_the_ai_flags_an_insult(monkeypatch):
+    import cogs.Modules.Growth.lojichat as lc
+    import core.guide
+    from core.lojichat_phrases import WARN_PHRASES
+    from tests.economy.fakes import DB
+
+    D = DB()
+    monkeypatch.setattr(lc, "Db", lambda: D)
+
+    class G:
+        async def Get(self, g):
+            return {"personality_text": "Eres LOJI."}
+
+        async def Key(self, g):
+            return "sk-x"
+    monkeypatch.setattr(lc, "Guide", lambda: G())
+
+    async def Complete(key, system, user, **kw):
+        return '{"mensajes": ["holi Ana", "jaja pepe"], "molestan": ["pepe"], "recordar": [], "alerta": ""}', 10
+    monkeypatch.setattr(core.guide, "Complete", Complete)
+
+    async def NoSleep(*a):
+        pass
+    monkeypatch.setattr(lc.asyncio, "sleep", NoSleep)
+    Sent = []
+
+    class Channel:
+        def get_partial_message(self, i):
+            return N(id=i)
+
+        def typing(self):
+            class T:
+                async def __aenter__(s):
+                    pass
+
+                async def __aexit__(s, *a):
+                    pass
+            return T()
+
+        async def send(self, text, **kw):
+            Sent.append((text, getattr(kw.get("reference"), "id", None)))
+
+    Cog = lc.LojiChat.__new__(lc.LojiChat)
+    Cog.client = N(user=N(id=999))
+    Cog.last_reply, Cog.handled, Cog.used_phrases, Cog.trolls = {}, {}, {}, {}
+    Cog.state = {1: {"awake": True, "woke_at": T0}}
+    Cog.live = {1: deque([{"author": "Ana", "author_id": 1, "content": "loji holaa", "to_loji": True, "id": 11},
+                          {"author": "Pepe", "author_id": 2, "content": "loji eres idiota", "to_loji": True, "id": 12}], maxlen=40)}
+    asyncio.run(Cog.Reply(N(id=1, name="S"), Channel(), dict(S), opening=False))
+    assert Sent[0][0] in WARN_PHRASES and Sent[0][1] == 12  # Pepe gets the warning, not "jaja pepe"
+    assert Sent[1:] == [("holi Ana", 11)]
