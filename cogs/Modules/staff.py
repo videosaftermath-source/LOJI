@@ -253,86 +253,68 @@ class quota(commands.Cog):
     async def list(self, ctx: commands.Context):
         pass
 
-    @list.command(description="Add a rank to the staff list")
+    async def ListChoices(self, interaction: discord.Interaction, current: str):
+        from core.staff.stafflist import Names
+
+        Lists = await Names(self.client.db, interaction.guild.id)
+        Choices = [app_commands.Choice(name=N, value=N) for N in Lists if current.lower() in N]
+        if current and current.lower() not in Lists:
+            Choices.insert(0, app_commands.Choice(name=f"➕ nueva lista: {current.lower()[:40]}", value=current.lower()[:40]))
+        return Choices[:25]
+
+    @list.command(description="Añadir un rango a una staff list (principal u otra rama)")
+    @app_commands.describe(rank="El rango", position="Orden en la lista (1 = arriba)", lista="Qué lista (vacío = principal; escribe un nombre para crear otra)")
+    @app_commands.autocomplete(lista=ListChoices)
     @Permissions("Admin")
     @ModuleIsEnabled("Staff List")
-    async def add(self, ctx: commands.Context, rank: discord.Role, position: int):
+    async def add(self, ctx: commands.Context, rank: discord.Role, position: int, lista: str = None):
+        from core.staff.stafflist import Clean, Filter
+
+        Name = Clean(lista)
+        await self.client.db["Staff List"].delete_one({**Filter(ctx.guild.id, Name), "rank": rank.id})  # moving it: no duplicate
         await self.client.db["Staff List"].update_one(
-            {"guild_id": ctx.guild.id, "position": position},
-            {"$set": {"rank": rank.id}},
+            {**Filter(ctx.guild.id, Name), "position": position},
+            {"$set": {"rank": rank.id, "list": Name}},
             upsert=True,
         )
         await ctx.send(
-            f"{Emojis.tick} **{ctx.author.display_name}**, I have added `@{rank.name}` to the staff list.",
+            f"{Emojis.tick} **{ctx.author.display_name}**, añadí `@{rank.name}` a la staff list **{Name}** (posición {position}).",
         )
 
-    @list.command(description="Remove a rank from the staff list")
+    @list.command(description="Quitar un rango de una staff list")
+    @app_commands.describe(lista="Qué lista (vacío = principal)")
+    @app_commands.autocomplete(lista=ListChoices)
     @Permissions("Admin")
     @ModuleIsEnabled("Staff List")
-    async def remove(self, ctx: commands.Context, rank: discord.Role):
-        await self.client.db["Staff List"].delete_one({"rank": rank.id})
+    async def remove(self, ctx: commands.Context, rank: discord.Role, lista: str = None):
+        from core.staff.stafflist import Clean, Filter
+
+        Name = Clean(lista)
+        Done = await self.client.db["Staff List"].delete_one({**Filter(ctx.guild.id, Name), "rank": rank.id})
         await ctx.send(
-            f"{Emojis.tick} **{ctx.author.display_name}**, I have removed `@{rank.name}` from the staff list.",
+            f"{Emojis.tick} **{ctx.author.display_name}**, quité `@{rank.name}` de la staff list **{Name}**."
+            if Done.deleted_count else f"{Emojis.no} `@{rank.name}` no está en la staff list **{Name}**.",
         )
 
-    @list.command(description="Send the staff list")
+    @list.command(description="Enviar una staff list a este canal (se actualiza sola)")
+    @app_commands.describe(lista="Qué lista (vacío = principal)", titulo="Título de la lista (opcional)")
+    @app_commands.autocomplete(lista=ListChoices)
     @Permissions("Admin")
     @ModuleIsEnabled("Staff List")
-    async def send(self, ctx: commands.Context):
-        results = (
-            await self.client.db["Staff List"]
-            .find({"guild_id": ctx.guild.id})
-            .to_list(length=None)
-        )
-        if len(results) == 0 or not results:
+    async def send(self, ctx: commands.Context, lista: str = None, titulo: str = None):
+        from core.staff.stafflist import DEFAULT_TITLE, MAIN, Clean, Embed, Filter
+
+        Name = Clean(lista)
+        results = await self.client.db["Staff List"].find(Filter(ctx.guild.id, Name)).to_list(length=None)
+        if not results:
             return await ctx.send(
-                f"{Emojis.no} **{ctx.author.display_name}**, there are no ranks in the staff list.\n{Emojis.replybottom} You can add a rank using `/staff list add <rank> <position>`."
+                f"{Emojis.no} **{ctx.author.display_name}**, la staff list **{Name}** no tiene rangos.\n{Emojis.replybottom} Añádelos con `/staff list add <rango> <posición> lista:{Name}`."
             )
-        results = sorted(results, key=lambda x: int(x.get("position", 0)))
-        member_roles = {}
-        highest_role_seen = {}
         if not ctx.guild.chunked:
             await ctx.guild.chunk()
-
-        for member in ctx.guild.members:
-            highest_role = max(
-                (
-                    role
-                    for role in member.roles
-                    if any(role.id == result["rank"] for result in results)
-                ),
-                key=lambda role: role.position,
-                default=None,
-            )
-            member_roles[member] = highest_role
-            highest_role_seen[member] = highest_role
-
-        embed = discord.Embed(
-            title="Staff Team",
-            color=discord.Color.dark_embed(),
-            timestamp=datetime.now(),
-        )
-        embed.set_thumbnail(url=ctx.guild.icon)
-        embed.set_author(name=ctx.guild.name, icon_url=ctx.guild.icon)
-        embed.set_footer(text="Last Updated")
-
-        description = ""
-        for result in results:
-            role = ctx.guild.get_role(result.get("rank"))
-            if role is not None:
-                members = [
-                    member.mention
-                    for member in member_roles
-                    if member_roles[member] == role
-                    and highest_role_seen[member] == role
-                ]
-                if members:
-                    description += (
-                        f"### **{role.mention}** ({len(members)})\n\n> "
-                        + "\n> ".join(members)
-                        + "\n"
-                    )
-        embed.description = description
+        Active = await self.client.db["Active Staff List"].find_one(Filter(ctx.guild.id, Name)) or {}
+        Title = (titulo or Active.get("title") or (DEFAULT_TITLE if Name == MAIN else Name.title()))[:256]
+        embed = Embed(ctx.guild, results, Title)
         if ctx.interaction:
             try:
                 msg = await ctx.channel.send(
@@ -345,7 +327,7 @@ class quota(commands.Cog):
                 )
                 return
             await ctx.send(
-                f"{Emojis.tick} successfully sent the staff list.", ephemeral=True
+                f"{Emojis.tick} Staff list **{Name}** enviada. Se actualiza sola cada 30 min.", ephemeral=True
             )
         else:
             try:
@@ -361,8 +343,8 @@ class quota(commands.Cog):
                 )
                 return
         await self.client.db["Active Staff List"].update_one(
-            {"guild_id": ctx.guild.id},
-            {"$set": {"msg": msg.id, "channel_id": ctx.channel.id}},
+            Filter(ctx.guild.id, Name),
+            {"$set": {"msg": msg.id, "channel_id": ctx.channel.id, "list": Name, "title": Title}},
             upsert=True,
         )
 

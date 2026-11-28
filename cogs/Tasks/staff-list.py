@@ -1,6 +1,5 @@
 import asyncio
 import logging
-from datetime import datetime
 
 import sentry_sdk
 from discord.ext import commands
@@ -56,60 +55,15 @@ class StaffList(commands.Cog):
             if not await ModuleCheck(guild.id, "Staff List"):
                 return
 
-            results = (
-                await self.client.db["Staff List"]
-                .find({"guild_id": guild.id})
-                .to_list(length=None)
-            )
+            from core.staff.stafflist import DEFAULT_TITLE, MAIN, Clean, Embed, Filter
+
+            Name = Clean(data.get("list"))
+            results = await self.client.db["Staff List"].find(Filter(guild.id, Name)).to_list(length=None)
             if not results:
                 return
-
-            results = sorted(results, key=lambda x: int(x.get("position", 0)))
-            MemberRoles = {}
-            HighestSeen = {}
-
             if not guild.chunked:
                 await guild.chunk()
-
-            for member in guild.members:
-                HighestRole = max(
-                    (
-                        role
-                        for role in member.roles
-                        if any(role.id == result["rank"] for result in results)
-                    ),
-                    key=lambda role: role.position,
-                    default=None,
-                )
-                MemberRoles[member] = HighestRole
-                HighestSeen[member] = HighestRole
-
-            embed = discord.Embed(
-                title="Staff Team",
-                color=discord.Color.dark_embed(),
-                timestamp=datetime.now(),
-            )
-            embed.set_thumbnail(url=guild.icon)
-            embed.set_author(name=guild.name, icon_url=guild.icon)
-            embed.set_footer(text="Last Updated")
-
-            description = ""
-            for result in results:
-                role = guild.get_role(result.get("rank"))
-                if role:
-                    members = [
-                        member.mention
-                        for member in MemberRoles
-                        if MemberRoles[member] == role and HighestSeen[member] == role
-                    ]
-                    if members:
-                        description += (
-                            f"### **{role.mention}** ({len(members)})\n\n> "
-                            + "\n> ".join(members)
-                            + "\n"
-                        )
-
-            embed.description = description
+            embed = Embed(guild, results, data.get("title") or (DEFAULT_TITLE if Name == MAIN else Name.title()))
             ChannelID = data.get("channel_id")
             MessageId = data.get("msg")
 
