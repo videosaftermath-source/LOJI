@@ -18,11 +18,11 @@
   «nada» = no decir nada), a cuántos responde por tanda (por ejemplo `4-6`) y el % de veces que ignora. Nunca dos veces seguidas sin respuesta.
   Cuando la mandas a hablar con el chat activo, solo contesta a quien se dirige a ella.
 - **🛡️ Anti-troll** (siempre activo):
-  - **Spam a LOJI:** 6 mensajes a ella en 30 s de la misma persona, o el mismo mensaje 4 veces en 2 min ("loji loji loji…").
-  - **Insultos o acoso a LOJI:** lo detecta la IA en la misma petición de siempre (sin coste extra), distinguiendo bromas
-    entre amigos de insultos de verdad.
+  - **Spam a LOJI:** 4 mensajes a ella en 30 s de la misma persona, o el mismo mensaje 3 veces en 2 min ("loji loji loji…").
+  - **Insultos o acoso a LOJI:** lo detecta la IA en la misma petición de siempre (sin coste extra), cuenta también los leves
+    (idiota, inútil, cállate…) si van en serio; no las bromas claras entre amigos.
   - **1.ª vez:** le responde con una frase de **aviso** (30, al azar, sin repetir seguido).
-  - **Si sigue en menos de 10 min:** frase de **reportado** y manda al staff la ficha del **reporte rápido** (mismos botones
+  - **Si sigue en menos de 15 min:** frase de **reportado** y manda al staff la ficha del **reporte rápido** (mismos botones
     ✅ Falsa alarma / ⚖️ Se actuará), **sin ping**, al canal de fichas del reporte rápido (o al de alertas de LOJI).
     Después **lo ignora 30 min**.
 - **🧠 Límites y memoria:** mensajes al día (150), tokens de contexto (10.000), días que recuerda las conversaciones (7)

@@ -43,11 +43,11 @@ SETTINGS = {
     # Anti-troll: spamming her, or insulting her (the AI notices it) -> a warning; again within troll_followup
     # minutes -> reported to staff (the quick-report card, no ping) and ignored for troll_ignore minutes.
     "antitroll": True,
-    "troll_burst": 6,  # messages to LOJI ...
+    "troll_burst": 4,  # messages to LOJI ...
     "troll_burst_secs": 30,  # ... within these seconds, from the same person
-    "troll_repeat": 4,  # or the same message this many times (within troll_repeat_secs)
+    "troll_repeat": 3,  # or the same message this many times (within troll_repeat_secs)
     "troll_repeat_secs": 120,
-    "troll_followup": 10,  # minutes
+    "troll_followup": 15,  # minutes
     "troll_ignore": 30,  # minutes
 }
 OLD_REST = "No respondo al resto porque me canso lol"  # the old single phrase: now means "LOJI's list"
@@ -142,7 +142,7 @@ Responde SOLO con un JSON:
 {"mensajes": ["UN solo mensaje (vacío si es mejor no decir nada)"],
  "responder_a": número entre corchetes del mensaje al que contestas, o null si le hablas al chat en general,
  "recordar": [{"persona": "nombre tal cual aparece", "dato": "algo pequeño e inofensivo que quieras recordar"}],
- "molestan": ["nombre tal cual aparece de quien te esté insultando o acosando DE VERDAD (no bromas entre amigos ni piques con cariño); casi siempre vacío"],
+ "molestan": ["nombre tal cual aparece de quien te insulte, te falte el respeto o te acose en serio, aunque sea leve (idiota, inútil, cállate, etc.); no cuentan las bromas claras entre amigos ni los piques con cariño; vacío si nadie"],
  "alerta": "vacío, o por qué crees que alguien necesita ayuda"}"""
 
 

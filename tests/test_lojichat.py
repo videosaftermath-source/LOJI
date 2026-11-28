@@ -339,17 +339,17 @@ def test_spam_and_strikes():
     def At(s):
         return T0 + timedelta(seconds=s)
     H = deque()
-    assert [SpamCheck(H, At(I * 4), f"loji {I}", S) for I in range(5)] == [None] * 5  # 5 in 30 s: fine
-    assert "6 mensajes" in SpamCheck(H, At(20), "loji?", S)
+    assert [SpamCheck(H, At(I * 4), f"loji {I}", S) for I in range(3)] == [None] * 3  # 3 in 30 s: fine
+    assert "4 mensajes" in SpamCheck(H, At(20), "loji?", S)
     H = deque()
-    assert [SpamCheck(H, At(I * 20), "LOJI!!", S) for I in range(3)] == [None] * 3
-    assert "mismo mensaje 4" in SpamCheck(H, At(60), "loji", S)  # "LOJI!!" and "loji" are the same message
+    assert [SpamCheck(H, At(I * 40), "LOJI!!", S) for I in range(2)] == [None] * 2
+    assert "mismo mensaje 3" in SpamCheck(H, At(80), "loji", S)  # "LOJI!!" and "loji" are the same message
     R = {}
     assert Strike(R, T0, S) == "warn"
-    assert Strike(R, T0 + timedelta(minutes=9), S) == "report"  # kept going within 10 min
+    assert Strike(R, T0 + timedelta(minutes=14), S) == "report"  # kept going within 15 min
     assert Strike(R, T0 + timedelta(minutes=20), S) == "ignore"  # ignored for 30 min
-    assert Strike(R, T0 + timedelta(minutes=40), S) == "warn"  # afterwards: a fresh start
-    assert Strike(R, T0 + timedelta(minutes=55), S) == "warn"  # too long after the warning: another warning
+    assert Strike(R, T0 + timedelta(minutes=45), S) == "warn"  # afterwards: a fresh start
+    assert Strike(R, T0 + timedelta(minutes=61), S) == "warn"  # too long after the warning: another warning
     assert ParseReply('{"mensajes": ["a"], "molestan": ["Pepe", ""]}')["trolls"] == ["Pepe"]
 
 
